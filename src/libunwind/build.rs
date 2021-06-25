@@ -6,6 +6,7 @@ fn main() {
 
 mod llvm_libunwind {
     use std::path::Path;
+    use std::env;
 
     fn setup_options(cfg: &mut cc::Build) {
         cfg.no_default_flags(true);
@@ -16,6 +17,9 @@ mod llvm_libunwind {
         cfg.flag("-fno-PIC");
         cfg.flag("-Isrc");
         cfg.flag("-isystem../include");
+        if let Ok(extra_include) = env::var("CLANG_EXTRA_INCLUDE_DIR") {
+            cfg.flag(&("-isystem".to_owned() + &extra_include));
+        }
         cfg.flag("-fno-stack-protector");
         cfg.flag("--target=armv7-none-eabihf");
         cfg.flag("-O2");

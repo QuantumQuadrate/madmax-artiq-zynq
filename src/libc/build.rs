@@ -5,6 +5,8 @@ fn main() {
 
 mod libc {
     use std::path::Path;
+    use std::env;
+
     pub fn compile() {
         let cfg = &mut cc::Build::new();
         cfg.no_default_flags(true);
@@ -16,6 +18,9 @@ mod libc {
         cfg.flag("-ffreestanding");
         cfg.flag("-fno-PIC");
         cfg.flag("-isystem../include");
+        if let Ok(extra_include) = env::var("CLANG_EXTRA_INCLUDE_DIR") {
+            cfg.flag(&("-isystem".to_owned() + &extra_include));
+        }
         cfg.flag("-fno-stack-protector");
         cfg.flag("--target=armv7-none-eabihf");
         cfg.flag("-O2");

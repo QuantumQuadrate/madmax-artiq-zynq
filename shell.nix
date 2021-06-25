@@ -30,6 +30,7 @@ in
     ];
 
     XARGO_RUST_SRC = "${rustPlatform.rust.rustc}/lib/rustlib/src/rust/library";
+    CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_9.clang-unwrapped.lib}/lib/clang/9.0.1/include";
     OPENOCD_ZYNQ = "${zynq-rs}/openocd";
     SZL = "${zc706-szl}/szl.elf";
   }
