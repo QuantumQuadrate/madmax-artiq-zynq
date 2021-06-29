@@ -62,7 +62,7 @@ cd ..
 
 Notes:
 
-- This is developed with Nixpkgs 20.09, and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
+- This is developed with Nixpkgs 21.05, and the ``nixbld.m-labs.hk`` binary substituter can also be used here (see the ARTIQ manual for the public key and instructions).
 - The impure build process is also compatible with non-Nix systems.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
 - To update ``zynq-rs``, update the cargo files as per usual for Rust projects, but also keep ``zynq-rs.nix`` in sync.
