@@ -13,6 +13,3 @@ debug = true
 codegen-units = 1
 opt-level = 2
 lto = true
-
-[patch.crates-io]
-core_io = { git = "https://git.m-labs.hk/M-Labs/zynq-rs.git" }
