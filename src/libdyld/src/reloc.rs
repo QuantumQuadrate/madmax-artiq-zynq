@@ -123,7 +123,7 @@ pub fn relocate<R: Relocatable>(
             if let Some(addr) = lib.lookup(sym_name) {
                 // First, try to resolve against itself.
                 trace!("looked up symbol {} in image", format_sym_name(sym_name));
-                value = lib.image.ptr() as u32 + addr;
+                value = addr;
             } else if let Some(addr) = resolve(sym_name) {
                 // Second, call the user-provided function.
                 trace!("resolved symbol {:?}", format_sym_name(sym_name));
