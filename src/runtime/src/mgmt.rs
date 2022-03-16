@@ -194,7 +194,7 @@ async fn handle_connection(
             },
             Request::ConfigWrite => {
                 let key = read_key(stream).await?;
-                warn!("write key: {}", key);
+                debug!("write key: {}", key);
                 let len = read_i32(stream).await?;
                 let len = if len <= 0 {
                     0
