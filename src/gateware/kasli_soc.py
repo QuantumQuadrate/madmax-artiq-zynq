@@ -118,7 +118,7 @@ class GenericStandalone(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = self.__class__.__name__
+        ident = description["variant"]
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
@@ -204,7 +204,7 @@ class GenericMaster(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = self.__class__.__name__
+        ident = description["variant"]
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
@@ -329,7 +329,7 @@ class GenericSatellite(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = self.__class__.__name__
+        ident = description["variant"]
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
