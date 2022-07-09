@@ -4,7 +4,7 @@ ARTIQ on Zynq
 How to use
 ----------
 
-1. Install ARTIQ-6 or newer.
+1. Install ARTIQ-7 or newer.
 2. Select the latest successful build on Hydra: https://nixbld.m-labs.hk/jobset/artiq/zynq
 3. Search for the job named ``<board>-<variant>-sd`` (for example: ``zc706-nist_clock-sd`` or ``zc706-nist_qc2-sd``).
 4. Download the ``boot.bin`` "binary distribution" and place it at the root of a FAT-formatted SD card.
@@ -33,7 +33,7 @@ not implemented as it seems not very useful.
 Development instructions
 ------------------------
 
-ARTIQ on Zynq is packaged using the [Nix](https://nixos.org) Flakes system. Install Nix 2.4+ and enable flakes by adding ``experimental-features = nix-command flakes`` to ``nix.conf`` (e.g. ``~/.config/nix/nix.conf``). 
+ARTIQ on Zynq is packaged using the [Nix](https://nixos.org) Flakes system. Install Nix 2.8+ and enable flakes by adding ``experimental-features = nix-command flakes`` to ``nix.conf`` (e.g. ``~/.config/nix/nix.conf``).
 
 Pure build with Nix and execution on a remote JTAG server:
 
