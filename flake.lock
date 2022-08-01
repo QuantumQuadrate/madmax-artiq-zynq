@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1657275623,
-        "narHash": "sha256-FtVLsJtUsK7Yul2Ma4x8qzFsbqPla/w+IBaotcK/jDI=",
+        "lastModified": 1659320626,
+        "narHash": "sha256-BuCSRYXtLDc68w/1b4v476RibGJpA+Fs8eASD/tDLvM=",
         "ref": "release-7",
-        "rev": "59dfb9e902183bd76cb39ff550495e5fdd17c65d",
-        "revCount": 8111,
+        "rev": "2e6ad950b7b52aee835adfb96cfa1d8b80892446",
+        "revCount": 8115,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -201,11 +201,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1654002148,
-        "narHash": "sha256-Ztzx7ze8o0gdu+sDpc+PS2M88h/b22rwFq0b12wMqZQ=",
+        "lastModified": 1658301375,
+        "narHash": "sha256-lo5U/ppYhAqeoZqcPhx2VJlO6j9KYHxypIOHWq5fcJg=",
         "ref": "master",
-        "rev": "6cd32f6ee0e7bb7ce5a279f8be943903a393a476",
-        "revCount": 617,
+        "rev": "043a152b91ed58521673ff67f8a4d068e7d1138f",
+        "revCount": 618,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
