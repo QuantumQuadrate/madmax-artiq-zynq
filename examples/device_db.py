@@ -8,7 +8,7 @@ device_db = {
         "arguments": {
             "host": "192.168.1.52",
             "ref_period": 1e-9,
-            "ref_multiplier": 1,
+            "ref_multiplier": 8,
             "target": "cortexa9"
         }
     },
