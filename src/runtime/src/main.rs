@@ -109,7 +109,7 @@ pub fn main_core0() {
     gic::InterruptController::gic(mpcore::RegisterBlock::mpcore()).enable_interrupts();
 
     init_gateware();
-    info!("detected gateware: {}", identifier_read(&mut [0; 64]));
+    info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
 
