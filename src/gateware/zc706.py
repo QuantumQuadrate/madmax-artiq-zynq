@@ -13,7 +13,7 @@ from misoc.interconnect.csr import *
 from misoc.integration import cpu_interface
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
-from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
+from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2, edge_counter
 
 import dma
 import analyzer
@@ -215,6 +215,7 @@ class NIST_QC2(ZC706):
         platform.add_extension(leds_fmc33)
 
         rtio_channels = []
+        edge_counter_phy = []
 
         for i in range(4):
             phy = ttl_simple.Output(platform.request("user_led_33", i))
@@ -226,6 +227,9 @@ class NIST_QC2(ZC706):
             phy = ttl_serdes_7series.InOut_8X(platform.request("ttl", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
+            # first four TTLs will also have edge counters
+            if i < 4:
+                edge_counter_phy.append(phy)
 
         # CLK0, CLK1 are for clock generators, on backplane SMP connectors
         for i in range(2):
@@ -245,6 +249,11 @@ class NIST_QC2(ZC706):
                 platform.request("dds", backplane_offset), 12, onehot=True)
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=4))
+        
+        for phy in edge_counter_phy:
+            counter = edge_counter.SimpleEdgeCounter(phy.input_state)
+            self.submodules += counter
+            rtio_channels.append(rtio.Channel.from_phy(counter))
 
         self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
         rtio_channels.append(rtio.LogChannel())
