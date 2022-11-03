@@ -14,7 +14,7 @@ from misoc.integration import cpu_interface
 from misoc.cores import gpio
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
-from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2
+from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2, edge_counter
 from artiq.gateware.rtio.xilinx_clocking import RTIOClockMultiplier, fix_serdes_timing_path
 from artiq.gateware.drtio.transceiver import gtx_7series
 from artiq.gateware.drtio.siphaser import SiPhaser7Series
@@ -562,12 +562,16 @@ class _NIST_QC2_RTIO:
         platform.add_extension(pmod1_33)
 
         rtio_channels = []
+        edge_counter_phy = []
 
         # All TTL channels are In+Out capable
         for i in range(40):
             phy = ttl_serdes_7series.InOut_8X(platform.request("ttl", i))
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=512))
+            # first four TTLs will also have edge counters
+            if i < 4:
+                edge_counter_phy.append(phy)
 
         # no SMA GPIO, replaced with PMOD1_0
         phy = ttl_serdes_7series.InOut_8X(platform.request("pmod1_33", 0))
@@ -606,6 +610,11 @@ class _NIST_QC2_RTIO:
                 platform.request("dds", backplane_offset), 12, onehot=True)
             self.submodules += phy
             rtio_channels.append(rtio.Channel.from_phy(phy, ififo_depth=4))
+        
+        for phy in edge_counter_phy:
+            counter = edge_counter.SimpleEdgeCounter(phy.input_state)
+            self.submodules += counter
+            rtio_channels.append(rtio.Channel.from_phy(counter))
 
         self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
         rtio_channels.append(rtio.LogChannel())

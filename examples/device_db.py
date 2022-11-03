@@ -59,6 +59,14 @@ device_db["ad9914dds1"] = {
     "arguments": {"sysclk": 3e9, "bus_channel": 50, "channel": 1},
 }
 
+for i in range(4):
+    device_db["ttl"+str(i)+"_counter"] = {
+        "type": "local",
+        "module": "artiq.coredevice.edge_counter",
+        "class": "EdgeCounter",
+        "arguments": {"channel": 52+i}
+    }
+
 # for ARTIQ test suite
 device_db.update(
     loop_out="ttl0",
