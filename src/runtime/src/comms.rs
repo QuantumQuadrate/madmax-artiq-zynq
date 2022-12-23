@@ -427,8 +427,8 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     moninj::start(timer, aux_mutex, drtio_routing_table);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
-    let idle_kernel = Rc::new(cfg.read("idle").ok());
-    if let Ok(buffer) = cfg.read("startup") {
+    let idle_kernel = Rc::new(cfg.read("idle_kernel").ok());
+    if let Ok(buffer) = cfg.read("startup_kernel") {
         info!("Loading startup kernel...");
         if let Ok(()) = task::block_on(load_kernel(&buffer, &control, None)) {
             info!("Starting startup kernel...");
