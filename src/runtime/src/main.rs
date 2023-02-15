@@ -45,6 +45,8 @@ mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
+#[cfg(feature = "target_kasli_soc")]
+mod io_expander;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 
@@ -112,6 +114,25 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
+
+    #[cfg(feature = "target_kasli_soc")]
+    {
+        let (mut io_expander0, mut io_expander1) = (io_expander::IoExpander::new(0).unwrap(), io_expander::IoExpander::new(1).unwrap());
+        io_expander0.init().expect("I2C I/O expander #0 initialization failed");
+        io_expander1.init().expect("I2C I/O expander #1 initialization failed");
+
+        // Actively drive TX_DISABLE to false on SFP0..3
+        io_expander0.set_oe(0, 1 << 1).unwrap();
+        io_expander0.set_oe(1, 1 << 1).unwrap();
+        io_expander1.set_oe(0, 1 << 1).unwrap();
+        io_expander1.set_oe(1, 1 << 1).unwrap();
+        io_expander0.set(0, 1, false);
+        io_expander0.set(1, 1, false);
+        io_expander1.set(0, 1, false);
+        io_expander1.set(1, 1, false);
+        io_expander0.service().unwrap();
+        io_expander1.service().unwrap();
+    }
 
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
