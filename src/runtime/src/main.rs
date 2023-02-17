@@ -21,6 +21,8 @@ use void::Void;
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
 use libboard_artiq::{logger, identifier_read, init_gateware, pl};
+#[cfg(feature = "target_kasli_soc")]
+use libboard_artiq::io_expander;
 
 const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
 const ASYNC_ERROR_BUSY: u8 = 1 << 1;
@@ -45,8 +47,6 @@ mod mgmt;
 mod analyzer;
 mod irq;
 mod i2c;
-#[cfg(feature = "target_kasli_soc")]
-mod io_expander;
 
 static mut SEEN_ASYNC_ERRORS: u8 = 0;
 
@@ -117,21 +117,17 @@ pub fn main_core0() {
 
     #[cfg(feature = "target_kasli_soc")]
     {
-        let (mut io_expander0, mut io_expander1) = (io_expander::IoExpander::new(0).unwrap(), io_expander::IoExpander::new(1).unwrap());
-        io_expander0.init().expect("I2C I/O expander #0 initialization failed");
-        io_expander1.init().expect("I2C I/O expander #1 initialization failed");
-
-        // Actively drive TX_DISABLE to false on SFP0..3
-        io_expander0.set_oe(0, 1 << 1).unwrap();
-        io_expander0.set_oe(1, 1 << 1).unwrap();
-        io_expander1.set_oe(0, 1 << 1).unwrap();
-        io_expander1.set_oe(1, 1 << 1).unwrap();
-        io_expander0.set(0, 1, false);
-        io_expander0.set(1, 1, false);
-        io_expander1.set(0, 1, false);
-        io_expander1.set(1, 1, false);
-        io_expander0.service().unwrap();
-        io_expander1.service().unwrap();
+        let i2c = unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() };
+        for expander_i in 0..=1 {
+            let mut io_expander = io_expander::IoExpander::new(i2c, expander_i).unwrap();
+            io_expander.init().expect("I2C I/O expander #0 initialization failed");
+            // Actively drive TX_DISABLE to false on SFP0..3
+            io_expander.set_oe(0, 1 << 1).unwrap();
+            io_expander.set_oe(1, 1 << 1).unwrap();
+            io_expander.set(0, 1, false);
+            io_expander.set(1, 1, false);
+            io_expander.service().unwrap();
+        }
     }
 
     let cfg = match Config::new() {

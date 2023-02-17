@@ -1,4 +1,4 @@
-use crate::i2c;
+use libboard_zynq::i2c;
 use log::info;
 
 // Only the bare minimum registers. Bits/IO connections equivalent between IC types.
@@ -10,10 +10,9 @@ struct Registers {
     gpiob: u8,  // Output Port 1
 }
 
-pub struct IoExpander {
-    busno: i32,
-    port: u8,
-    address: i32,
+pub struct IoExpander<'a> {
+    i2c: &'a mut i2c::I2c,
+    address: u8,
     iodir: [u8; 2],
     out_current: [u8; 2],
     out_target: [u8; 2],
@@ -21,14 +20,13 @@ pub struct IoExpander {
 }
 
 
-impl IoExpander {
-    pub fn new(index: u8) -> Result<Self, &'static str> {
+impl<'a> IoExpander<'a> {
+    pub fn new(i2c: &'a mut i2c::I2c, index: u8) -> Result<Self, &'static str> {
 
         // Both expanders on SHARED I2C bus
         let mut io_expander = match index {
             0 => IoExpander {
-                busno: 0,
-                port: 11,
+                i2c,
                 address: 0x40,
                 iodir: [0xff; 2],
                 out_current: [0; 2],
@@ -41,8 +39,7 @@ impl IoExpander {
                 },
             },
             1 => IoExpander {
-                busno: 0,
-                port: 11,
+                i2c,
                 address: 0x42,
                 iodir: [0xff; 2],
                 out_current: [0; 2],
@@ -75,32 +72,31 @@ impl IoExpander {
         Ok(io_expander)
     }
 
-    fn select(&self) -> Result<(), &'static str> {
-        let mask: u16 = 1 << self.port;
-        i2c::switch_select(self.busno, 0x70, mask as u8 as i32);
-        i2c::switch_select(self.busno, 0x71, (mask >> 8) as u8 as i32);
+    fn select(&mut self) -> Result<(), &'static str> {
+        self.i2c.pca954x_select(0x70, None)?;
+        self.i2c.pca954x_select(0x71, Some(3))?;
         Ok(())
     }
 
-    fn write(&self, addr: u8, value: u8) -> Result<(), &'static str> {
-        i2c::start(self.busno);
-        i2c::write(self.busno, self.address as i32);
-        i2c::write(self.busno, addr as i32);
-        i2c::write(self.busno, value as i32);
-        i2c::stop(self.busno);
+    fn write(&mut self, addr: u8, value: u8) -> Result<(), &'static str> {
+        self.i2c.start()?;
+        self.i2c.write(self.address)?;
+        self.i2c.write(addr)?;
+        self.i2c.write(value)?;
+        self.i2c.stop()?;
         Ok(())
     }
 
-    fn check_ack(&self) -> Result<bool, &'static str> {
+    fn check_ack(&mut self) -> Result<bool, &'static str> {
         // Check for ack from io expander
         self.select()?;
-        i2c::start(self.busno);
-        let ack = i2c::write(self.busno, self.address);
-        i2c::stop(self.busno);
+        self.i2c.start()?;
+        let ack = self.i2c.write(self.address)?;
+        self.i2c.stop()?;
         Ok(ack)
     }
 
-    fn update_iodir(&self) -> Result<(), &'static str> {
+    fn update_iodir(&mut self) -> Result<(), &'static str> {
         self.write(self.registers.iodira, self.iodir[0])?;
         self.write(self.registers.iodirb, self.iodir[1])?;
         Ok(())

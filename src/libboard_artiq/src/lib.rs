@@ -27,6 +27,8 @@ pub mod drtioaux_async;
 #[cfg(has_drtio)]
 #[path = "../../../build/mem.rs"]
 pub mod mem;
+#[cfg(feature = "target_kasli_soc")]
+pub mod io_expander;
 
 use core::{cmp, str};
 use libboard_zynq::slcr;
