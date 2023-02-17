@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1666210907,
-        "narHash": "sha256-q0ehAZ608F0evqDeq2/OQyqQkRoqNAy7Ioo7d9yjtRQ=",
+        "lastModified": 1672816468,
+        "narHash": "sha256-6ni5HQmnTvdTqoL0OE3Yo9N+UGuBo8IN7eXffbKXYWM=",
         "ref": "release-7",
-        "rev": "ab8bb9ef31390ed9feb39c82211f6887924bcde3",
-        "revCount": 8131,
+        "rev": "81dbbd08b2807a82088a53f10f15112565c05994",
+        "revCount": 8160,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -85,11 +85,11 @@
     "mozilla-overlay_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1664789696,
-        "narHash": "sha256-UGWJHQShiwLCr4/DysMVFrYdYYHcOqAOVsWNUu+l6YU=",
+        "lastModified": 1675354105,
+        "narHash": "sha256-ZAJGIZ7TjOCU7302lSUabNDz+rxM4If0l8/ZbE/7R5U=",
         "owner": "mozilla",
         "repo": "nixpkgs-mozilla",
-        "rev": "80627b282705101e7b38e19ca6e8df105031b072",
+        "rev": "85eb0ba7d8e5d6d4b79e5b0180aadbdd25d76404",
         "type": "github"
       },
       "original": {
@@ -101,11 +101,11 @@
     "mozilla-overlay_3": {
       "flake": false,
       "locked": {
-        "lastModified": 1650459918,
-        "narHash": "sha256-sroCK+QJTmoXtcRkwZyKOP9iAYOPID2Bwdxn4GkG16w=",
+        "lastModified": 1664789696,
+        "narHash": "sha256-UGWJHQShiwLCr4/DysMVFrYdYYHcOqAOVsWNUu+l6YU=",
         "owner": "mozilla",
         "repo": "nixpkgs-mozilla",
-        "rev": "e1f7540fc0a8b989fb8cf701dc4fd7fc76bcf168",
+        "rev": "80627b282705101e7b38e19ca6e8df105031b072",
         "type": "github"
       },
       "original": {
@@ -217,11 +217,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1665118676,
-        "narHash": "sha256-9hX80tRMFNehL7jSUrlctKMe7k8Br14O93gr9P5Zl7w=",
-        "ref": "master",
-        "rev": "0a3a7776520fa0359fe7dbf40146b9bd22bbc0f8",
-        "revCount": 622,
+        "lastModified": 1669819016,
+        "narHash": "sha256-WvNMUekL4Elc55RdqX8XP43QPnBrK8Rbd0bsoI61E5U=",
+        "ref": "refs/heads/master",
+        "rev": "67dbb5932fa8ff5f143983476f741f945871d286",
+        "revCount": 624,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
