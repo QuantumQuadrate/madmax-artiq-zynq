@@ -15,6 +15,7 @@ from misoc.integration import cpu_interface
 from artiq.coredevice import jsondesc
 from artiq.gateware import rtio, eem_7series
 from artiq.gateware.rtio.phy import ttl_simple
+from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
 from artiq.gateware.rtio.xilinx_clocking import RTIOClockMultiplier
 from artiq.gateware.drtio.transceiver import gtx_7series
 from artiq.gateware.drtio.siphaser import SiPhaser7Series
@@ -138,6 +139,7 @@ class GenericStandalone(SoCCore):
         self.platform.add_false_path_constraints(
             self.ps7.cd_sys.clk,
             self.rtio_crg.cd_rtio.clk)
+        fix_serdes_timing_path(platform)
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -225,6 +227,7 @@ class GenericMaster(SoCCore):
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
         self.csr_devices.append("rtio_crg")
+        fix_serdes_timing_path(platform)
 
         self.rustc_cfg["has_si5324"] = None
         self.rustc_cfg["si5324_soft_reset"] = None
@@ -341,6 +344,7 @@ class GenericSatellite(SoCCore):
         self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
         self.csr_devices.append("rtio_crg")
         self.rustc_cfg["has_rtio_crg"] = None
+        fix_serdes_timing_path(platform)
         
         data_pads = [platform.request("sfp", i) for i in range(4)]
         
