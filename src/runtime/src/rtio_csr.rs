@@ -94,7 +94,7 @@ pub extern fn output(target: i32, data: i32) {
     }
 }
 
-pub extern fn output_wide(target: i32, data: CSlice<i32>) {
+pub extern fn output_wide(target: i32, data: &CSlice<i32>) {
     unsafe {
         csr::rtio::target_write(target as u32);
         // writing target clears o_data
