@@ -4,14 +4,13 @@ ARTIQ on Zynq
 How to use
 ----------
 
-1. Install ARTIQ-7 or newer.
-2. Select the latest successful build on Hydra: https://nixbld.m-labs.hk/jobset/artiq/zynq
-3. Search for the job named ``<board>-<variant>-sd`` (for example: ``zc706-nist_clock-sd`` or ``zc706-nist_qc2-sd``).
-4. Download the ``boot.bin`` "binary distribution" and place it at the root of a FAT-formatted SD card.
-5. Optionally, create a ``config.txt`` configuration file at the root of the SD card containing ``key=value`` pairs on each line. Use the ``ip``, ``ip6`` and ``mac`` keys to respectively set the IPv4, IPv6 and MAC address of the board. Configuring an IPv6 address is entirely optional. If these keys are not found, the firmware will use default values that may or may not be compatible with your network.
-6. Insert the SD card into the board and set up the board to boot from the SD card. For the ZC706, this is achieved by placing the large DIP switch SW11 in the 00110 position.
-7. Power up the board. After the firmware starts successfully, it should respond to ping at its IP addresses, and boot messages can be observed from its UART at 115200bps.
-8. Create and use an ARTIQ device database as usual, but set ``"target": "cortexa9"`` in the arguments of the core device.
+1. Install the ARTIQ version that corresponds to the artiq-zynq version you are targeting.
+2. To obtain firmware binaries, select the latest successful build on [Hydra](https://nixbld.m-labs.hk/) for the targeted artiq-zynq version, or use AFWS. If using Hydra, search for the job named ``<board>-<variant>-sd`` (for example: ``zc706-nist_clock-sd`` or ``zc706-nist_qc2-sd``).
+3. Place the ``boot.bin`` file, obtained from Hydra's "binary distribution" download link or from AFWS, at the root of a FAT-formatted SD card.
+4. Optionally, create a ``config.txt`` configuration file at the root of the SD card containing ``key=value`` pairs on each line. Use the ``ip``, ``ip6`` and ``mac`` keys to respectively set the IPv4, IPv6 and MAC address of the board. Configuring an IPv6 address is entirely optional. If these keys are not found, the firmware will use default values that may or may not be compatible with your network.
+5. Insert the SD card into the board and set up the board to boot from the SD card. For the ZC706, this is achieved by placing the large DIP switch SW11 in the 00110 position.
+6. Power up the board. After the firmware starts successfully, it should respond to ping at its IP addresses, and boot messages can be observed from its UART at 115200bps.
+7. Create and use an ARTIQ device database as usual, but set ``"target": "cortexa9"`` in the arguments of the core device.
 
 Configuration
 -------------
