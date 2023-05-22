@@ -311,7 +311,7 @@ class GenericMaster(SoCCore):
         self.submodules.routing_table = rtio.RoutingTableAccess(self.cri_con)
         self.csr_devices.append("routing_table")
 
-        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.rtio_core.cri,
+        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.cri_con.switch.slave,
                                                           self.ps7.s_axi_hp1)
         self.csr_devices.append("rtio_analyzer")
 

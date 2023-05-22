@@ -320,7 +320,7 @@ class _MasterBase(SoCCore):
         self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
         self.csr_devices.append("rtio_moninj")
 
-        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.rtio_core.cri,
+        self.submodules.rtio_analyzer = analyzer.Analyzer(self.rtio_tsc, self.cri_con.switch.slave,
                                                           self.ps7.s_axi_hp1)
         self.csr_devices.append("rtio_analyzer")
 
