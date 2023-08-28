@@ -114,20 +114,31 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
+    let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
 
     #[cfg(feature = "target_kasli_soc")]
+    let (mut io_expander0, mut io_expander1);
+    #[cfg(feature = "target_kasli_soc")]
     {
-        let i2c = unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() };
-        for expander_i in 0..=1 {
-            let mut io_expander = io_expander::IoExpander::new(i2c, expander_i).unwrap();
-            io_expander.init().expect("I2C I/O expander #0 initialization failed");
-            // Actively drive TX_DISABLE to false on SFP0..3
-            io_expander.set_oe(0, 1 << 1).unwrap();
-            io_expander.set_oe(1, 1 << 1).unwrap();
-            io_expander.set(0, 1, false);
-            io_expander.set(1, 1, false);
-            io_expander.service().unwrap();
-        }
+        io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
+        io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
+        io_expander0
+            .init(i2c_bus)
+            .expect("I2C I/O expander #0 initialization failed");
+        io_expander1
+            .init(i2c_bus)
+            .expect("I2C I/O expander #1 initialization failed");
+        // Actively drive TX_DISABLE to false on SFP0..3
+        io_expander0.set_oe(i2c_bus, 0, 1 << 1).unwrap();
+        io_expander1.set_oe(i2c_bus, 0, 1 << 1).unwrap();
+        io_expander0.set_oe(i2c_bus, 1, 1 << 1).unwrap();
+        io_expander1.set_oe(i2c_bus, 1, 1 << 1).unwrap();
+        io_expander0.set(0, 1, false);
+        io_expander1.set(0, 1, false);
+        io_expander0.set(1, 1, false);
+        io_expander1.set(1, 1, false);
+        io_expander0.service(i2c_bus).unwrap();
+        io_expander1.service(i2c_bus).unwrap();
     }
 
     let cfg = match Config::new() {

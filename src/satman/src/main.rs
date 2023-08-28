@@ -470,18 +470,30 @@ pub extern fn main_core0() -> i32 {
 
     let mut i2c = I2c::i2c0();
     i2c.init().expect("I2C initialization failed");
+
+    #[cfg(feature = "target_kasli_soc")]
+    let (mut io_expander0, mut io_expander1);
     #[cfg(feature = "target_kasli_soc")]
     {
-        for expander_i in 0..=1 {
-            let mut io_expander = io_expander::IoExpander::new(&mut i2c, expander_i).unwrap();
-            io_expander.init().expect("I2C I/O expander #0 initialization failed");
-            // Actively drive TX_DISABLE to false on SFP0..3
-            io_expander.set_oe(0, 1 << 1).unwrap();
-            io_expander.set_oe(1, 1 << 1).unwrap();
-            io_expander.set(0, 1, false);
-            io_expander.set(1, 1, false);
-            io_expander.service().unwrap();
-        }
+        io_expander0 = io_expander::IoExpander::new(&mut i2c, 0).unwrap();
+        io_expander1 = io_expander::IoExpander::new(&mut i2c, 1).unwrap();
+        io_expander0
+            .init(&mut i2c)
+            .expect("I2C I/O expander #0 initialization failed");
+        io_expander1
+            .init(&mut i2c)
+            .expect("I2C I/O expander #1 initialization failed");
+        // Actively drive TX_DISABLE to false on SFP0..3
+        io_expander0.set_oe(&mut i2c, 0, 1 << 1).unwrap();
+        io_expander1.set_oe(&mut i2c, 0, 1 << 1).unwrap();
+        io_expander0.set_oe(&mut i2c, 1, 1 << 1).unwrap();
+        io_expander1.set_oe(&mut i2c, 1, 1 << 1).unwrap();
+        io_expander0.set(0, 1, false);
+        io_expander1.set(0, 1, false);
+        io_expander0.set(1, 1, false);
+        io_expander1.set(1, 1, false);
+        io_expander0.service(&mut i2c).unwrap();
+        io_expander1.service(&mut i2c).unwrap();
     }
 
     #[cfg(has_si5324)]
