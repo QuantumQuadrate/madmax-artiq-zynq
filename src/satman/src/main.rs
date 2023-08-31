@@ -206,7 +206,7 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
             drtioaux::send(0, &drtioaux::Packet::RoutingAck)
         }
 
-        drtioaux::Packet::MonitorRequest { destination: _destination, channel: _channel, probe: _probe } => {
+        drtioaux::Packet::MonitorRequest { destination: _destination, channel, probe } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let value;
             #[cfg(has_rtio_moninj)]
@@ -223,8 +223,8 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
             let reply = drtioaux::Packet::MonitorReply { value: value };
             drtioaux::send(0, &reply)
         },
-        drtioaux::Packet::InjectionRequest { destination: _destination, channel: _channel, 
-                                             overrd: _overrd, value: _value } => {
+        drtioaux::Packet::InjectionRequest { destination: _destination, channel, 
+                                             overrd, value } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             #[cfg(has_rtio_moninj)]
             unsafe {
@@ -235,7 +235,7 @@ fn process_aux_packet(_repeaters: &mut [repeater::Repeater],
             Ok(())
         },
         drtioaux::Packet::InjectionStatusRequest { destination: _destination, 
-                                                   channel: _channel, overrd: _overrd } => {
+                                                   channel, overrd } => {
             forward!(_routing_table, _destination, *_rank, _repeaters, &packet, timer);
             let value;
             #[cfg(has_rtio_moninj)]
