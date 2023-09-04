@@ -10,6 +10,7 @@ from migen.genlib.cdc import MultiReg
 from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import kasli_soc
 from misoc.interconnect.csr import *
+from misoc.cores import virtual_leds
 from misoc.integration import cpu_interface
 
 from artiq.coredevice import jsondesc
@@ -321,6 +322,11 @@ class GenericMaster(SoCCore):
             self.config["HAS_GRABBER"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
 
+        self.submodules.virtual_leds = virtual_leds.VirtualLeds()
+        self.csr_devices.append("virtual_leds")
+
+        self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
+                for i, channel in enumerate(self.drtio_transceiver.channels)]
 
 class GenericSatellite(SoCCore):
     def __init__(self, description, acpki=False):
@@ -480,6 +486,11 @@ class GenericSatellite(SoCCore):
             self.add_csr_group("grabber", self.grabber_csr_group)
             # no RTIO CRG here
      
+        self.submodules.virtual_leds = virtual_leds.VirtualLeds()
+        self.csr_devices.append("virtual_leds")
+
+        self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
+                for i, channel in enumerate(self.drtio_transceiver.channels)]
 
 def write_mem_file(soc, filename):
     with open(filename, "w") as f:

@@ -1,6 +1,8 @@
 use libboard_zynq::i2c;
 use log::info;
 
+use crate::pl::csr;
+
 // Only the bare minimum registers. Bits/IO connections equivalent between IC types.
 struct Registers {
     // PCA9539 equivalent register names in comments
@@ -31,6 +33,7 @@ const IODIR1: [u8; 2] = [
 
 pub struct IoExpander {
     address: u8,
+    virtual_led_mapping: &'static [(u8, u8, u8)],
     iodir: [u8; 2],
     out_current: [u8; 2],
     out_target: [u8; 2],
@@ -39,11 +42,18 @@ pub struct IoExpander {
 
 impl IoExpander {
     pub fn new(i2c: &mut i2c::I2c, index: u8) -> Result<Self, &'static str> {
+        #[cfg(hw_rev = "v1.0")]
+        const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 6), (1, 1, 6)];
+        #[cfg(hw_rev = "v1.1")]
+        const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 7), (1, 1, 6)];
+
+        const VIRTUAL_LED_MAPPING1: [(u8, u8, u8); 2] = [(2, 0, 6), (3, 1, 6)];
 
         // Both expanders on SHARED I2C bus
         let mut io_expander = match index {
             0 => IoExpander {
                 address: 0x40,
+                virtual_led_mapping: &VIRTUAL_LED_MAPPING0,
                 iodir: IODIR0,
                 out_current: [0; 2],
                 out_target: [0; 2],
@@ -56,6 +66,7 @@ impl IoExpander {
             },
             1 => IoExpander {
                 address: 0x42,
+                virtual_led_mapping: &VIRTUAL_LED_MAPPING1,
                 iodir: IODIR1,
                 out_current: [0; 2],
                 out_target: [0; 2],
@@ -143,6 +154,12 @@ impl IoExpander {
     }
 
     pub fn service(&mut self, i2c: &mut i2c::I2c) -> Result<(), &'static str> {
+        #[cfg(has_virtual_leds)]
+        for (led, port, bit) in self.virtual_led_mapping.iter() {
+            let level = unsafe { csr::virtual_leds::status_read() >> led & 1 };
+            self.set(*port, *bit, level != 0);
+        }
+
         if self.out_target != self.out_current {
             self.select(i2c)?;
             if self.out_target[0] != self.out_current[0] {

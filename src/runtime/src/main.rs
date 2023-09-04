@@ -11,6 +11,7 @@
 
 extern crate alloc;
 
+use core::cell::RefCell;
 use log::{info, warn, error};
 
 use libboard_zynq::{timer::GlobalTimer, mpcore, gic};
@@ -91,6 +92,24 @@ async fn report_async_rtio_errors() {
 
 
 
+#[cfg(feature = "target_kasli_soc")]
+async fn io_expanders_service(
+    i2c_bus: RefCell<&mut libboard_zynq::i2c::I2c>,
+    io_expander0: RefCell<io_expander::IoExpander>,
+    io_expander1: RefCell<io_expander::IoExpander>,
+) {
+    loop {
+        task::r#yield().await;
+        io_expander0
+            .borrow_mut()
+            .service(&mut i2c_bus.borrow_mut())
+            .expect("I2C I/O expander #0 service failed");
+        io_expander1
+            .borrow_mut()
+            .service(&mut i2c_bus.borrow_mut())
+            .expect("I2C I/O expander #1 service failed");
+    }
+}
 static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
 
 #[no_mangle]
@@ -149,5 +168,11 @@ pub fn main_core0() {
 
     task::spawn(report_async_rtio_errors());
 
+    #[cfg(feature = "target_kasli_soc")]
+    task::spawn(io_expanders_service(
+        RefCell::new(i2c_bus),
+        RefCell::new(io_expander0),
+        RefCell::new(io_expander1),
+    ));
     comms::main(timer, cfg);
 }

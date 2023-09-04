@@ -524,6 +524,16 @@ pub extern fn main_core0() -> i32 {
             for mut rep in repeaters.iter_mut() {
                 rep.service(&routing_table, rank, &mut timer);
             }
+            #[cfg(feature = "target_kasli_soc")]
+            {
+                io_expander0
+                    .service(&mut i2c)
+                    .expect("I2C I/O expander #0 service failed");
+                io_expander1
+                    .service(&mut i2c)
+                    .expect("I2C I/O expander #1 service failed");
+            }
+
             hardware_tick(&mut hardware_tick_ts, &mut timer);
         }
 
@@ -544,6 +554,15 @@ pub extern fn main_core0() -> i32 {
             #[allow(unused_mut)]
             for mut rep in repeaters.iter_mut() {
                 rep.service(&routing_table, rank, &mut timer);
+            }
+            #[cfg(feature = "target_kasli_soc")]
+            {
+                io_expander0
+                    .service(&mut i2c)
+                    .expect("I2C I/O expander #0 service failed");
+                io_expander1
+                    .service(&mut i2c)
+                    .expect("I2C I/O expander #1 service failed");
             }
             hardware_tick(&mut hardware_tick_ts, &mut timer);
             if drtiosat_tsc_loaded() {
