@@ -10,6 +10,25 @@ struct Registers {
     gpiob: u8,  // Output Port 1
 }
 
+//IO expanders pins
+const IODIR_OUT_SFP_TX_DISABLE: u8 = 0x02;
+const IODIR_OUT_SFP_LED: u8 = 0x40;
+#[cfg(hw_rev = "v1.0")]
+const IODIR_OUT_SFP0_LED: u8 = 0x40;
+#[cfg(hw_rev = "v1.1")]
+const IODIR_OUT_SFP0_LED: u8 = 0x80;
+
+//IO expander port direction
+const IODIR0: [u8; 2] = [
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP0_LED,
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
+];
+
+const IODIR1: [u8; 2] = [
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
+];
+
 pub struct IoExpander {
     address: u8,
     iodir: [u8; 2],
@@ -25,7 +44,7 @@ impl IoExpander {
         let mut io_expander = match index {
             0 => IoExpander {
                 address: 0x40,
-                iodir: [0xff; 2],
+                iodir: IODIR0,
                 out_current: [0; 2],
                 out_target: [0; 2],
                 registers: Registers {
@@ -37,7 +56,7 @@ impl IoExpander {
             },
             1 => IoExpander {
                 address: 0x42,
-                iodir: [0xff; 2],
+                iodir: IODIR1,
                 out_current: [0; 2],
                 out_target: [0; 2],
                 registers: Registers {

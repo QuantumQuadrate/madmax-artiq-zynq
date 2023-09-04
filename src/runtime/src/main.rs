@@ -128,11 +128,7 @@ pub fn main_core0() {
         io_expander1
             .init(i2c_bus)
             .expect("I2C I/O expander #1 initialization failed");
-        // Actively drive TX_DISABLE to false on SFP0..3
-        io_expander0.set_oe(i2c_bus, 0, 1 << 1).unwrap();
-        io_expander1.set_oe(i2c_bus, 0, 1 << 1).unwrap();
-        io_expander0.set_oe(i2c_bus, 1, 1 << 1).unwrap();
-        io_expander1.set_oe(i2c_bus, 1, 1 << 1).unwrap();
+        // Drive TX_DISABLE to false on SFP0..3
         io_expander0.set(0, 1, false);
         io_expander1.set(0, 1, false);
         io_expander0.set(1, 1, false);

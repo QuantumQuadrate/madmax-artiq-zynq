@@ -483,11 +483,7 @@ pub extern fn main_core0() -> i32 {
         io_expander1
             .init(&mut i2c)
             .expect("I2C I/O expander #1 initialization failed");
-        // Actively drive TX_DISABLE to false on SFP0..3
-        io_expander0.set_oe(&mut i2c, 0, 1 << 1).unwrap();
-        io_expander1.set_oe(&mut i2c, 0, 1 << 1).unwrap();
-        io_expander0.set_oe(&mut i2c, 1, 1 << 1).unwrap();
-        io_expander1.set_oe(&mut i2c, 1, 1 << 1).unwrap();
+        // Drive TX_DISABLE to false on SFP0..3
         io_expander0.set(0, 1, false);
         io_expander1.set(0, 1, false);
         io_expander0.set(1, 1, false);
