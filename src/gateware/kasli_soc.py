@@ -77,7 +77,7 @@ class RTIOCRG(Module, AutoCSR):
             MultiReg(pll_locked, self.pll_locked.status)
         ]
 
-        
+
 eem_iostandard_dict = {
      0: "LVDS_25",
      1: "LVDS_25",
@@ -114,6 +114,7 @@ class SMAClkinForward(Module):
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
+        sys_clk_freq = 125e6
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -142,6 +143,7 @@ class GenericStandalone(SoCCore):
             self.ps7.cd_sys.clk,
             self.rtio_crg.cd_rtio.clk)
         fix_serdes_timing_path(platform)
+        self.config["CLOCK_FREQUENCY"] = int(sys_clk_freq)
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
@@ -226,6 +228,7 @@ class GenericMaster(SoCCore):
             pads=data_pads,
             sys_clk_freq=sys_clk_freq)
         self.csr_devices.append("drtio_transceiver")
+        self.config["CLOCK_FREQUENCY"] = int(sys_clk_freq)
 
         self.crg = self.ps7 # HACK for eem_7series to find the clock
         self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
@@ -330,7 +333,7 @@ class GenericMaster(SoCCore):
 
 class GenericSatellite(SoCCore):
     def __init__(self, description, acpki=False):
-        sys_clk_freq = 125e6  
+        sys_clk_freq = 125e6
         rtio_clk_freq = description["rtio_frequency"]
 
         self.acpki = acpki
@@ -353,7 +356,7 @@ class GenericSatellite(SoCCore):
         self.submodules.rtio_crg = RTIOClockMultiplier(rtio_clk_freq)
         self.csr_devices.append("rtio_crg")
         fix_serdes_timing_path(platform)
-        
+
         data_pads = [platform.request("sfp", i) for i in range(4)]
         
         self.submodules.drtio_transceiver = gtx_7series.GTX(
@@ -458,6 +461,7 @@ class GenericSatellite(SoCCore):
 
         rtio_clk_period = 1e9/rtio_clk_freq
         self.config["RTIO_FREQUENCY"] = str(rtio_clk_freq/1e6)
+        self.config["CLOCK_FREQUENCY"] = int(sys_clk_freq)
 
         self.submodules.siphaser = SiPhaser7Series(
             si5324_clkin=platform.request("cdr_clk"),
@@ -485,7 +489,7 @@ class GenericSatellite(SoCCore):
             self.config["HAS_GRABBER"] = None
             self.add_csr_group("grabber", self.grabber_csr_group)
             # no RTIO CRG here
-     
+
         self.submodules.virtual_leds = virtual_leds.VirtualLeds()
         self.csr_devices.append("virtual_leds")
 

@@ -20,6 +20,8 @@ extern crate alloc;
 
 use libboard_zynq::{i2c::I2c, timer::GlobalTimer, time::Milliseconds, print, println, mpcore, gic, stdio};
 use libsupport_zynq::ram;
+#[cfg(has_grabber)]
+use libboard_artiq::grabber;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
 #[cfg(feature = "target_kasli_soc")]
@@ -417,6 +419,8 @@ fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
     if now > ts_ms {
         ts_ms = now + Milliseconds(200);
         *ts = ts_ms.0;
+        #[cfg(has_grabber)]
+        grabber::tick();
     }
 }
 

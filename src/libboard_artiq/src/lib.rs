@@ -29,6 +29,8 @@ pub mod drtioaux_async;
 pub mod mem;
 #[cfg(feature = "target_kasli_soc")]
 pub mod io_expander;
+#[cfg(has_grabber)]
+pub mod grabber;
 
 use core::{cmp, str};
 use libboard_zynq::slcr;

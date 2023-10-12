@@ -110,6 +110,21 @@ async fn io_expanders_service(
             .expect("I2C I/O expander #1 service failed");
     }
 }
+#[cfg(has_grabber)]
+mod grabber {
+    use libasync::delay;
+    use libboard_artiq::grabber;
+    use libboard_zynq::time::Milliseconds;
+    use crate::GlobalTimer;
+    pub async fn grabber_thread(timer: GlobalTimer) {
+        let mut countdown = timer.countdown();
+        loop {
+            grabber::tick();
+            delay(&mut countdown, Milliseconds(200)).await;
+        }
+    }
+}
+
 static mut LOG_BUFFER: [u8; 1<<17] = [0; 1<<17];
 
 #[no_mangle]
@@ -167,6 +182,9 @@ pub fn main_core0() {
     rtio_clocking::init(&mut timer, &cfg);
 
     task::spawn(report_async_rtio_errors());
+
+    #[cfg(has_grabber)]
+    task::spawn(grabber::grabber_thread(timer));
 
     #[cfg(feature = "target_kasli_soc")]
     task::spawn(io_expanders_service(
