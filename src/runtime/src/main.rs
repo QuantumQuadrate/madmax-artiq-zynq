@@ -11,7 +11,7 @@
 
 extern crate alloc;
 
-#[cfg(feature = "target_kasli_soc")]
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
 use core::cell::RefCell;
 use log::{info, warn, error};
 
@@ -23,7 +23,7 @@ use void::Void;
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
 use libboard_artiq::{logger, identifier_read, init_gateware, pl};
-#[cfg(feature = "target_kasli_soc")]
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
 use libboard_artiq::io_expander;
 
 const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
@@ -93,7 +93,7 @@ async fn report_async_rtio_errors() {
 
 
 
-#[cfg(feature = "target_kasli_soc")]
+#[cfg(all(feature = "target_kasli_soc", has_drtio))]
 async fn io_expanders_service(
     i2c_bus: RefCell<&mut libboard_zynq::i2c::I2c>,
     io_expander0: RefCell<io_expander::IoExpander>,
@@ -149,7 +149,7 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
-    #[cfg(feature = "target_kasli_soc")]
+    #[cfg(all(feature = "target_kasli_soc", has_drtio))]
     {
         let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
         let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
