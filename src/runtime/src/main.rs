@@ -11,6 +11,7 @@
 
 extern crate alloc;
 
+#[cfg(feature = "target_kasli_soc")]
 use core::cell::RefCell;
 use log::{info, warn, error};
 
@@ -148,14 +149,11 @@ pub fn main_core0() {
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
     i2c::init();
-    let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
-
-    #[cfg(feature = "target_kasli_soc")]
-    let (mut io_expander0, mut io_expander1);
     #[cfg(feature = "target_kasli_soc")]
     {
-        io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
-        io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
+        let i2c_bus = unsafe { (i2c::I2C_BUS).as_mut().unwrap() };
+        let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
+        let mut io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
         io_expander0
             .init(i2c_bus)
             .expect("I2C I/O expander #0 initialization failed");
@@ -169,6 +167,11 @@ pub fn main_core0() {
         io_expander1.set(1, 1, false);
         io_expander0.service(i2c_bus).unwrap();
         io_expander1.service(i2c_bus).unwrap();
+        task::spawn(io_expanders_service(
+            RefCell::new(i2c_bus),
+            RefCell::new(io_expander0),
+            RefCell::new(io_expander1),
+        ));
     }
 
     let cfg = match Config::new() {
@@ -186,11 +189,5 @@ pub fn main_core0() {
     #[cfg(has_grabber)]
     task::spawn(grabber::grabber_thread(timer));
 
-    #[cfg(feature = "target_kasli_soc")]
-    task::spawn(io_expanders_service(
-        RefCell::new(i2c_bus),
-        RefCell::new(io_expander0),
-        RefCell::new(io_expander1),
-    ));
     comms::main(timer, cfg);
 }

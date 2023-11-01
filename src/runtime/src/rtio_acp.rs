@@ -11,6 +11,7 @@ pub const RTIO_O_STATUS_UNDERFLOW:                 i32 = 2;
 pub const RTIO_O_STATUS_DESTINATION_UNREACHABLE:   i32 = 4;
 pub const RTIO_I_STATUS_WAIT_EVENT:                i32 = 1;
 pub const RTIO_I_STATUS_OVERFLOW:                  i32 = 2;
+#[allow(unused)]
 pub const RTIO_I_STATUS_WAIT_STATUS:               i32 = 4; // TODO
 pub const RTIO_I_STATUS_DESTINATION_UNREACHABLE:   i32 = 8;
 
