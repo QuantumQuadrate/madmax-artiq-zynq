@@ -451,6 +451,7 @@ class _SatelliteBase(SoCCore):
     def add_rtio(self, rtio_channels):
         self.submodules.rtio_moninj = rtio.MonInj(rtio_channels)
         self.csr_devices.append("rtio_moninj")
+        self.rustc_cfg["has_rtio_moninj"] = None
 
         if self.acpki:
             self.rustc_cfg["ki_impl"] = "acp"
