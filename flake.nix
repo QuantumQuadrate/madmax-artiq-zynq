@@ -134,7 +134,7 @@
         cargoLock = { 
           lockFile = src/Cargo.lock;
           outputHashes = {
-            "libasync-0.0.0" = "sha256-p89w9eoFJ2VFTDZ5Mrv5vsH0E1Ko9z1C6Ett281hCHg=";
+            "libasync-0.0.0" = "sha256-f8IPIYenff7B8S3p/pjVxT/0HVZuJXtdg2jtMpaZEbM=";
           };
         };
 

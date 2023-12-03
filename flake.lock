@@ -217,11 +217,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1697795161,
-        "narHash": "sha256-p89w9eoFJ2VFTDZ5Mrv5vsH0E1Ko9z1C6Ett281hCHg=",
+        "lastModified": 1701572971,
+        "narHash": "sha256-f8IPIYenff7B8S3p/pjVxT/0HVZuJXtdg2jtMpaZEbM=",
         "ref": "refs/heads/master",
-        "rev": "be672ab662d8134ee11412a651864824f6483d4a",
-        "revCount": 630,
+        "rev": "91bae572f913abc2f95acb899ca5afa33eeaa036",
+        "revCount": 634,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
