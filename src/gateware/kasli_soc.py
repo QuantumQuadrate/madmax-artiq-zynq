@@ -160,7 +160,9 @@ class GenericStandalone(SoCCore):
         self.rtio_channels.append(rtio.LogChannel())
 
         self.submodules.rtio_tsc = rtio.TSC("async", glbl_fine_ts_width=3)
-        self.submodules.rtio_core = rtio.Core(self.rtio_tsc, self.rtio_channels)
+        self.submodules.rtio_core = rtio.Core(
+            self.rtio_tsc, self.rtio_channels, lane_count=description["sed_lanes"]
+        )
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
@@ -287,7 +289,9 @@ class GenericMaster(SoCCore):
         self.add_csr_group("drtioaux", drtioaux_csr_group)
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
-        self.submodules.rtio_core = rtio.Core(self.rtio_tsc, self.rtio_channels)
+        self.submodules.rtio_core = rtio.Core(
+            self.rtio_tsc, self.rtio_channels, lane_count=description["sed_lanes"]
+        )
         self.csr_devices.append("rtio_core")
 
         if self.acpki:
@@ -444,7 +448,9 @@ class GenericSatellite(SoCCore):
         self.submodules.rtio_dma = dma.DMA(self.ps7.s_axi_hp0)
         self.csr_devices.append("rtio_dma")
 
-        self.submodules.local_io = SyncRTIO(self.rtio_tsc, self.rtio_channels)
+        self.submodules.local_io = SyncRTIO(
+            self.rtio_tsc, self.rtio_channels, lane_count=description["sed_lanes"]
+        )
         self.comb += self.drtiosat.async_errors.eq(self.local_io.async_errors)
 
         self.submodules.cri_con = rtio.CRIInterconnectShared(
