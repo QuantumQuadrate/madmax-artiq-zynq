@@ -61,6 +61,7 @@ mod remote_moninj {
     use libboard_artiq::drtioaux_async;
     use crate::rtio_mgt::drtio;
     use log::error;
+    use libasync::delay;
 
     pub async fn read_probe(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
         let reply = drtio::aux_transact(aux_mutex, linkno, &drtioaux_async::Packet::MonitorRequest { 
@@ -77,7 +78,7 @@ mod remote_moninj {
         0
     }
 
-    pub async fn inject(aux_mutex: &Rc<Mutex<bool>>, _timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
+    pub async fn inject(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
         let _lock = aux_mutex.lock();
         drtioaux_async::send(linkno, &drtioaux_async::Packet::InjectionRequest {
             destination: destination,
@@ -85,6 +86,9 @@ mod remote_moninj {
             overrd: overrd as _,
             value: value as _
         }).await.unwrap();
+        // give time for the satellite to process the request before releasing mutex
+        let mut countdown = timer.countdown();
+        delay(&mut countdown, Milliseconds(10)).await;
     }
 
     pub async fn read_injection_status(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8) -> i8 {
