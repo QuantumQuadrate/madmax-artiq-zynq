@@ -696,6 +696,31 @@ async fn handle_connection(
     }
 }
 
+async fn load_and_run_idle_kernel(
+    buffer: &Vec<u8>,
+    control: &Rc<RefCell<kernel::Control>>,
+    up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    aux_mutex: &Rc<Mutex<bool>>,
+    routing_table: &drtio_routing::RoutingTable,
+    timer: GlobalTimer,
+) {
+    info!("Loading idle kernel");
+    let res = handle_flash_kernel(buffer, control, up_destinations,  aux_mutex, routing_table, timer).await;
+    match res {
+        #[cfg(has_drtio)]
+        Err(Error::DestinationDown) => {
+            let mut countdown = timer.countdown();
+            delay(&mut countdown, Milliseconds(500)).await;
+        }
+        Err(_) => warn!("error loading idle kernel"),
+        _ => (),
+    }
+    info!("Running idle kernel");
+    let _ = handle_run_kernel(None, control, up_destinations, aux_mutex, routing_table, timer)
+        .await.map_err(|_| warn!("error running idle kernel"));
+    info!("Idle kernel terminated");
+}
+
 pub fn main(timer: GlobalTimer, cfg: Config) {
     let net_addresses = net_settings::get_addresses(&cfg);
     info!("network addresses: {}", net_addresses);
@@ -786,8 +811,30 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     mgmt::start(cfg);
 
     task::spawn(async move {
-        let connection = Rc::new(Semaphore::new(1, 1));
+        let connection = Rc::new(Semaphore::new(0, 1));
         let terminate = Rc::new(Semaphore::new(0, 1));
+        {
+            let control = control.clone();
+            let idle_kernel = idle_kernel.clone();
+            let connection = connection.clone();
+            let terminate = terminate.clone();
+            let up_destinations = up_destinations.clone();
+            let aux_mutex = aux_mutex.clone();
+            let routing_table = drtio_routing_table.clone();
+            task::spawn(async move {
+                let routing_table = routing_table.borrow();
+                select_biased! {
+                    _ = (async {
+                        if let Some(buffer) = &*idle_kernel {
+                            load_and_run_idle_kernel(&buffer, &control, &up_destinations, &aux_mutex, &routing_table, timer).await;
+                        }
+                    }).fuse() => (),
+                    _ = terminate.async_wait().fuse() => ()
+                }
+                connection.signal();
+            });
+        }
+
         loop {
             let mut stream = TcpStream::accept(1381, 0x10_000, 0x10_000).await.unwrap();
 
@@ -815,22 +862,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                             .await
                             .map_err(|e| warn!("connection terminated: {}", e));
                         if let Some(buffer) = &*idle_kernel {
-                            info!("Loading idle kernel");
-                            let res = handle_flash_kernel(&buffer, &control, &up_destinations,  &aux_mutex, &routing_table, timer)
-                                .await;
-                            match res {
-                                #[cfg(has_drtio)]
-                                Err(Error::DestinationDown) => {
-                                    let mut countdown = timer.countdown();
-                                    delay(&mut countdown, Milliseconds(500)).await;
-                                }
-                                Err(_) => warn!("error loading idle kernel"),
-                                _ => (),
-                            }
-                            info!("Running idle kernel");
-                            let _ = handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer)
-                                .await.map_err(|_| warn!("error running idle kernel"));
-                            info!("Idle kernel terminated");
+                            load_and_run_idle_kernel(&buffer, &control, &up_destinations, &aux_mutex, &routing_table, timer).await;
                         }
                     }).fuse() => (),
                     _ = terminate.async_wait().fuse() => ()
