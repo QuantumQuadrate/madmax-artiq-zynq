@@ -13,7 +13,7 @@ from misoc.interconnect.csr import *
 from misoc.cores import gpio
 
 from artiq.gateware import rtio, nist_clock, nist_qc2
-from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2, edge_counter
+from artiq.gateware.rtio.phy import ttl_simple, ttl_serdes_7series, dds, spi2, edge_counter, cxp_grabber
 from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
 from artiq.gateware.drtio.transceiver import gtx_7series
 from artiq.gateware.drtio.siphaser import SiPhaser7Series
@@ -25,6 +25,7 @@ import analyzer
 import acpki
 import drtio_aux_controller
 import zynq_clocking
+import cxp_4r_fmc
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 
 class SMAClkinForward(Module):
@@ -138,7 +139,7 @@ class ZC706(SoCCore):
         platform.add_extension(si5324_fmc33)
         self.comb += platform.request("si5324_33").rst_n.eq(1)
 
-        cdr_clk = Signal()
+        self.cdr_clk = Signal()
         cdr_clk_buf = Signal()
         si5324_out = platform.request("si5324_clkout")
         platform.add_period_constraint(si5324_out.p, 8.0)
@@ -146,11 +147,11 @@ class ZC706(SoCCore):
             Instance("IBUFDS_GTE2",
                 i_CEB=0,
                 i_I=si5324_out.p, i_IB=si5324_out.n,
-                o_O=cdr_clk,
+                o_O=self.cdr_clk,
                 p_CLKCM_CFG="TRUE",
                 p_CLKRCV_TRST="TRUE",
                 p_CLKSWING_CFG=3),
-            Instance("BUFG", i_I=cdr_clk, o_O=cdr_clk_buf)
+            Instance("BUFG", i_I=self.cdr_clk, o_O=cdr_clk_buf)
         ]
         self.config["HAS_SI5324"] = None
         self.config["SI5324_AS_SYNTHESIZER"] = None
@@ -652,6 +653,56 @@ class _NIST_QC2_RTIO:
         self.add_rtio(rtio_channels)
 
 
+class _CXP_4R_FMC_RTIO():
+    """
+    CoaXpress host FMC card
+    """
+    def __init__(self):
+        platform = self.platform
+        platform.add_extension(cxp_4r_fmc.fmc_adapter_io)
+        platform.add_extension(leds_fmc33)
+
+        rtio_channels = []
+        clk_freq = 125e6
+
+        self.submodules.cxp_grabber = cxp_grabber.CXPGrabber(
+            refclk=self.cdr_clk,
+            tx_pads=[platform.request("CXP_LS", 0)],
+            rx_pads=[platform.request("CXP_HS", 0)],
+            sys_clk_freq=clk_freq,
+        )
+        mem_size = self.cxp_grabber.core.get_mem_size()
+        # upper half is tx while lower half is rx
+        memory_address = self.axi2csr.register_port(self.cxp_grabber.core.get_tx_port(), mem_size)
+        self.axi2csr.register_port(self.cxp_grabber.core.get_rx_port(), mem_size)
+        self.add_memory_region("cxp_mem", self.mem_map["csr"] + memory_address, mem_size * 2)
+        self.csr_devices.append("cxp_grabber")
+
+        print("CoaXPress at RTIO channel 0x{:06x}".format(len(rtio_channels)))
+        rtio_channels += [
+            rtio.Channel(self.cxp_grabber.trigger),
+            rtio.Channel(self.cxp_grabber.config),
+            rtio.Channel(self.cxp_grabber.gate_data),
+        ]
+        # max freq of cxp_gt_rx = linerate/internal_datawidth = 12.5Gbps/40 = 312.5MHz
+        # zc706 use speed grade 2 which only support up to 10.3125Gbps (~4ns)
+        # pushing to 12.5Gbps (3.2ns) will result in Pulse width violation but setup/hold times will still meet
+        rx = self.cxp_grabber.phy_rx.phys[0]
+        platform.add_period_constraint(rx.gtx.cd_cxp_gt_rx.clk, 3.2)
+        # constraint the clk path 
+        platform.add_false_path_constraints(self.sys_crg.cd_sys.clk, rx.gtx.cd_cxp_gt_rx.clk)
+
+        # Add a user LED for rtio moninj 
+        print("USER LED at RTIO channel 0x{:06x}".format(len(rtio_channels)))
+        phy = ttl_simple.Output(self.platform.request("user_led_33", 0))
+        self.submodules += phy
+        rtio_channels.append(rtio.Channel.from_phy(phy))
+        self.config["HAS_RTIO_LOG"] = None
+        rtio_channels.append(rtio.LogChannel())
+
+        self.config["RTIO_LOG_CHANNEL"] = len(rtio_channels)
+        self.add_rtio(rtio_channels)
+
 class NIST_CLOCK(ZC706, _NIST_CLOCK_RTIO):
     def __init__(self, acpki, drtio100mhz):
         ZC706.__init__(self, acpki)
@@ -684,8 +735,13 @@ class NIST_QC2_Satellite(_SatelliteBase, _NIST_QC2_RTIO):
         _SatelliteBase.__init__(self, acpki, drtio100mhz)
         _NIST_QC2_RTIO.__init__(self)
 
+class CXP_4R_FMC(ZC706, _CXP_4R_FMC_RTIO):
+    def __init__(self, acpki, drtio100mhz):
+        ZC706.__init__(self, acpki)
+        _CXP_4R_FMC_RTIO.__init__(self)
+
 VARIANTS = {cls.__name__.lower(): cls for cls in [NIST_CLOCK, NIST_CLOCK_Master, NIST_CLOCK_Satellite,
-                                                  NIST_QC2, NIST_QC2_Master, NIST_QC2_Satellite]}
+                                                  NIST_QC2, NIST_QC2_Master, NIST_QC2_Satellite, CXP_4R_FMC]}
 
 def main():
     parser = argparse.ArgumentParser(
