@@ -345,6 +345,7 @@
       {
         inherit fastnumbers artiq-netboot ramda migen-axi binutils-arm;
       } //
+      (board-package-set { target = "zc706"; variant = "cxp_4r_fmc"; }) //
       (board-package-set { target = "zc706"; variant = "nist_clock"; }) //
       (board-package-set { target = "zc706"; variant = "nist_clock_master"; }) //
       (board-package-set { target = "zc706"; variant = "nist_clock_master_100mhz"; }) //
