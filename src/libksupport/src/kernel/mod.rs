@@ -24,6 +24,7 @@ pub enum SubkernelStatus {
     IncorrectState,
     CommLost,
     OtherError,
+    Exception(Vec<u8>),
 }
 
 #[derive(Debug, Clone)]

@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use cslice::CSlice;
 
 use super::{Message, SubkernelStatus, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
-use crate::{artiq_raise, rpc::send_args};
+use crate::{artiq_raise, eh_artiq, rpc::send_args};
 
 pub extern "C" fn load_run(id: u32, destination: u8, run: bool) {
     unsafe {
@@ -51,6 +51,12 @@ pub extern "C" fn await_finish(id: u32, timeout: i64) {
         Message::SubkernelAwaitFinishReply {
             status: SubkernelStatus::OtherError,
         } => artiq_raise!("SubkernelError", "An error occurred during subkernel operation"),
+        Message::SubkernelAwaitFinishReply {
+            status: SubkernelStatus::Exception(raw_exception),
+        } => {
+            // reconstruct the exception here and raise it
+            eh_artiq::raise_raw(&raw_exception)
+        }
         _ => panic!("expected SubkernelAwaitFinishReply after SubkernelAwaitFinishRequest"),
     }
 }
@@ -116,6 +122,13 @@ pub extern "C" fn await_message(id: i32, timeout: i64, tags: &CSlice<u8>, min: u
             status: SubkernelStatus::OtherError,
             ..
         } => artiq_raise!("SubkernelError", "An error occurred during subkernel operation"),
+        Message::SubkernelMsgRecvReply {
+            status: SubkernelStatus::Exception(raw_exception),
+            ..
+        } => {
+            // reconstruct the raw exception here
+            eh_artiq::raise_raw(&raw_exception);
+        }
         _ => panic!("expected SubkernelMsgRecvReply after SubkernelMsgRecvRequest"),
     }
     // RpcRecvRequest should be called after this to receive message data

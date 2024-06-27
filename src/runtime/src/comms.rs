@@ -423,19 +423,11 @@ async fn handle_run_kernel(
             kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
                 let res = subkernel::await_finish(aux_mutex, routing_table, timer, id, timeout).await;
                 let status = match res {
-                    Ok(ref res) => {
+                    Ok(res) => {
                         if res.status == subkernel::FinishStatus::CommLost {
                             kernel::SubkernelStatus::CommLost
-                        } else if let Some(exception) = &res.exception {
-                            error!("Exception in subkernel");
-                            match stream {
-                                None => (),
-                                Some(stream) => {
-                                    write_chunk(stream, exception).await?;
-                                }
-                            }
-                            // will not be called after exception is served
-                            kernel::SubkernelStatus::OtherError
+                        } else if let Some(exception) = res.exception {
+                            kernel::SubkernelStatus::Exception(exception)
                         } else {
                             kernel::SubkernelStatus::NoError
                         }
@@ -475,18 +467,11 @@ async fn handle_run_kernel(
                     Err(SubkernelError::IncorrectState) => (kernel::SubkernelStatus::IncorrectState, 0),
                     Err(SubkernelError::CommLost) => (kernel::SubkernelStatus::CommLost, 0),
                     Err(SubkernelError::SubkernelException) => {
-                        error!("Exception in subkernel");
                         // just retrieve the exception
                         let status = subkernel::await_finish(aux_mutex, routing_table, timer, id as u32, timeout)
                             .await
                             .unwrap();
-                        match stream {
-                            None => (),
-                            Some(stream) => {
-                                write_chunk(stream, &status.exception.unwrap()).await?;
-                            }
-                        }
-                        (kernel::SubkernelStatus::OtherError, 0)
+                        (kernel::SubkernelStatus::Exception(status.exception.unwrap()), 0)
                     }
                     Err(_) => (kernel::SubkernelStatus::OtherError, 0),
                 };

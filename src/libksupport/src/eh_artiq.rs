@@ -14,8 +14,10 @@
 
 use core::mem;
 
+use core_io::Error as ReadError;
 use cslice::CSlice;
 use dwarf::eh::{self, EHAction, EHContext};
+use io::{Cursor, ProtoRead};
 use libc::{c_int, c_void, uintptr_t};
 use log::{error, trace};
 use unwind as uw;
@@ -293,6 +295,60 @@ pub unsafe extern "C" fn raise(exception: *const Exception) -> ! {
         }
     }
     unreachable!();
+}
+
+fn read_exception_string<'a>(reader: &mut Cursor<&[u8]>) -> Result<CSlice<'a, u8>, ReadError> {
+    let len = reader.read_u32()? as usize;
+    if len == usize::MAX {
+        let data = reader.read_u32()?;
+        Ok(unsafe { CSlice::new(data as *const u8, len) })
+    } else {
+        let pos = reader.position();
+        let slice = unsafe {
+            let ptr = reader.get_ref().as_ptr().offset(pos as isize);
+            CSlice::new(ptr, len)
+        };
+        reader.set_position(pos + len);
+        Ok(slice)
+    }
+}
+
+fn read_exception(raw_exception: &[u8]) -> Result<Exception, ReadError> {
+    let mut reader = Cursor::new(raw_exception);
+
+    let mut byte = reader.read_u8()?;
+    // to sync
+    while byte != 0x5a {
+        byte = reader.read_u8()?;
+    }
+    // skip sync bytes, 0x09 indicates exception
+    while byte != 0x09 {
+        byte = reader.read_u8()?;
+    }
+    let _len = reader.read_u32()?;
+    // ignore the remaining exceptions, stack traces etc. - unwinding from another device would be unwise anyway
+    Ok(Exception {
+        id: reader.read_u32()?,
+        message: read_exception_string(&mut reader)?,
+        param: [
+            reader.read_u64()? as i64,
+            reader.read_u64()? as i64,
+            reader.read_u64()? as i64,
+        ],
+        file: read_exception_string(&mut reader)?,
+        line: reader.read_u32()?,
+        column: reader.read_u32()?,
+        function: read_exception_string(&mut reader)?,
+    })
+}
+
+pub fn raise_raw(raw_exception: &[u8]) -> ! {
+    use crate::artiq_raise;
+    if let Ok(exception) = read_exception(raw_exception) {
+        unsafe { raise(&exception) };
+    } else {
+        artiq_raise!("SubkernelError", "Error passing exception");
+    }
 }
 
 pub unsafe extern "C" fn resume() -> ! {
