@@ -422,25 +422,23 @@ async fn handle_run_kernel(
             #[cfg(has_drtio)]
             kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
                 let res = subkernel::await_finish(aux_mutex, routing_table, timer, id, timeout).await;
-                let status = match res {
+                let response = match res {
                     Ok(res) => {
                         if res.status == subkernel::FinishStatus::CommLost {
-                            kernel::SubkernelStatus::CommLost
+                            kernel::Message::SubkernelError(kernel::SubkernelStatus::CommLost)
                         } else if let Some(exception) = res.exception {
-                            kernel::SubkernelStatus::Exception(exception)
+                            kernel::Message::SubkernelError(kernel::SubkernelStatus::Exception(exception))
                         } else {
-                            kernel::SubkernelStatus::NoError
+                            kernel::Message::SubkernelAwaitFinishReply
                         }
                     }
-                    Err(SubkernelError::Timeout) => kernel::SubkernelStatus::Timeout,
-                    Err(SubkernelError::IncorrectState) => kernel::SubkernelStatus::IncorrectState,
-                    Err(_) => kernel::SubkernelStatus::OtherError,
+                    Err(SubkernelError::Timeout) => kernel::Message::SubkernelError(kernel::SubkernelStatus::Timeout),
+                    Err(SubkernelError::IncorrectState) => {
+                        kernel::Message::SubkernelError(kernel::SubkernelStatus::IncorrectState)
+                    }
+                    Err(_) => kernel::Message::SubkernelError(kernel::SubkernelStatus::OtherError),
                 };
-                control
-                    .borrow_mut()
-                    .tx
-                    .async_send(kernel::Message::SubkernelAwaitFinishReply { status: status })
-                    .await;
+                control.borrow_mut().tx.async_send(response).await;
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgSend { id, destination, data } => {
@@ -461,28 +459,23 @@ async fn handle_run_kernel(
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgRecvRequest { id, timeout, tags } => {
                 let message_received = subkernel::message_await(id as u32, timeout, timer).await;
-                let (status, count) = match message_received {
-                    Ok(ref message) => (kernel::SubkernelStatus::NoError, message.count),
-                    Err(SubkernelError::Timeout) => (kernel::SubkernelStatus::Timeout, 0),
-                    Err(SubkernelError::IncorrectState) => (kernel::SubkernelStatus::IncorrectState, 0),
-                    Err(SubkernelError::CommLost) => (kernel::SubkernelStatus::CommLost, 0),
+                let response = match message_received {
+                    Ok(ref message) => kernel::Message::SubkernelMsgRecvReply { count: message.count },
+                    Err(SubkernelError::Timeout) => kernel::Message::SubkernelError(kernel::SubkernelStatus::Timeout),
+                    Err(SubkernelError::IncorrectState) => {
+                        kernel::Message::SubkernelError(kernel::SubkernelStatus::IncorrectState)
+                    }
+                    Err(SubkernelError::CommLost) => kernel::Message::SubkernelError(kernel::SubkernelStatus::CommLost),
                     Err(SubkernelError::SubkernelException) => {
                         // just retrieve the exception
                         let status = subkernel::await_finish(aux_mutex, routing_table, timer, id as u32, timeout)
                             .await
                             .unwrap();
-                        (kernel::SubkernelStatus::Exception(status.exception.unwrap()), 0)
+                        kernel::Message::SubkernelError(kernel::SubkernelStatus::Exception(status.exception.unwrap()))
                     }
-                    Err(_) => (kernel::SubkernelStatus::OtherError, 0),
+                    Err(_) => kernel::Message::SubkernelError(kernel::SubkernelStatus::OtherError),
                 };
-                control
-                    .borrow_mut()
-                    .tx
-                    .async_send(kernel::Message::SubkernelMsgRecvReply {
-                        status: status,
-                        count: count,
-                    })
-                    .await;
+                control.borrow_mut().tx.async_send(response).await;
                 if let Ok(message) = message_received {
                     // receive code almost identical to RPC recv, except we are not reading from a stream
                     let mut reader = Cursor::new(message.data);
@@ -514,7 +507,7 @@ async fn handle_run_kernel(
                             .async_send(kernel::Message::RpcRecvReply(Ok(0)))
                             .await;
                         i += 1;
-                        if i < count {
+                        if i < message.count {
                             current_tags = remaining_tags;
                         } else {
                             break;

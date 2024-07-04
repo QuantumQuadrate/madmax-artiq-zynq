@@ -129,6 +129,8 @@ pub mod drtio {
             | Packet::SubkernelLoadRunReply { destination, .. }
             | Packet::SubkernelMessage { destination, .. }
             | Packet::SubkernelMessageAck { destination, .. }
+            | Packet::SubkernelException { destination, .. }
+            | Packet::SubkernelExceptionRequest { destination, .. }
             | Packet::DmaPlaybackStatus { destination, .. }
             | Packet::SubkernelFinished { destination, .. } => {
                 if destination == 0 {
@@ -183,10 +185,7 @@ pub mod drtio {
 
     async fn drain_buffer(linkno: u8, draining_time: Milliseconds, timer: GlobalTimer) {
         let max_time = timer.get_time() + draining_time;
-        loop {
-            if timer.get_time() > max_time {
-                return;
-            }
+        while timer.get_time() < max_time {
             let _ = drtioaux_async::recv(linkno).await;
         }
     }
@@ -835,13 +834,19 @@ pub mod drtio {
                 linkno,
                 routing_table,
                 &Packet::SubkernelExceptionRequest {
+                    source: 0,
                     destination: destination,
                 },
                 timer,
             )
             .await?;
             match reply {
-                Packet::SubkernelException { last, length, data } => {
+                Packet::SubkernelException {
+                    destination: 0,
+                    last,
+                    length,
+                    data,
+                } => {
                     remote_data.extend(&data[0..length as usize]);
                     if last {
                         return Ok(remote_data);

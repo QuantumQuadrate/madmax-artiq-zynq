@@ -267,12 +267,14 @@ pub enum Packet {
         exception_src: u8,
     },
     SubkernelExceptionRequest {
+        source: u8,
         destination: u8,
     },
     SubkernelException {
+        destination: u8,
         last: bool,
         length: u16,
-        data: [u8; SAT_PAYLOAD_MAX_SIZE],
+        data: [u8; MASTER_PAYLOAD_MAX_SIZE],
     },
     SubkernelMessage {
         source: u8,
@@ -524,14 +526,17 @@ impl Packet {
                 exception_src: reader.read_u8()?,
             },
             0xc9 => Packet::SubkernelExceptionRequest {
+                source: reader.read_u8()?,
                 destination: reader.read_u8()?,
             },
             0xca => {
+                let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
-                let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
+                let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::SubkernelException {
+                    destination: destination,
                     last: last,
                     length: length,
                     data: data,
@@ -896,12 +901,19 @@ impl Packet {
                 writer.write_bool(with_exception)?;
                 writer.write_u8(exception_src)?;
             }
-            Packet::SubkernelExceptionRequest { destination } => {
+            Packet::SubkernelExceptionRequest { source, destination } => {
                 writer.write_u8(0xc9)?;
+                writer.write_u8(source)?;
                 writer.write_u8(destination)?;
             }
-            Packet::SubkernelException { last, length, data } => {
+            Packet::SubkernelException {
+                destination,
+                last,
+                length,
+                data,
+            } => {
                 writer.write_u8(0xca)?;
+                writer.write_u8(destination)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
                 writer.write_all(&data[0..length as usize])?;
@@ -943,6 +955,8 @@ impl Packet {
             Packet::SubkernelLoadRunReply { destination, .. } => Some(*destination),
             Packet::SubkernelMessage { destination, .. } => Some(*destination),
             Packet::SubkernelMessageAck { destination } => Some(*destination),
+            Packet::SubkernelExceptionRequest { destination, .. } => Some(*destination),
+            Packet::SubkernelException { destination, .. } => Some(*destination),
             Packet::DmaPlaybackStatus { destination, .. } => Some(*destination),
             Packet::SubkernelFinished { destination, .. } => Some(*destination),
             _ => None,

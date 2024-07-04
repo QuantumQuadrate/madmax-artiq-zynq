@@ -895,6 +895,7 @@ fn process_aux_packet(
             Ok(())
         }
         drtioaux::Packet::SubkernelExceptionRequest {
+            source,
             destination: _destination,
         } => {
             forward!(
@@ -907,16 +908,45 @@ fn process_aux_packet(
                 &packet,
                 timer
             );
-            let mut data_slice: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
+            let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
             let meta = kernel_manager.exception_get_slice(&mut data_slice);
-            drtioaux::send(
-                0,
-                &drtioaux::Packet::SubkernelException {
+            router.send(
+                drtioaux::Packet::SubkernelException {
+                    destination: source,
                     last: meta.status.is_last(),
                     length: meta.len,
                     data: data_slice,
                 },
+                _routing_table,
+                *rank,
+                *self_destination,
             )
+        }
+        drtioaux::Packet::SubkernelException {
+            destination: _destination,
+            last,
+            length,
+            data,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+            kernel_manager.received_exception(
+                &data[..length as usize],
+                last,
+                router,
+                _routing_table,
+                *rank,
+                *self_destination,
+            );
+            Ok(())
         }
         drtioaux::Packet::SubkernelMessage {
             source,

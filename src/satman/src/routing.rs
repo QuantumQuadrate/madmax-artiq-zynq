@@ -4,7 +4,7 @@ use core::cmp::min;
 #[cfg(has_drtio_routing)]
 use libboard_artiq::pl::csr;
 use libboard_artiq::{drtio_routing, drtioaux,
-                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE}};
+                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE}};
 
 pub struct SliceMeta {
     pub destination: u8,
@@ -57,7 +57,6 @@ impl Sliceable {
         self.data.extend(data);
     }
 
-    get_slice_fn!(get_slice_sat, SAT_PAYLOAD_MAX_SIZE);
     get_slice_fn!(get_slice_master, MASTER_PAYLOAD_MAX_SIZE);
 }
 

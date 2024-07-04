@@ -23,8 +23,8 @@ pub enum SubkernelStatus {
     Timeout,
     IncorrectState,
     CommLost,
-    OtherError,
     Exception(Vec<u8>),
+    OtherError,
 }
 
 #[derive(Debug, Clone)]
@@ -91,9 +91,7 @@ pub enum Message {
         timeout: i64,
     },
     #[cfg(has_drtio)]
-    SubkernelAwaitFinishReply {
-        status: SubkernelStatus,
-    },
+    SubkernelAwaitFinishReply,
     #[cfg(has_drtio)]
     SubkernelMsgSend {
         id: u32,
@@ -110,9 +108,10 @@ pub enum Message {
     },
     #[cfg(has_drtio)]
     SubkernelMsgRecvReply {
-        status: SubkernelStatus,
         count: u8,
     },
+    #[cfg(has_drtio)]
+    SubkernelError(SubkernelStatus),
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);

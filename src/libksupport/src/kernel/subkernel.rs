@@ -36,27 +36,18 @@ pub extern "C" fn await_finish(id: u32, timeout: i64) {
             });
     }
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
-        Message::SubkernelAwaitFinishReply {
-            status: SubkernelStatus::NoError,
-        } => (),
-        Message::SubkernelAwaitFinishReply {
-            status: SubkernelStatus::IncorrectState,
-        } => artiq_raise!("SubkernelError", "Subkernel not running"),
-        Message::SubkernelAwaitFinishReply {
-            status: SubkernelStatus::Timeout,
-        } => artiq_raise!("SubkernelError", "Subkernel timed out"),
-        Message::SubkernelAwaitFinishReply {
-            status: SubkernelStatus::CommLost,
-        } => artiq_raise!("SubkernelError", "Lost communication with satellite"),
-        Message::SubkernelAwaitFinishReply {
-            status: SubkernelStatus::OtherError,
-        } => artiq_raise!("SubkernelError", "An error occurred during subkernel operation"),
-        Message::SubkernelAwaitFinishReply {
-            status: SubkernelStatus::Exception(raw_exception),
-        } => {
-            // reconstruct the exception here and raise it
-            eh_artiq::raise_raw(&raw_exception)
+        Message::SubkernelAwaitFinishReply => (),
+        Message::SubkernelError(SubkernelStatus::IncorrectState) => {
+            artiq_raise!("SubkernelError", "Subkernel not running")
         }
+        Message::SubkernelError(SubkernelStatus::Timeout) => artiq_raise!("SubkernelError", "Subkernel timed out"),
+        Message::SubkernelError(SubkernelStatus::CommLost) => {
+            artiq_raise!("SubkernelError", "Lost communication with satellite")
+        }
+        Message::SubkernelError(SubkernelStatus::OtherError) => {
+            artiq_raise!("SubkernelError", "An error occurred during subkernel operation")
+        }
+        Message::SubkernelError(SubkernelStatus::Exception(raw_exception)) => eh_artiq::raise_raw(&raw_exception),
         _ => panic!("expected SubkernelAwaitFinishReply after SubkernelAwaitFinishRequest"),
     }
 }
@@ -98,37 +89,22 @@ pub extern "C" fn await_message(id: i32, timeout: i64, tags: &CSlice<u8>, min: u
             });
     }
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {
-        Message::SubkernelMsgRecvReply {
-            status: SubkernelStatus::NoError,
-            count,
-        } => {
+        Message::SubkernelMsgRecvReply { count } => {
             if min > count || count > max {
                 artiq_raise!("SubkernelError", "Received more or less arguments than required")
             }
         }
-        Message::SubkernelMsgRecvReply {
-            status: SubkernelStatus::IncorrectState,
-            ..
-        } => artiq_raise!("SubkernelError", "Subkernel not running"),
-        Message::SubkernelMsgRecvReply {
-            status: SubkernelStatus::Timeout,
-            ..
-        } => artiq_raise!("SubkernelError", "Subkernel timed out"),
-        Message::SubkernelMsgRecvReply {
-            status: SubkernelStatus::CommLost,
-            ..
-        } => artiq_raise!("SubkernelError", "Lost communication with satellite"),
-        Message::SubkernelMsgRecvReply {
-            status: SubkernelStatus::OtherError,
-            ..
-        } => artiq_raise!("SubkernelError", "An error occurred during subkernel operation"),
-        Message::SubkernelMsgRecvReply {
-            status: SubkernelStatus::Exception(raw_exception),
-            ..
-        } => {
-            // reconstruct the raw exception here
-            eh_artiq::raise_raw(&raw_exception);
+        Message::SubkernelError(SubkernelStatus::IncorrectState) => {
+            artiq_raise!("SubkernelError", "Subkernel not running")
         }
+        Message::SubkernelError(SubkernelStatus::Timeout) => artiq_raise!("SubkernelError", "Subkernel timed out"),
+        Message::SubkernelError(SubkernelStatus::CommLost) => {
+            artiq_raise!("SubkernelError", "Lost communication with satellite")
+        }
+        Message::SubkernelError(SubkernelStatus::OtherError) => {
+            artiq_raise!("SubkernelError", "An error occurred during subkernel operation")
+        }
+        Message::SubkernelError(SubkernelStatus::Exception(raw_exception)) => eh_artiq::raise_raw(&raw_exception),
         _ => panic!("expected SubkernelMsgRecvReply after SubkernelMsgRecvRequest"),
     }
     // RpcRecvRequest should be called after this to receive message data
