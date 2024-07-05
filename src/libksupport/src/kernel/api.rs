@@ -303,6 +303,7 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64f64!(nextafter),
         api_libm_f64f64f64!(pow),
         api_libm_f64f64!(round),
+        api_libm_f64f64!(rint),
         api_libm_f64f64!(sin),
         api_libm_f64f64!(sinh),
         api_libm_f64f64!(sqrt),
