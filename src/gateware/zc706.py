@@ -487,6 +487,10 @@ class _SatelliteBase(SoCCore):
         self.csr_devices.append("rtio_dma")
 
         self.submodules.local_io = SyncRTIO(self.rtio_tsc, rtio_channels)
+        self.comb += [
+            self.drtiosat.async_errors.eq(self.local_io.async_errors),
+            self.local_io.sed_spread_enable.eq(self.drtiosat.sed_spread_enable.storage)
+        ]
         self.submodules.cri_con = rtio.CRIInterconnectShared(
             [self.drtiosat.cri, self.rtio_dma.cri, self.rtio.cri],
             [self.local_io.cri] + self.drtio_cri,

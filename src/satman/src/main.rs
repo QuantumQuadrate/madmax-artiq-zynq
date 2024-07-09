@@ -12,6 +12,7 @@ extern crate io;
 extern crate ksupport;
 extern crate libboard_artiq;
 extern crate libboard_zynq;
+extern crate libconfig;
 extern crate libcortex_a9;
 extern crate libregister;
 extern crate libsupport_zynq;
@@ -38,6 +39,7 @@ use libboard_artiq::{drtio_routing, drtioaux,
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{i2c::I2c, print, println, time::Milliseconds, timer::GlobalTimer};
+use libconfig::Config;
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
 use libsupport_zynq::{exception_vectors, ram};
@@ -78,6 +80,12 @@ fn drtiosat_tsc_loaded() -> bool {
             csr::drtiosat::tsc_loaded_write(1);
         }
         tsc_loaded
+    }
+}
+
+fn toggle_sed_spread(val: u8) {
+    unsafe {
+        csr::drtiosat::sed_spread_enable_write(val);
     }
 }
 
@@ -919,6 +927,28 @@ pub extern "C" fn main_core0() -> i32 {
     }
     #[cfg(has_si549)]
     si549::helper_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize helper Si549");
+
+    let cfg = match Config::new() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            warn!("config initialization failed: {}", err);
+            Config::new_dummy()
+        }
+    };
+
+    if let Ok(spread_enable) = cfg.read_str("sed_spread_enable") {
+        match spread_enable.as_ref() {
+            "1" => toggle_sed_spread(1),
+            "0" => toggle_sed_spread(0),
+            _ => {
+                warn!("sed_spread_enable value not supported (only 1, 0 allowed), disabling by default");
+                toggle_sed_spread(0)
+            }
+        };
+    } else {
+        info!("SED spreading disabled by default");
+        toggle_sed_spread(0);
+    }
 
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];

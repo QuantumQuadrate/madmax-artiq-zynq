@@ -3,7 +3,9 @@ use core::cell::RefCell;
 
 use libboard_artiq::{drtio_routing, drtio_routing::RoutingTable, pl::csr};
 use libboard_zynq::timer::GlobalTimer;
+use libconfig::Config;
 use libcortex_a9::mutex::Mutex;
+use log::{info, warn};
 
 #[cfg(has_drtio)]
 pub mod drtio {
@@ -898,12 +900,36 @@ pub mod drtio {
     pub fn reset(_aux_mutex: Rc<Mutex<bool>>, _routing_table: &RoutingTable, mut _timer: GlobalTimer) {}
 }
 
+fn toggle_sed_spread(val: u8) {
+    unsafe {
+        csr::rtio_core::sed_spread_enable_write(val);
+    }
+}
+
+fn setup_sed_spread(cfg: &Config) {
+    if let Ok(spread_enable) = cfg.read_str("sed_spread_enable") {
+        match spread_enable.as_ref() {
+            "1" => toggle_sed_spread(1),
+            "0" => toggle_sed_spread(0),
+            _ => {
+                warn!("sed_spread_enable value not supported (only 1, 0 allowed), disabling by default");
+                toggle_sed_spread(0)
+            }
+        };
+    } else {
+        info!("SED spreading disabled by default");
+        toggle_sed_spread(0);
+    }
+}
+
 pub fn startup(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &Rc<RefCell<RoutingTable>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
+    cfg: &Config,
     timer: GlobalTimer,
 ) {
+    setup_sed_spread(cfg);
     drtio::startup(aux_mutex, routing_table, up_destinations, timer);
     unsafe {
         csr::rtio_core::reset_phy_write(1);

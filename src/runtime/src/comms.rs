@@ -771,7 +771,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
-    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
+    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, &cfg, timer);
     ksupport::setup_device_map(&cfg);
 
     analyzer::start(&aux_mutex, &drtio_routing_table, &up_destinations, timer);
