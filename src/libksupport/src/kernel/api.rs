@@ -1,9 +1,11 @@
 use alloc::vec;
-use core::{ffi::VaList, ptr, str};
+use core::{ffi::VaList, ptr, str, slice};
 
 use libc::{c_char, c_int, size_t};
 use libm;
 use log::{info, warn};
+
+use nalgebra::{DMatrix, linalg};
 
 #[cfg(has_drtio)]
 use super::subkernel;
@@ -36,6 +38,26 @@ unsafe extern "C" fn rtio_log(fmt: *const c_char, mut args: ...) {
     let mut buf = vec![0; size + 1];
     vsnprintf_(buf.as_mut_ptr(), size + 1, fmt, args.as_va_list());
     rtio::write_log(buf.as_slice());
+}
+
+unsafe extern "C" fn linalg_try_invert_to(dim0: usize, dim1: usize, data: *mut f64) -> i8 {
+    let data_slice = unsafe { slice::from_raw_parts_mut(data, dim0 * dim1) };
+    let matrix = DMatrix::from_row_slice(dim0, dim1, data_slice);
+    let mut inverted_matrix = DMatrix::<f64>::zeros(dim0, dim1);
+
+    if linalg::try_invert_to(matrix, &mut inverted_matrix) {
+        data_slice.copy_from_slice(inverted_matrix.transpose().as_slice());
+        1
+    } else {
+        0
+    }
+}
+
+unsafe extern "C" fn linalg_wilkinson_shift(dim0: usize, dim1: usize, data: *mut f64) -> f64 {
+    let data_slice = slice::from_raw_parts_mut(data, dim0 * dim1);
+    let matrix = DMatrix::from_row_slice(dim0, dim1, data_slice);
+
+    linalg::wilkinson_shift(matrix[(0, 0)], matrix[(1, 1)], matrix[(0, 1)])
 }
 
 macro_rules! api {
@@ -319,6 +341,10 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
             }
             api!(yn = yn)
         },
+
+        // linalg
+        api!(linalg_try_invert_to = linalg_try_invert_to),
+        api!(linalg_wilkinson_shift = linalg_wilkinson_shift),
     ];
     api.iter()
         .find(|&&(exported, _)| exported.as_bytes() == required)
