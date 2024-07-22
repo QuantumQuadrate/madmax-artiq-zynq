@@ -126,6 +126,7 @@
           lockFile = src/Cargo.lock;
           outputHashes = {
               "tar-no-std-0.1.8" = "sha256-xm17108v4smXOqxdLvHl9CxTCJslmeogjm4Y87IXFuM=";
+              "nalgebra-0.32.6" = "sha256-L/YudkVOtfGYoNQKBD7LMk/sMYgRDzPDdpGL5rO7G2I=";
             };
         };
 
