@@ -1,11 +1,10 @@
 use alloc::vec;
-use core::{ffi::VaList, ptr, str, slice};
+use core::{ffi::VaList, ptr, slice, str};
 
 use libc::{c_char, c_int, size_t};
 use libm;
 use log::{info, warn};
-
-use nalgebra::{DMatrix, linalg};
+use nalgebra::{linalg, DMatrix};
 
 #[cfg(has_drtio)]
 use super::subkernel;
