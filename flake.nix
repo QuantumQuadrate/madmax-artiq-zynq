@@ -18,11 +18,11 @@
 
     fastnumbers = pkgs.python3Packages.buildPythonPackage rec {
       pname = "fastnumbers";
-      version = "2.2.1";
+      version = "5.1.0";
 
       src = pkgs.python3Packages.fetchPypi {
         inherit pname version;
-        sha256 = "0j15i54p7nri6hkzn1wal9pxri4pgql01wgjccig6ar0v5jjbvsy";
+        sha256 = "sha256-4JLTP4uVwxcaL7NOV57+DFSwKQ3X+W/6onYkN2AdkKc=";
       };
     };
 
