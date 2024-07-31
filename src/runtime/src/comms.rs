@@ -707,11 +707,6 @@ async fn load_and_run_idle_kernel(
     info!("Loading idle kernel");
     let res = handle_flash_kernel(buffer, control, up_destinations,  aux_mutex, routing_table, timer).await;
     match res {
-        #[cfg(has_drtio)]
-        Err(Error::DestinationDown) => {
-            let mut countdown = timer.countdown();
-            delay(&mut countdown, Milliseconds(500)).await;
-        }
         Err(_) => warn!("error loading idle kernel"),
         _ => (),
     }
