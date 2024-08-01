@@ -13,6 +13,7 @@ mod dma;
 mod rpc;
 pub use dma::DmaRecorder;
 mod cache;
+mod linalg;
 #[cfg(has_drtio)]
 mod subkernel;
 

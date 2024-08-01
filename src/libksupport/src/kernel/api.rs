@@ -1,16 +1,15 @@
 use alloc::vec;
-use core::{ffi::VaList, ptr, slice, str};
+use core::{ffi::VaList, ptr, str};
 
 use libc::{c_char, c_int, size_t};
 use libm;
 use log::{info, warn};
-use nalgebra::{linalg, DMatrix};
 
 #[cfg(has_drtio)]
 use super::subkernel;
 use super::{cache,
             core1::rtio_get_destination_status,
-            dma,
+            dma, linalg,
             rpc::{rpc_recv, rpc_send, rpc_send_async}};
 use crate::{eh_artiq, i2c, rtio};
 
@@ -37,26 +36,6 @@ unsafe extern "C" fn rtio_log(fmt: *const c_char, mut args: ...) {
     let mut buf = vec![0; size + 1];
     vsnprintf_(buf.as_mut_ptr(), size + 1, fmt, args.as_va_list());
     rtio::write_log(buf.as_slice());
-}
-
-unsafe extern "C" fn linalg_try_invert_to(dim0: usize, dim1: usize, data: *mut f64) -> i8 {
-    let data_slice = unsafe { slice::from_raw_parts_mut(data, dim0 * dim1) };
-    let matrix = DMatrix::from_row_slice(dim0, dim1, data_slice);
-    let mut inverted_matrix = DMatrix::<f64>::zeros(dim0, dim1);
-
-    if linalg::try_invert_to(matrix, &mut inverted_matrix) {
-        data_slice.copy_from_slice(inverted_matrix.transpose().as_slice());
-        1
-    } else {
-        0
-    }
-}
-
-unsafe extern "C" fn linalg_wilkinson_shift(dim0: usize, dim1: usize, data: *mut f64) -> f64 {
-    let data_slice = slice::from_raw_parts_mut(data, dim0 * dim1);
-    let matrix = DMatrix::from_row_slice(dim0, dim1, data_slice);
-
-    linalg::wilkinson_shift(matrix[(0, 0)], matrix[(1, 1)], matrix[(0, 1)])
 }
 
 macro_rules! api {
@@ -342,8 +321,17 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         },
 
         // linalg
-        api!(linalg_try_invert_to = linalg_try_invert_to),
-        api!(linalg_wilkinson_shift = linalg_wilkinson_shift),
+        api!(np_linalg_cholesky = linalg::np_linalg_cholesky),
+        api!(np_linalg_qr = linalg::np_linalg_qr),
+        api!(np_linalg_svd = linalg::np_linalg_svd),
+        api!(np_linalg_inv = linalg::np_linalg_inv),
+        api!(np_linalg_pinv = linalg::np_linalg_pinv),
+        api!(np_linalg_matrix_power = linalg::np_linalg_matrix_power),
+        api!(np_linalg_det = linalg::np_linalg_det),
+        api!(sp_linalg_lu = linalg::sp_linalg_lu),
+        api!(sp_linalg_schur = linalg::sp_linalg_schur),
+        api!(sp_linalg_hessenberg = linalg::sp_linalg_hessenberg),
+
     ];
     api.iter()
         .find(|&&(exported, _)| exported.as_bytes() == required)
