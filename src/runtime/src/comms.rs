@@ -705,14 +705,15 @@ async fn load_and_run_idle_kernel(
     timer: GlobalTimer,
 ) {
     info!("Loading idle kernel");
-    let res = handle_flash_kernel(buffer, control, up_destinations,  aux_mutex, routing_table, timer).await;
+    let res = handle_flash_kernel(buffer, control, up_destinations, aux_mutex, routing_table, timer).await;
     match res {
         Err(_) => warn!("error loading idle kernel"),
         _ => (),
     }
     info!("Running idle kernel");
     let _ = handle_run_kernel(None, control, up_destinations, aux_mutex, routing_table, timer)
-        .await.map_err(|_| warn!("error running idle kernel"));
+        .await
+        .map_err(|_| warn!("error running idle kernel"));
     info!("Idle kernel terminated");
 }
 
