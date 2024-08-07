@@ -395,7 +395,7 @@ checksum = "c75de51135344a4f8ed3cfe2720dc27736f7711989703a0b43aadf3753c55577"
 [[package]]
 name = "nalgebra"
 version = "0.32.6"
-source = "git+https://git.m-labs.hk/M-labs/nalgebra?rev=dd00f9b#dd00f9b46046e0b931d1b470166db02fd29591be"
+source = "git+https://git.m-labs.hk/M-Labs/nalgebra.git?rev=dd00f9b#dd00f9b46046e0b931d1b470166db02fd29591be"
 dependencies = [
  "approx",
  "num-complex",

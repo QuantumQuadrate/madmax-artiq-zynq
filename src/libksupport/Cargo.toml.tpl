@@ -34,7 +34,7 @@ io = { path = "../libio" }
 libboard_artiq = { path = "../libboard_artiq" }
 
 [dependencies.nalgebra]
-git = "https://git.m-labs.hk/M-labs/nalgebra.git"
+git = "https://git.m-labs.hk/M-Labs/nalgebra.git"
 rev = "dd00f9b"
 default-features = false
 features = ["libm", "alloc"]
