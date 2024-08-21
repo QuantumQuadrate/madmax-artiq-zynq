@@ -15,7 +15,7 @@
 use core::mem;
 
 use core_io::Error as ReadError;
-use cslice::CSlice;
+use cslice::{AsCSlice, CSlice};
 use dwarf::eh::{self, EHAction, EHContext};
 use io::{Cursor, ProtoRead};
 use libc::{c_int, c_void, uintptr_t};
@@ -222,8 +222,6 @@ pub unsafe fn artiq_personality(
 }
 
 pub unsafe extern "C" fn raise(exception: *const Exception) -> ! {
-    use cslice::AsCSlice;
-
     let count = EXCEPTION_BUFFER.exception_count;
     let stack = &mut EXCEPTION_BUFFER.exception_stack;
     let diff = exception as isize - EXCEPTION_BUFFER.exceptions.as_ptr() as isize;
@@ -532,4 +530,30 @@ macro_rules! artiq_raise {
         }
     }};
     ($name:expr, $message:expr) => {{ artiq_raise!($name, $message, 0, 0, 0) }};
+}
+
+/// Takes as input exception id from host
+/// Generates a new exception with:
+///   * `id` set to `exn_id`
+///   * `message` set to corresponding exception name from `EXCEPTION_ID_LOOKUP`
+///
+/// The message is matched on host to ensure correct exception is being referred
+/// This test checks the synchronization of exception ids for runtime errors
+#[no_mangle]
+pub extern "C" fn test_exception_id_sync(exn_id: u32) {
+    let message = EXCEPTION_ID_LOOKUP
+        .iter()
+        .find_map(|&(name, id)| if id == exn_id { Some(name) } else { None })
+        .unwrap_or("unallocated internal exception id");
+
+    let exn = Exception {
+        id: exn_id,
+        file: file!().as_c_slice(),
+        line: 0,
+        column: 0,
+        function: "test_exception_id_sync".as_c_slice(),
+        message: message.as_c_slice(),
+        param: [0, 0, 0],
+    };
+    unsafe { raise(&exn) };
 }
