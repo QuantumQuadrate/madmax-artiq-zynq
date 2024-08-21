@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1722417433,
-        "narHash": "sha256-QEbcVdL1sUQEbMCvCUvPM8DKqwOth3gJpdiLTf4hPN8=",
+        "lastModified": 1724210813,
+        "narHash": "sha256-OqQdE2lC0jKNS2fFq0Fda1nBpyT8ijmSXqdkO8xeOJ8=",
         "ref": "refs/heads/master",
-        "rev": "0623480c82c28d57e14dc4f363374758a52284d3",
-        "revCount": 8952,
+        "rev": "61e96b37f9c4345e2d7bf71d47ba0b5e947de83e",
+        "revCount": 8985,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -102,11 +102,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1721924956,
-        "narHash": "sha256-Sb1jlyRO+N8jBXEX9Pg9Z1Qb8Bw9QyOgLDNMEpmjZ2M=",
+        "lastModified": 1723362943,
+        "narHash": "sha256-dFZRVSgmJkyM0bkPpaYRtG/kRMRTorUIDj8BxoOt1T4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "5ad6a14c6bf098e98800b091668718c336effc95",
+        "rev": "a58bc8ad779655e790115244571758e8de055e3d",
         "type": "github"
       },
       "original": {
@@ -131,15 +131,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1722046723,
-        "narHash": "sha256-G7/gHz8ORRvHd1/RIURrdcswKRPe9K0FsIYR4v5jSWo=",
+        "lastModified": 1719454714,
+        "narHash": "sha256-MojqG0lyUINkEk0b3kM2drsU5vyaF8DFZe/FAlZVOGs=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "56baac5e6b2743d4730e664ea64f6d8a2aad0fbb",
+        "rev": "d1c527659cf076ecc4b96a91c702d080b213801e",
         "type": "github"
       },
       "original": {
         "owner": "oxalica",
+        "ref": "snapshot/2024-08-01",
         "repo": "rust-overlay",
         "type": "github"
       }
