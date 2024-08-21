@@ -280,6 +280,13 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
             }
             api!(yn = yn)
         },
+        /*
+         * syscall for unit tests
+         * Used in `artiq.tests.coredevice.test_exceptions.ExceptionTest.test_raise_exceptions_kernel`
+         * This syscall checks that the exception IDs used in the Python `EmbeddingMap` (in `artiq.language.embedding`)
+         * match the `EXCEPTION_ID_LOOKUP` defined in the firmware (`libksupport::src::eh_artiq`)
+         */
+        api!(test_exception_id_sync = eh_artiq::test_exception_id_sync)
     ];
     api.iter()
        .find(|&&(exported, _)| exported.as_bytes() == required)
