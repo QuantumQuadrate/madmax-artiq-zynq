@@ -476,7 +476,7 @@ extern "C" fn stop_fn(
 }
 
 // Must be kept in sync with preallocate_runtime_exception_names() in `artiq.compiler.embedding`
-static EXCEPTION_ID_LOOKUP: [(&str, u32); 20] = [
+static EXCEPTION_ID_LOOKUP: [(&str, u32); 21] = [
     ("RTIOUnderflow", 0),
     ("RTIOOverflow", 1),
     ("RTIODestinationUnreachable", 2),
@@ -497,6 +497,7 @@ static EXCEPTION_ID_LOOKUP: [(&str, u32); 20] = [
     ("TypeError", 17),
     ("ValueError", 18),
     ("ZeroDivisionError", 19),
+    ("LinAlgError", 20),
 ];
 
 pub fn get_exception_id(name: &str) -> u32 {
