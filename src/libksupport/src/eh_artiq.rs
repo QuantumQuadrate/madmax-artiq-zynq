@@ -498,7 +498,7 @@ static EXCEPTION_ID_LOOKUP: [(&str, u32); 22] = [
     ("ValueError", 18),
     ("ZeroDivisionError", 19),
     ("LinAlgError", 20),
-    ("UnwrapNoneError", 21)
+    ("UnwrapNoneError", 21),
 ];
 
 pub fn get_exception_id(name: &str) -> u32 {
