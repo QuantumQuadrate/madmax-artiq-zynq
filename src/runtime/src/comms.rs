@@ -785,7 +785,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
 
     let cfg = Rc::new(cfg);
     let restart_idle = Rc::new(Semaphore::new(1, 1));
-    mgmt::start(cfg.clone(), restart_idle.clone());
+    mgmt::start(cfg.clone(), restart_idle.clone(), Some((&aux_mutex, &drtio_routing_table, timer)));
 
     task::spawn(async move {
         let connection = Rc::new(Semaphore::new(1, 1));
@@ -911,7 +911,7 @@ pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
     Sockets::init(32);
 
     let dummy = Rc::new(Semaphore::new(0, 1));
-    mgmt::start(Rc::new(cfg), dummy);
+    mgmt::start(Rc::new(cfg), dummy, None);
 
     // getting eth settings disables the LED as it resets GPIO
     // need to re-enable it here

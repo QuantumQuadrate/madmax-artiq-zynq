@@ -577,7 +577,7 @@ pub mod drtio {
         }
     }
 
-    async fn partition_data<PacketF, HandlerF>(
+    pub async fn partition_data<PacketF, HandlerF>(
         linkno: u8,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
