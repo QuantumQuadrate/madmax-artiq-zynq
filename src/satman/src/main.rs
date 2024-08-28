@@ -38,16 +38,18 @@ use libboard_artiq::{drtio_routing, drtioaux,
                      pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
-use libboard_zynq::{i2c::I2c, print, println, time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::{i2c::I2c, print, println, slcr, time::Milliseconds, timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
 use libsupport_zynq::{exception_vectors, ram};
+use mgmt::Manager as CoreManager;
 use routing::Router;
 use subkernel::Manager as KernelManager;
 
 mod analyzer;
 mod dma;
+mod mgmt;
 mod repeater;
 mod routing;
 mod subkernel;
@@ -149,6 +151,7 @@ fn process_aux_packet(
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
     kernel_manager: &mut KernelManager,
+    core_manager: &mut CoreManager,
     router: &mut Router,
 ) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
@@ -1011,6 +1014,279 @@ fn process_aux_packet(
             }
             Ok(())
         }
+        drtioaux::Packet::CoreMgmtGetLogRequest {
+            destination: _destination,
+            clear,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+            let mut data_slice = [0; SAT_PAYLOAD_MAX_SIZE];
+            let meta = core_manager.log_get_slice(&mut data_slice);
+            if clear && meta.status.is_first() {
+                mgmt::clear_log();
+            }
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::CoreMgmtGetLogReply {
+                    last: meta.status.is_last(),
+                    length: meta.len as u16,
+                    data: data_slice,
+                },
+            )
+        }
+        drtioaux::Packet::CoreMgmtClearLogRequest {
+            destination: _destination,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+            mgmt::clear_log();
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+        }
+        drtioaux::Packet::CoreMgmtSetLogLevelRequest {
+            destination: _destination,
+            log_level,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
+                info!("Changing log level to {}", level_filter);
+                log::set_max_level(level_filter);
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+            } else {
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            }
+        }
+        drtioaux::Packet::CoreMgmtSetUartLogLevelRequest {
+            destination: _destination,
+            log_level,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
+                info!("Changing log level to {}", level_filter);
+                unsafe {
+                    logger::BufferLogger::get_logger()
+                        .as_ref()
+                        .unwrap()
+                        .set_uart_log_level(level_filter);
+                }
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+            } else {
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            }
+        }
+        drtioaux::Packet::CoreMgmtConfigReadRequest {
+            destination: _destination,
+            length,
+            key,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            let mut value_slice = [0; SAT_PAYLOAD_MAX_SIZE];
+
+            let key_slice = &key[..length as usize];
+            if !key_slice.is_ascii() {
+                error!("invalid key");
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            } else {
+                let key = core::str::from_utf8(key_slice).unwrap();
+                if core_manager.fetch_config_value(key).is_ok() {
+                    let meta = core_manager.get_config_value_slice(&mut value_slice);
+                    drtioaux::send(
+                        0,
+                        &drtioaux::Packet::CoreMgmtConfigReadReply {
+                            last: meta.status.is_last(),
+                            length: meta.len as u16,
+                            value: value_slice,
+                        },
+                    )
+                } else {
+                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                }
+            }
+        }
+        drtioaux::Packet::CoreMgmtConfigReadContinue {
+            destination: _destination,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            let mut value_slice = [0; SAT_PAYLOAD_MAX_SIZE];
+            let meta = core_manager.get_config_value_slice(&mut value_slice);
+            drtioaux::send(
+                0,
+                &drtioaux::Packet::CoreMgmtConfigReadReply {
+                    last: meta.status.is_last(),
+                    length: meta.len as u16,
+                    value: value_slice,
+                },
+            )
+        }
+        drtioaux::Packet::CoreMgmtConfigWriteRequest {
+            destination: _destination,
+            last,
+            length,
+            data,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            core_manager.add_data(&data, length as usize);
+
+            let mut succeeded = true;
+            if last {
+                succeeded = core_manager.write_config().is_ok();
+                core_manager.clear_data();
+            }
+
+            if succeeded {
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+            } else {
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            }
+        }
+        drtioaux::Packet::CoreMgmtConfigRemoveRequest {
+            destination: _destination,
+            length,
+            key,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            let key_slice = &key[..length as usize];
+            if !key_slice.is_ascii() {
+                error!("invalid key");
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            } else {
+                let key = core::str::from_utf8(key_slice).unwrap();
+                if core_manager.remove_config(key).is_ok() {
+                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+                } else {
+                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                }
+            }
+        }
+        drtioaux::Packet::CoreMgmtConfigEraseRequest {
+            destination: _destination,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            error!("config erase not supported on zynq device");
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+        }
+        drtioaux::Packet::CoreMgmtRebootRequest {
+            destination: _destination,
+        } => {
+            info!("received reboot request");
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)?;
+            info!("reboot imminent");
+            slcr::reboot();
+            Ok(())
+        }
+        drtioaux::Packet::CoreMgmtAllocatorDebugRequest {
+            destination: _destination,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            error!("debug allocator not supported on zynq device");
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+        }
 
         p => {
             warn!("received unexpected aux packet: {:?}", p);
@@ -1029,6 +1305,7 @@ fn process_aux_packets(
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
     kernel_manager: &mut KernelManager,
+    core_manager: &mut CoreManager,
     router: &mut Router,
 ) {
     let result = drtioaux::recv(0).and_then(|packet| {
@@ -1044,6 +1321,7 @@ fn process_aux_packets(
                 dma_manager,
                 analyzer,
                 kernel_manager,
+                core_manager,
                 router,
             )
         } else {
@@ -1240,7 +1518,7 @@ pub extern "C" fn main_core0() -> i32 {
     #[cfg(has_si549)]
     si549::helper_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize helper Si549");
 
-    let cfg = match Config::new() {
+    let mut cfg = match Config::new() {
         Ok(cfg) => cfg,
         Err(err) => {
             warn!("config initialization failed: {}", err);
@@ -1315,6 +1593,7 @@ pub extern "C" fn main_core0() -> i32 {
         let mut dma_manager = DmaManager::new();
         let mut analyzer = Analyzer::new();
         let mut kernel_manager = KernelManager::new(&mut control);
+        let mut core_manager = CoreManager::new(&mut cfg);
 
         drtioaux::reset(0);
         drtiosat_reset(false);
@@ -1332,6 +1611,7 @@ pub extern "C" fn main_core0() -> i32 {
                 &mut dma_manager,
                 &mut analyzer,
                 &mut kernel_manager,
+                &mut core_manager,
                 &mut router,
             );
             #[allow(unused_mut)]
