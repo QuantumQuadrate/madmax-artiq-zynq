@@ -102,7 +102,7 @@ mod remote_moninj {
         overrd: i8,
         value: i8,
     ) {
-        let _lock = aux_mutex.lock();
+        let _lock = aux_mutex.async_lock().await;
         drtioaux_async::send(
             linkno,
             &drtioaux_async::Packet::InjectionRequest {
