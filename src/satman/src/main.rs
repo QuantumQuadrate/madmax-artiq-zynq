@@ -1263,7 +1263,8 @@ fn process_aux_packet(
             drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })?;
             info!("reboot imminent");
             slcr::reboot();
-            Ok(())
+
+            unreachable!();
         }
         drtioaux::Packet::CoreMgmtAllocatorDebugRequest {
             destination: _destination,
