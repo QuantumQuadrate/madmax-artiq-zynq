@@ -4,7 +4,9 @@
 
 #[macro_use]
 extern crate log;
+extern crate byteorder;
 extern crate core_io;
+extern crate crc;
 extern crate cslice;
 extern crate embedded_hal;
 
@@ -1144,7 +1146,7 @@ fn process_aux_packet(
                         },
                     )
                 } else {
-                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false  })
+                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
                 }
             }
         }
@@ -1279,6 +1281,53 @@ fn process_aux_packet(
 
             error!("debug allocator not supported on zynq device");
             drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+        }
+        drtioaux::Packet::CoreMgmtFlashRequest {
+            destination: _destination,
+            last,
+            length,
+            data,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            core_manager.add_image_data(&data, length as usize);
+
+            if last {
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtDropLink)
+            } else {
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+            }
+        }
+        drtioaux::Packet::CoreMgmtDropLinkAck {
+            destination: _destination,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            unsafe {
+                csr::gt_drtio::txenable_write(0);
+            }
+            core_manager.write_image();
+            info!("reboot imminent");
+            slcr::reboot();
+            Ok(())
         }
 
         p => {

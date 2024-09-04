@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
 
+use byteorder::{ByteOrder, NativeEndian};
+use crc::crc32;
 use io::{Cursor, ProtoRead, ProtoWrite};
 use libboard_artiq::{drtioaux_proto::SAT_PAYLOAD_MAX_SIZE,
                      logger::{BufferLogger, LogBufferRef}};
@@ -48,6 +50,7 @@ pub struct Manager<'a> {
     last_log: Sliceable,
     config_payload: Cursor<Vec<u8>>,
     last_value: Sliceable,
+    image_payload: Vec<u8>,
 }
 
 impl<'a> Manager<'_> {
@@ -57,6 +60,7 @@ impl<'a> Manager<'_> {
             last_log: Sliceable::new(0, Vec::new()),
             config_payload: Cursor::new(Vec::new()),
             last_value: Sliceable::new(0, Vec::new()),
+            image_payload: Vec::new(),
         }
     }
 
@@ -112,5 +116,32 @@ impl<'a> Manager<'_> {
             .remove(&key)
             .map(|()| debug!("erase success"))
             .map_err(|err| warn!("failed to erase: {:?}", err))
+    }
+
+    pub fn add_image_data(&mut self, data: &[u8], data_len: usize) {
+        self.image_payload.extend(&data[..data_len]);
+    }
+
+    pub fn write_image(&self) {
+        let mut image = self.image_payload.clone();
+        let image_ref = &image[..];
+        let bin_len = image.len() - 4;
+
+        let (image_ref, expected_crc) = {
+            let (image_ref, crc_slice) = image_ref.split_at(bin_len);
+            (image_ref, NativeEndian::read_u32(crc_slice))
+        };
+
+        let actual_crc = crc32::checksum_ieee(image_ref);
+
+        if actual_crc == expected_crc {
+            image.truncate(bin_len);
+            self.cfg.write("boot", image).expect("failed to write boot image");
+        } else {
+            panic!(
+                "CRC failed in SDRAM (actual {:08x}, expected {:08x})",
+                actual_crc, expected_crc
+            );
+        }
     }
 }
