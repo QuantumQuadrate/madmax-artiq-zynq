@@ -332,6 +332,16 @@ pub enum Packet {
     CoreMgmtAllocatorDebugRequest {
         destination: u8,
     },
+    CoreMgmtFlashRequest {
+        destination: u8,
+        last: bool,
+        length: u16,
+        data: [u8; MASTER_PAYLOAD_MAX_SIZE],
+    },
+    CoreMgmtDropLinkAck {
+        destination: u8,
+    },
+    CoreMgmtDropLink,
     CoreMgmtGetLogReply {
         last: bool,
         length: u16,
@@ -342,8 +352,9 @@ pub enum Packet {
         length: u16,
         value: [u8; SAT_PAYLOAD_MAX_SIZE],
     },
-    CoreMgmtAck,
-    CoreMgmtNack,
+    CoreMgmtReply {
+        succeeded: bool,
+    },
 }
 
 impl Packet {
@@ -684,6 +695,23 @@ impl Packet {
                 destination: reader.read_u8()?,
             },
             0xdb => {
+                let destination = reader.read_u8()?;
+                let last = reader.read_bool()?;
+                let length = reader.read_u16()?;
+                let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
+                reader.read_exact(&mut data[0..length as usize])?;
+                Packet::CoreMgmtFlashRequest {
+                    destination: destination,
+                    last: last,
+                    length: length,
+                    data: data,
+                }
+            }
+            0xdc => Packet::CoreMgmtDropLinkAck {
+                destination: reader.read_u8()?,
+            },
+            0xdd => Packet::CoreMgmtDropLink,
+            0xde => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
                 let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -694,7 +722,7 @@ impl Packet {
                     data: data,
                 }
             }
-            0xdc => {
+            0xdf => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
                 let mut value: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -705,8 +733,9 @@ impl Packet {
                     value: value,
                 }
             }
-            0xdd => Packet::CoreMgmtAck,
-            0xde => Packet::CoreMgmtNack,
+            0xe0 => Packet::CoreMgmtReply {
+                succeeded: reader.read_bool()?,
+            },
 
             ty => return Err(Error::UnknownPacket(ty)),
         })
@@ -1153,20 +1182,39 @@ impl Packet {
                 writer.write_u8(0xda)?;
                 writer.write_u8(destination)?;
             }
-            Packet::CoreMgmtGetLogReply { last, length, data } => {
+            Packet::CoreMgmtFlashRequest {
+                destination,
+                last,
+                length,
+                data,
+            } => {
                 writer.write_u8(0xdb)?;
+                writer.write_u8(destination)?;
+                writer.write_bool(last)?;
+                writer.write_u16(length)?;
+                writer.write_all(&data[..length as usize])?;
+            }
+            Packet::CoreMgmtDropLinkAck { destination } => {
+                writer.write_u8(0xdc)?;
+                writer.write_u8(destination)?;
+            }
+            Packet::CoreMgmtDropLink => writer.write_u8(0xdd)?,
+            Packet::CoreMgmtGetLogReply { last, length, data } => {
+                writer.write_u8(0xde)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::CoreMgmtConfigReadReply { last, length, value } => {
-                writer.write_u8(0xdc)?;
+                writer.write_u8(0xdf)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
                 writer.write_all(&value[0..length as usize])?;
             }
-            Packet::CoreMgmtAck => writer.write_u8(0xdd)?,
-            Packet::CoreMgmtNack => writer.write_u8(0xde)?,
+            Packet::CoreMgmtReply { succeeded } => {
+                writer.write_u8(0xe0)?;
+                writer.write_bool(succeeded)?;
+            }
         }
         Ok(())
     }

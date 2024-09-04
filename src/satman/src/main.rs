@@ -1056,7 +1056,7 @@ fn process_aux_packet(
                 timer
             );
             mgmt::clear_log();
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
         }
         drtioaux::Packet::CoreMgmtSetLogLevelRequest {
             destination: _destination,
@@ -1076,9 +1076,9 @@ fn process_aux_packet(
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
                 info!("Changing log level to {}", level_filter);
                 log::set_max_level(level_filter);
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
             } else {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
             }
         }
         drtioaux::Packet::CoreMgmtSetUartLogLevelRequest {
@@ -1104,9 +1104,9 @@ fn process_aux_packet(
                         .unwrap()
                         .set_uart_log_level(level_filter);
                 }
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
             } else {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
             }
         }
         drtioaux::Packet::CoreMgmtConfigReadRequest {
@@ -1130,7 +1130,7 @@ fn process_aux_packet(
             let key_slice = &key[..length as usize];
             if !key_slice.is_ascii() {
                 error!("invalid key");
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
             } else {
                 let key = core::str::from_utf8(key_slice).unwrap();
                 if core_manager.fetch_config_value(key).is_ok() {
@@ -1144,7 +1144,7 @@ fn process_aux_packet(
                         },
                     )
                 } else {
-                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false  })
                 }
             }
         }
@@ -1198,11 +1198,7 @@ fn process_aux_packet(
                 core_manager.clear_data();
             }
 
-            if succeeded {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
-            } else {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
-            }
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded })
         }
         drtioaux::Packet::CoreMgmtConfigRemoveRequest {
             destination: _destination,
@@ -1223,14 +1219,11 @@ fn process_aux_packet(
             let key_slice = &key[..length as usize];
             if !key_slice.is_ascii() {
                 error!("invalid key");
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
             } else {
                 let key = core::str::from_utf8(key_slice).unwrap();
-                if core_manager.remove_config(key).is_ok() {
-                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)
-                } else {
-                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
-                }
+                let succeeded = core_manager.remove_config(key).is_ok();
+                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded })
             }
         }
         drtioaux::Packet::CoreMgmtConfigEraseRequest {
@@ -1248,7 +1241,7 @@ fn process_aux_packet(
             );
 
             error!("config erase not supported on zynq device");
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
         }
         drtioaux::Packet::CoreMgmtRebootRequest {
             destination: _destination,
@@ -1265,7 +1258,7 @@ fn process_aux_packet(
                 timer
             );
 
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtAck)?;
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })?;
             info!("reboot imminent");
             slcr::reboot();
             Ok(())
@@ -1285,7 +1278,7 @@ fn process_aux_packet(
             );
 
             error!("debug allocator not supported on zynq device");
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtNack)
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
         }
 
         p => {

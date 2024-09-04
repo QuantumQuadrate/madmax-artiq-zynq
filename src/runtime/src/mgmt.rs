@@ -201,7 +201,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::Success as i8).await?;
                 Ok(())
             }
@@ -291,7 +291,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::Success as i8).await?;
                 Ok(())
             }
@@ -330,7 +330,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::Success as i8).await?;
                 Ok(())
             }
@@ -440,7 +440,7 @@ mod remote_coremgmt {
                 data: *slice,
             },
             |reply| match reply {
-                Packet::CoreMgmtAck => Ok(()),
+                Packet::CoreMgmtReply { succeeded: true } => Ok(()),
                 packet => {
                     error!("received unexpected aux packet: {:?}", packet);
                     Err(drtio::Error::UnexpectedReply)
@@ -490,7 +490,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::Success as i8).await?;
                 Ok(())
             }
@@ -527,7 +527,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::Success as i8).await?;
                 Ok(())
             }
@@ -565,7 +565,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::RebootImminent as i8).await?;
                 Ok(())
             }
@@ -602,7 +602,7 @@ mod remote_coremgmt {
         .await;
 
         match reply {
-            Ok(Packet::CoreMgmtAck) => {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
                 write_i8(stream, Reply::Success as i8).await?;
                 Ok(())
             }
