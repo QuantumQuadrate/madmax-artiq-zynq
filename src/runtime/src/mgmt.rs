@@ -70,6 +70,8 @@ pub enum Request {
     ConfigErase = 15,
 
     DebugAllocator = 8,
+
+    Flash = 9,
 }
 
 #[repr(i8)]
@@ -132,8 +134,10 @@ async fn read_key(stream: &mut TcpStream) -> Result<String> {
 
 #[cfg(has_drtio)]
 mod remote_coremgmt {
+    use core_io::Read;
     use io::{Cursor, ProtoWrite};
-    use libboard_artiq::drtioaux_proto::{Packet, MASTER_PAYLOAD_MAX_SIZE};
+    use libboard_artiq::{drtioaux_async,
+                         drtioaux_proto::{Packet, MASTER_PAYLOAD_MAX_SIZE}};
 
     use super::*;
     use crate::rtio_mgt::drtio;
@@ -616,6 +620,64 @@ mod remote_coremgmt {
             }
         }
     }
+
+    pub async fn image_write(
+        stream: &mut TcpStream,
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &drtio_routing::RoutingTable,
+        timer: GlobalTimer,
+        linkno: u8,
+        destination: u8,
+        _cfg: &Rc<Config>,
+        image: Vec<u8>,
+    ) -> Result<()> {
+        let mut image = &image[..];
+
+        while !image.is_empty() {
+            let mut data = [0; MASTER_PAYLOAD_MAX_SIZE];
+            let len = image.read(&mut data).unwrap();
+            let last = image.is_empty();
+
+            let reply = drtio::aux_transact(
+                aux_mutex,
+                linkno,
+                routing_table,
+                &Packet::CoreMgmtFlashRequest {
+                    destination: destination,
+                    last: last,
+                    length: len as u16,
+                    data: data,
+                },
+                timer,
+            )
+            .await;
+
+            match reply {
+                Ok(Packet::CoreMgmtReply { succeeded: true }) if !last => Ok(()),
+                Ok(Packet::CoreMgmtDropLink) if last => drtioaux_async::send(
+                    linkno,
+                    &Packet::CoreMgmtDropLinkAck {
+                        destination: destination,
+                    },
+                )
+                .await
+                .map_err(|_| drtio::Error::AuxError),
+                Ok(packet) => {
+                    error!("received unexpected aux packet: {:?}", packet);
+                    write_i8(stream, Reply::Error as i8).await?;
+                    Err(drtio::Error::UnexpectedReply)
+                }
+                Err(e) => {
+                    error!("aux packet error ({})", e);
+                    write_i8(stream, Reply::Error as i8).await?;
+                    Err(drtio::Error::AuxError)
+                }
+            }?;
+        }
+
+        write_i8(stream, Reply::RebootImminent as i8).await?;
+        Ok(())
+    }
 }
 
 mod local_coremgmt {
@@ -744,6 +806,18 @@ mod local_coremgmt {
         error!("zynq device does not support allocator debug print");
         Ok(())
     }
+
+    pub async fn image_write(stream: &mut TcpStream, cfg: &Rc<Config>, image: Vec<u8>) -> Result<()> {
+        let value = cfg.write("boot", image);
+        if value.is_ok() {
+            reboot(stream).await?;
+        } else {
+            // this is an error because we do not expect write to fail
+            error!("failed to write boot file: {:?}", value);
+            write_i8(stream, Reply::Error as i8).await?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(has_drtio)]
@@ -828,6 +902,19 @@ async fn handle_connection(
             }
             Request::DebugAllocator => {
                 process!(stream, _drtio_tuple, _destination, debug_allocator)
+            }
+            Request::Flash => {
+                let len = read_i32(stream).await?;
+                if len <= 0 {
+                    write_i8(stream, Reply::Error as i8).await?;
+                    return Err(Error::UnexpectedPattern);
+                }
+                let mut buffer = Vec::with_capacity(len as usize);
+                unsafe {
+                    buffer.set_len(len as usize);
+                }
+                read_chunk(stream, &mut buffer).await?;
+                process!(stream, _drtio_tuple, _destination, image_write, &cfg, buffer)
             }
         }?;
     }
