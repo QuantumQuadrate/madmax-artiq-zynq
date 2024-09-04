@@ -1190,12 +1190,12 @@ fn process_aux_packet(
                 timer
             );
 
-            core_manager.add_data(&data, length as usize);
+            core_manager.add_config_data(&data, length as usize);
 
             let mut succeeded = true;
             if last {
                 succeeded = core_manager.write_config().is_ok();
-                core_manager.clear_data();
+                core_manager.clear_config_data();
             }
 
             drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded })
