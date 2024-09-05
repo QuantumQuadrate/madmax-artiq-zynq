@@ -135,7 +135,7 @@ async fn read_key(stream: &mut TcpStream) -> Result<String> {
 #[cfg(has_drtio)]
 mod remote_coremgmt {
     use core_io::Read;
-    use io::{Cursor, ProtoWrite};
+    use io::ProtoWrite;
     use libboard_artiq::{drtioaux_async,
                          drtioaux_proto::{Packet, MASTER_PAYLOAD_MAX_SIZE}};
 
@@ -427,7 +427,7 @@ mod remote_coremgmt {
         value: Vec<u8>,
         _restart_idle: &Rc<Semaphore>,
     ) -> Result<()> {
-        let mut message = Cursor::new(Vec::with_capacity(key.len() + value.len() + 4 * 2));
+        let mut message = Vec::with_capacity(key.len() + value.len() + 4 * 2);
         message.write_string(key).unwrap();
         message.write_bytes(&value).unwrap();
 
@@ -436,7 +436,7 @@ mod remote_coremgmt {
             aux_mutex,
             routing_table,
             timer,
-            message.get_ref(),
+            &message,
             |slice, status, len: usize| Packet::CoreMgmtConfigWriteRequest {
                 destination: destination,
                 last: status.is_last(),

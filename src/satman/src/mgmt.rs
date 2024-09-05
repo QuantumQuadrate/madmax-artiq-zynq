@@ -48,7 +48,7 @@ pub fn clear_log() {
 pub struct Manager<'a> {
     cfg: &'a mut Config,
     last_log: Sliceable,
-    config_payload: Cursor<Vec<u8>>,
+    config_payload: Vec<u8>,
     last_value: Sliceable,
     image_payload: Vec<u8>,
 }
@@ -58,7 +58,7 @@ impl<'a> Manager<'_> {
         Manager {
             cfg: cfg,
             last_log: Sliceable::new(0, Vec::new()),
-            config_payload: Cursor::new(Vec::new()),
+            config_payload: Vec::new(),
             last_value: Sliceable::new(0, Vec::new()),
             image_payload: Vec::new(),
         }
@@ -92,17 +92,14 @@ impl<'a> Manager<'_> {
     }
 
     pub fn clear_config_data(&mut self) {
-        self.config_payload.get_mut().clear();
-        self.config_payload.set_position(0);
+        self.config_payload.clear();
     }
 
     pub fn write_config(&mut self) -> Result<()> {
-        let key = self
-            .config_payload
-            .read_string()
-            .map_err(|_err| error!("error on reading key"))?;
+        let mut payload = &self.config_payload[..];
+        let key = payload.read_string().map_err(|_err| error!("error on reading key"))?;
         debug!("write key: {}", key);
-        let value = self.config_payload.read_bytes().unwrap();
+        let value = payload.read_bytes().unwrap();
 
         self.cfg
             .write(&key, value)
