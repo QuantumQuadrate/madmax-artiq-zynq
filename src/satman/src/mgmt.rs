@@ -2,24 +2,24 @@ use alloc::vec::Vec;
 
 use byteorder::{ByteOrder, NativeEndian};
 use crc::crc32;
-use io::{Cursor, ProtoRead, ProtoWrite};
+use io::{ProtoRead, ProtoWrite};
 use libboard_artiq::{drtioaux_proto::SAT_PAYLOAD_MAX_SIZE,
                      logger::{BufferLogger, LogBufferRef}};
 use libconfig::Config;
-use log::{self, debug, error, info, warn, LevelFilter};
+use log::{debug, error, info, warn, LevelFilter};
 
 use crate::routing::{SliceMeta, Sliceable};
 
 type Result<T> = core::result::Result<T, ()>;
 
-pub fn byte_to_level_filter(level_byte: u8) -> Result<log::LevelFilter> {
+pub fn byte_to_level_filter(level_byte: u8) -> Result<LevelFilter> {
     Ok(match level_byte {
-        0 => log::LevelFilter::Off,
-        1 => log::LevelFilter::Error,
-        2 => log::LevelFilter::Warn,
-        3 => log::LevelFilter::Info,
-        4 => log::LevelFilter::Debug,
-        5 => log::LevelFilter::Trace,
+        0 => LevelFilter::Off,
+        1 => LevelFilter::Error,
+        2 => LevelFilter::Warn,
+        3 => LevelFilter::Info,
+        4 => LevelFilter::Debug,
+        5 => LevelFilter::Trace,
         lv => {
             error!("unknown log level: {}", lv);
             return Err(());
@@ -132,6 +132,7 @@ impl<'a> Manager<'_> {
         let actual_crc = crc32::checksum_ieee(image_ref);
 
         if actual_crc == expected_crc {
+            info!("CRC passed. Writing boot image to SD card...");
             image.truncate(bin_len);
             self.cfg.write("boot", image).expect("failed to write boot image");
         } else {

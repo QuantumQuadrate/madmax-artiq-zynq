@@ -3,19 +3,18 @@ use core::{cell::RefCell, ops::Deref};
 
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
-use libboard_artiq::{drtio_routing,
-                     drtio_routing::RoutingTable,
+use libboard_artiq::{drtio_routing::RoutingTable,
                      logger::{BufferLogger, LogBufferRef}};
-use libboard_zynq::{slcr, smoltcp, timer::GlobalTimer};
+use libboard_zynq::{smoltcp, timer::GlobalTimer};
 use libconfig::Config;
-use libcortex_a9::{mutex::Mute, semaphore::Semaphore};
-use log::{self, debug, error, info, warn, LevelFilter};
+use libcortex_a9::{mutex::Mutex, semaphore::Semaphore};
+use log::{self, debug, error, info, warn};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use crate::proto_async::*;
 #[cfg(has_drtio)]
-use crate::rtio_mgt::*;
+use crate::rtio_mgt::drtio;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -140,12 +139,11 @@ mod remote_coremgmt {
                          drtioaux_proto::{Packet, MASTER_PAYLOAD_MAX_SIZE}};
 
     use super::*;
-    use crate::rtio_mgt::drtio;
 
     pub async fn get_log(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -190,7 +188,7 @@ mod remote_coremgmt {
     pub async fn clear_log(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -225,7 +223,7 @@ mod remote_coremgmt {
     pub async fn pull_log(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -276,11 +274,11 @@ mod remote_coremgmt {
     pub async fn set_log_filter(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
-        level: LevelFilter,
+        level: log::LevelFilter,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
             aux_mutex,
@@ -315,11 +313,11 @@ mod remote_coremgmt {
     pub async fn set_uart_log_filter(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
-        level: LevelFilter,
+        level: log::LevelFilter,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
             aux_mutex,
@@ -354,7 +352,7 @@ mod remote_coremgmt {
     pub async fn config_read(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -418,7 +416,7 @@ mod remote_coremgmt {
     pub async fn config_write(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -468,7 +466,7 @@ mod remote_coremgmt {
     pub async fn config_remove(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -514,7 +512,7 @@ mod remote_coremgmt {
     pub async fn config_erase(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -551,7 +549,7 @@ mod remote_coremgmt {
     pub async fn reboot(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -589,7 +587,7 @@ mod remote_coremgmt {
     pub async fn debug_allocator(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -624,7 +622,7 @@ mod remote_coremgmt {
     pub async fn image_write(
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &drtio_routing::RoutingTable,
+        routing_table: &RoutingTable,
         timer: GlobalTimer,
         linkno: u8,
         destination: u8,
@@ -681,6 +679,8 @@ mod remote_coremgmt {
 }
 
 mod local_coremgmt {
+    use libboard_zynq::slcr;
+
     use super::*;
 
     pub async fn get_log(stream: &mut TcpStream) -> Result<()> {
@@ -714,25 +714,25 @@ mod local_coremgmt {
             buffer.clear();
             core::mem::drop(buffer);
             write_chunk(stream, &bytes).await?;
-            if log::max_level() == LevelFilter::Trace {
+            if log::max_level() == log::LevelFilter::Trace {
                 // temporarily discard all trace level log
                 let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
-                logger.set_buffer_log_level(LevelFilter::Debug);
+                logger.set_buffer_log_level(log::LevelFilter::Debug);
                 stream.flush().await?;
-                logger.set_buffer_log_level(LevelFilter::Trace);
+                logger.set_buffer_log_level(log::LevelFilter::Trace);
             }
         }
         Ok(())
     }
 
-    pub async fn set_log_filter(stream: &mut TcpStream, lvl: LevelFilter) -> Result<()> {
+    pub async fn set_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
         info!("Changing log level to {}", lvl);
         log::set_max_level(lvl);
         write_i8(stream, Reply::Success as i8).await?;
         Ok(())
     }
 
-    pub async fn set_uart_log_filter(stream: &mut TcpStream, lvl: LevelFilter) -> Result<()> {
+    pub async fn set_uart_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
         info!("Changing UART log level to {}", lvl);
         unsafe {
             BufferLogger::get_logger().as_ref().unwrap().set_uart_log_level(lvl);
@@ -920,11 +920,7 @@ async fn handle_connection(
     }
 }
 
-pub fn start(
-    cfg: Rc<Config>,
-    restart_idle: Rc<Semaphore>,
-    drtio_tuple: Option<(&Rc<Mutex<bool>>, &Rc<RefCell<drtio_routing::RoutingTable>>, GlobalTimer)>,
-) {
+pub fn start(cfg: Config, restart_idle: Rc<Semaphore>, drtio_tuple: Option<(&Rc<Mutex<bool>>, &Rc<RefCell<RoutingTable>>, GlobalTimer)>) {
     let drtio_tuple =
         drtio_tuple.map(|(aux_mutex, routing_table, timer)| (aux_mutex.clone(), routing_table.clone(), timer));
     task::spawn(async move {
