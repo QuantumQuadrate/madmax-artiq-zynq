@@ -14,6 +14,8 @@ use core::cell::RefCell;
 
 use ksupport;
 use libasync::task;
+#[cfg(has_cxp_grabber)]
+use libboard_artiq::cxp_phys;
 #[cfg(has_drtio_eem)]
 use libboard_artiq::drtio_eem;
 #[cfg(feature = "target_kasli_soc")]
@@ -74,6 +76,23 @@ mod grabber {
         let mut countdown = timer.countdown();
         loop {
             grabber::tick();
+            delay(&mut countdown, Milliseconds(200)).await;
+        }
+    }
+}
+
+#[cfg(has_cxp_grabber)]
+mod cxp {
+    use libasync::delay;
+    use libboard_artiq::cxp_grabber;
+    use libboard_zynq::time::Milliseconds;
+
+    use crate::GlobalTimer;
+
+    pub async fn grabber_thread(timer: GlobalTimer) {
+        let mut countdown = timer.countdown();
+        loop {
+            cxp_grabber::tick(timer);
             delay(&mut countdown, Milliseconds(200)).await;
         }
     }
@@ -150,6 +169,12 @@ pub fn main_core0() {
     task::spawn(grabber::grabber_thread(timer));
 
     task::spawn(ksupport::report_async_rtio_errors());
+
+    #[cfg(has_cxp_grabber)]
+    {
+        cxp_phys::setup();
+        task::spawn(cxp::grabber_thread(timer));
+    }
 
     comms::main(timer, cfg);
 }
