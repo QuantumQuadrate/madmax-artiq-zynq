@@ -1251,7 +1251,8 @@ impl Packet {
             | Packet::SubkernelLoadRunReply { .. }
             | Packet::SubkernelMessageAck { .. }
             | Packet::DmaPlaybackStatus { .. }
-            | Packet::SubkernelFinished { .. } => false,
+            | Packet::SubkernelFinished { .. }
+            | Packet::CoreMgmtDropLinkAck { .. } => false,
             _ => true,
         }
     }
