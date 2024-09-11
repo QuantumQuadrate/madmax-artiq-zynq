@@ -6,6 +6,7 @@ use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::logger::{BufferLogger, LogBufferRef};
 use libboard_zynq::{slcr, smoltcp};
 use libconfig::Config;
+use libcortex_a9::semaphore::Semaphore;
 use log::{self, debug, error, info, warn, LevelFilter};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -111,7 +112,7 @@ async fn read_key(stream: &mut TcpStream) -> Result<String> {
     Ok(String::from_utf8(buffer).unwrap())
 }
 
-async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cfg: Rc<Config>) -> Result<()> {
+async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cfg: Rc<Config>, restart_idle: Rc<Semaphore>) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -200,6 +201,9 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cf
                 let value = cfg.write(&key, buffer);
                 if value.is_ok() {
                     debug!("write success");
+                    if key == "idle_kernel" {
+                        restart_idle.signal();
+                    }
                     write_i8(stream, Reply::Success as i8).await?;
                 } else {
                     // this is an error because we do not expect write to fail
@@ -213,6 +217,9 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cf
                 let value = cfg.remove(&key);
                 if value.is_ok() {
                     debug!("erase success");
+                    if key == "idle_kernel" {
+                        restart_idle.signal();
+                    }
                     write_i8(stream, Reply::Success as i8).await?;
                 } else {
                     warn!("erase failed");
@@ -229,17 +236,17 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cf
     }
 }
 
-pub fn start(cfg: Config) {
+pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
-        let cfg = Rc::new(cfg);
         loop {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
             let cfg = cfg.clone();
+            let restart_idle = restart_idle.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id, cfg)
+                let _ = handle_connection(&mut stream, pull_id, cfg, restart_idle)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;
