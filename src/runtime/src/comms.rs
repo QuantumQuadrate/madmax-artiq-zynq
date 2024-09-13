@@ -837,16 +837,18 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                         can_restart_idle.signal();
                         match maybe_idle_kernel {
                             Some(buffer) => {
-                                info!("loading idle kernel");
-                                match handle_flash_kernel(&buffer, &control, &up_destinations, &aux_mutex, &routing_table, timer).await {
-                                    Ok(_) => {
-                                        info!("running idle kernel");
-                                        match handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer).await {
-                                            Ok(_) => info!("idle kernel finished"),
-                                            Err(_) => warn!("idle kernel running error")
-                                        }
-                                    },
-                                    Err(_) => warn!("idle kernel loading error")
+                                loop {
+                                    info!("loading idle kernel");
+                                    match handle_flash_kernel(&buffer, &control, &up_destinations, &aux_mutex, &routing_table, timer).await {
+                                        Ok(_) => {
+                                            info!("running idle kernel");
+                                            match handle_run_kernel(None, &control, &up_destinations, &aux_mutex, &routing_table, timer).await {
+                                                Ok(_) => info!("idle kernel finished"),
+                                                Err(_) => warn!("idle kernel running error")
+                                            }
+                                        },
+                                        Err(_) => warn!("idle kernel loading error")
+                                    }
                                 }
                             },
                             None => info!("no idle kernel found")
