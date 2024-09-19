@@ -755,7 +755,7 @@ mod local_coremgmt {
     }
 
     pub async fn config_write(stream: &mut TcpStream, cfg: &Rc<Config>, key: &String, value: Vec<u8>, restart_idle: &Rc<Semaphore>) -> Result<()> {
-        let value = cfg.write(&key, buffer);
+        let value = cfg.write(&key, value);
         if value.is_ok() {
             debug!("write success");
             if key == "idle_kernel" {
@@ -771,7 +771,6 @@ mod local_coremgmt {
     }
 
     pub async fn config_remove(stream: &mut TcpStream, cfg: &Rc<Config>, key: &String, restart_idle: &Rc<Semaphore>) -> Result<()> {
-        let key = read_key(stream).await?;
         debug!("erase key: {}", key);
         let value = cfg.remove(&key);
         if value.is_ok() {
@@ -888,11 +887,11 @@ async fn handle_connection(
                     buffer.set_len(len);
                 }
                 read_chunk(stream, &mut buffer).await?;
-                process!(stream, _drtio_tuple, _destination, config_write, &cfg, &key, buffer, restart_idle)
+                process!(stream, _drtio_tuple, _destination, config_write, &cfg, &key, buffer, &restart_idle)
             }
             Request::ConfigRemove => {
                 let key = read_key(stream).await?;
-                process!(stream, _drtio_tuple, _destination, config_remove, &cfg, &key, restart_idle)
+                process!(stream, _drtio_tuple, _destination, config_remove, &cfg, &key, &restart_idle)
             }
             Request::Reboot => {
                 process!(stream, _drtio_tuple, _destination, reboot)
@@ -920,7 +919,7 @@ async fn handle_connection(
     }
 }
 
-pub fn start(cfg: Config, restart_idle: Rc<Semaphore>, drtio_tuple: Option<(&Rc<Mutex<bool>>, &Rc<RefCell<RoutingTable>>, GlobalTimer)>) {
+pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>, drtio_tuple: Option<(&Rc<Mutex<bool>>, &Rc<RefCell<RoutingTable>>, GlobalTimer)>) {
     let drtio_tuple =
         drtio_tuple.map(|(aux_mutex, routing_table, timer)| (aux_mutex.clone(), routing_table.clone(), timer));
     task::spawn(async move {
@@ -929,6 +928,7 @@ pub fn start(cfg: Config, restart_idle: Rc<Semaphore>, drtio_tuple: Option<(&Rc<
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
             let cfg = cfg.clone();
+            let restart_idle = restart_idle.clone();
             let drtio_tuple = drtio_tuple.clone();
             task::spawn(async move {
                 info!("received connection");
