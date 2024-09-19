@@ -112,7 +112,12 @@ async fn read_key(stream: &mut TcpStream) -> Result<String> {
     Ok(String::from_utf8(buffer).unwrap())
 }
 
-async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>, cfg: Rc<Config>, restart_idle: Rc<Semaphore>) -> Result<()> {
+async fn handle_connection(
+    stream: &mut TcpStream,
+    pull_id: Rc<RefCell<u32>>,
+    cfg: Rc<Config>,
+    restart_idle: Rc<Semaphore>,
+) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
     }

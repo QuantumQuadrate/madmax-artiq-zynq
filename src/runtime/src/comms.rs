@@ -781,7 +781,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
             error!("Error loading startup kernel!");
         }
     }
-    
+
     let cfg = Rc::new(cfg);
     let restart_idle = Rc::new(Semaphore::new(1, 1));
     mgmt::start(cfg.clone(), restart_idle.clone());
@@ -797,9 +797,9 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
                 s = (async {
                         TcpStream::accept(1381, 0x10_000, 0x10_000).await.unwrap()
                     }).fuse() => Some(s),
-                _ = (async { 
-                        restart_idle.async_wait().await; 
-                        can_restart_idle.async_wait().await; 
+                _ = (async {
+                        restart_idle.async_wait().await;
+                        can_restart_idle.async_wait().await;
                     }).fuse() => None
             };
 
@@ -908,7 +908,7 @@ pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
     };
 
     Sockets::init(32);
-    
+
     let dummy = Rc::new(Semaphore::new(0, 1));
     mgmt::start(Rc::new(cfg), dummy);
 
