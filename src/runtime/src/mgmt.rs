@@ -261,6 +261,7 @@ mod remote_coremgmt {
                     if last {
                         write_chunk(stream, &buffer).await?;
                         buffer.clear();
+                        task::r#yield().await;
                     }
                 }
                 Ok(packet) => {
