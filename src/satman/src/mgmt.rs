@@ -27,17 +27,13 @@ pub fn byte_to_level_filter(level_byte: u8) -> Result<LevelFilter> {
     })
 }
 
-fn get_logger_buffer_pred() -> LogBufferRef<'static> {
+fn get_logger_buffer() -> LogBufferRef<'static> {
     let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
     loop {
         if let Some(buffer_ref) = logger.buffer() {
             return buffer_ref;
         }
     }
-}
-
-fn get_logger_buffer() -> LogBufferRef<'static> {
-    get_logger_buffer_pred()
 }
 
 pub fn clear_log() {
