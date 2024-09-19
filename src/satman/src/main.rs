@@ -1096,7 +1096,7 @@ fn process_aux_packet(
             );
 
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
-                info!("Changing log level to {}", level_filter);
+                info!("Changing UART log level to {}", level_filter);
                 unsafe {
                     logger::BufferLogger::get_logger()
                         .as_ref()
