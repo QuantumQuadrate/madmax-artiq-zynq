@@ -1031,10 +1031,7 @@ fn process_aux_packet(
                 timer
             );
             let mut data_slice = [0; SAT_PAYLOAD_MAX_SIZE];
-            let meta = core_manager.log_get_slice(&mut data_slice);
-            if clear && meta.status.is_first() {
-                mgmt::clear_log();
-            }
+            let meta = core_manager.log_get_slice(&mut data_slice, clear);
             drtioaux::send(
                 0,
                 &drtioaux::Packet::CoreMgmtGetLogReply {

@@ -60,10 +60,14 @@ impl<'a> Manager<'_> {
         }
     }
 
-    pub fn log_get_slice(&mut self, data_slice: &mut [u8; SAT_PAYLOAD_MAX_SIZE]) -> SliceMeta {
+    pub fn log_get_slice(&mut self, data_slice: &mut [u8; SAT_PAYLOAD_MAX_SIZE], consume: bool) -> SliceMeta {
         // Populate buffer if depleted
         if self.last_log.at_end() {
-            self.last_log.extend(get_logger_buffer().extract().as_bytes());
+            let mut buffer = get_logger_buffer();
+            self.last_log.extend(buffer.extract().as_bytes());
+            if consume {
+                buffer.clear();
+            }
         }
 
         self.last_log.get_slice_satellite(data_slice)
