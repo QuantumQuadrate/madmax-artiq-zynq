@@ -234,6 +234,8 @@ mod remote_coremgmt {
             *guard += 1;
             *guard
         };
+        let mut buffer = Vec::new();
+
         loop {
             if id != *pull_id.borrow() {
                 // another connection attempts to pull the log...
@@ -254,8 +256,12 @@ mod remote_coremgmt {
             .await;
 
             match reply {
-                Ok(Packet::CoreMgmtGetLogReply { last: _, length, data }) => {
-                    write_chunk(stream, &data[..length as usize]).await?;
+                Ok(Packet::CoreMgmtGetLogReply { last, length, data }) => {
+                    buffer.extend(&data[..length as usize]);
+                    if last {
+                        write_chunk(stream, &buffer).await?;
+                        buffer.clear();
+                    }
                 }
                 Ok(packet) => {
                     error!("received unexpected aux packet: {:?}", packet);
