@@ -958,11 +958,7 @@ async fn handle_connection(
     }
 }
 
-pub fn start(
-    cfg: Rc<Config>,
-    restart_idle: Rc<Semaphore>,
-    drtio_tuple: Option<DrtioTuple>,
-) {
+pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>, drtio_tuple: Option<DrtioTuple>) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
         loop {
