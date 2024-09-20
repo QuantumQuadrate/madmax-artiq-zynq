@@ -1,5 +1,5 @@
 use alloc::{rc::Rc, string::String, vec::Vec};
-use core::{cell::RefCell, ops::Deref};
+use core::cell::RefCell;
 
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
@@ -842,9 +842,10 @@ macro_rules! process {
     ($stream: ident, $drtio_tuple:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
         if $destination == 0 {
             local_coremgmt::$func($stream, $($param, )*).await
-        } else if let Some((aux_mutex, routing_table, timer)) = $drtio_tuple {
+        } else if let Some(DrtioTuple(ref aux_mutex, ref routing_table, timer)) = $drtio_tuple {
+            let routing_table = routing_table.borrow();
             let linkno = routing_table.0[$destination as usize][0] - 1 as u8;
-            remote_coremgmt::$func($stream, aux_mutex, routing_table, timer, linkno, $destination, $($param, )*).await
+            remote_coremgmt::$func($stream, &aux_mutex, &routing_table, timer, linkno, $destination, $($param, )*).await
         } else {
             error!("coremgmt-over-drtio not supported for panicked device, please reboot");
             write_i8($stream, Reply::Error as i8).await?;
@@ -860,12 +861,15 @@ macro_rules! process {
     }}
 }
 
+#[derive(Clone)]
+pub struct DrtioTuple(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>, pub GlobalTimer);
+
 async fn handle_connection(
     stream: &mut TcpStream,
     pull_id: Rc<RefCell<u32>>,
     cfg: Rc<Config>,
     restart_idle: Rc<Semaphore>,
-    _drtio_tuple: Option<(&Rc<Mutex<bool>>, &RoutingTable, GlobalTimer)>,
+    _drtio_tuple: Option<DrtioTuple>,
 ) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
@@ -957,10 +961,8 @@ async fn handle_connection(
 pub fn start(
     cfg: Rc<Config>,
     restart_idle: Rc<Semaphore>,
-    drtio_tuple: Option<(&Rc<Mutex<bool>>, &Rc<RefCell<RoutingTable>>, GlobalTimer)>,
+    drtio_tuple: Option<DrtioTuple>,
 ) {
-    let drtio_tuple =
-        drtio_tuple.map(|(aux_mutex, routing_table, timer)| (aux_mutex.clone(), routing_table.clone(), timer));
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
         loop {
@@ -971,14 +973,6 @@ pub fn start(
             let drtio_tuple = drtio_tuple.clone();
             task::spawn(async move {
                 info!("received connection");
-                // Avoid consuming the tuple
-                // Keep the borrowed value on stack
-                let drtio_tuple = drtio_tuple
-                    .as_ref()
-                    .map(|(aux_mutex, routing_table, timer)| (aux_mutex, routing_table.borrow(), *timer));
-                let drtio_tuple = drtio_tuple
-                    .as_ref()
-                    .map(|(aux_mutex, routing_table, timer)| (*aux_mutex, routing_table.deref(), *timer));
                 let _ = handle_connection(&mut stream, pull_id, cfg, restart_idle, drtio_tuple)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));

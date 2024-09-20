@@ -788,7 +788,7 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
     mgmt::start(
         cfg.clone(),
         restart_idle.clone(),
-        Some((&aux_mutex, &drtio_routing_table, timer)),
+        Some(mgmt::DrtioTuple(aux_mutex.clone(), drtio_routing_table.clone(), timer)),
     );
 
     task::spawn(async move {
