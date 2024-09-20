@@ -785,7 +785,11 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
 
     let cfg = Rc::new(cfg);
     let restart_idle = Rc::new(Semaphore::new(1, 1));
-    mgmt::start(cfg.clone(), restart_idle.clone(), Some((&aux_mutex, &drtio_routing_table, timer)));
+    mgmt::start(
+        cfg.clone(),
+        restart_idle.clone(),
+        Some((&aux_mutex, &drtio_routing_table, timer)),
+    );
 
     task::spawn(async move {
         let connection = Rc::new(Semaphore::new(1, 1));
