@@ -75,7 +75,7 @@
 
       propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
 
-      checkInputs = with pkgs.python3Packages; [ pytest-runner pytestCheckHook pytest-timeout ];
+      checkInputs = with pkgs.python3Packages; [ pytestCheckHook pytest-timeout ];
 
       # migen/misoc version checks are broken with pyproject for some reason
       postPatch = ''
