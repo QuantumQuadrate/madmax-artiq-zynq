@@ -24,6 +24,7 @@ core_io = { git = "https://git.m-labs.hk/M-Labs/rs-core_io.git", rev = "e9d3edf0
 embedded-hal = "0.2"
 nb = "1.0"
 void = { version = "1", default-features = false }
+byteorder = { version = "1.3", default-features = false }
 
 io = { path = "../libio", features = ["byteorder"] }
 libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq" }
