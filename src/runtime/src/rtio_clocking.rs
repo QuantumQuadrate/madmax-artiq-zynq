@@ -12,9 +12,9 @@ use libboard_artiq::si549;
 use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
-use log::warn;
 #[cfg(not(feature = "target_ebaz4205"))]
 use log::info;
+use log::warn;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[allow(non_camel_case_types)]
