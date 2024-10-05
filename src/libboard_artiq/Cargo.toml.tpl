@@ -10,6 +10,7 @@ name = "libboard_artiq"
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libconfig/target_zc706"]
 target_kasli_soc = ["libboard_zynq/target_kasli_soc", "libconfig/target_kasli_soc"]
+target_ebaz4205 = ["libboard_zynq/target_ebaz4205", "libconfig/target_ebaz4205"]
 calibrate_wrpll_skew = []
 
 [build-dependencies]

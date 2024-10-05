@@ -1,6 +1,8 @@
+#[cfg(not(feature = "target_ebaz4205"))]
 use embedded_hal::blocking::delay::DelayMs;
 #[cfg(has_si5324)]
 use ksupport::i2c;
+#[cfg(not(feature = "target_ebaz4205"))]
 use libboard_artiq::pl;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
@@ -10,7 +12,9 @@ use libboard_artiq::si549;
 use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
-use log::{info, warn};
+use log::warn;
+#[cfg(not(feature = "target_ebaz4205"))]
+use log::info;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[allow(non_camel_case_types)]
@@ -69,7 +73,7 @@ fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
     res
 }
 
-#[cfg(not(has_drtio))]
+#[cfg(not(any(has_drtio, feature = "target_ebaz4205")))]
 fn init_rtio(timer: &mut GlobalTimer) {
     info!("Switching SYS clocks...");
     unsafe {
@@ -429,7 +433,7 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     #[cfg(has_drtio)]
     init_drtio(timer);
 
-    #[cfg(not(has_drtio))]
+    #[cfg(not(any(has_drtio, feature = "target_ebaz4205")))]
     init_rtio(timer);
 
     #[cfg(all(has_si549, has_wrpll))]

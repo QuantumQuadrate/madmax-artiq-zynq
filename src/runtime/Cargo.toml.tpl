@@ -8,6 +8,7 @@ edition = "2018"
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706", "libconfig/target_zc706", "libboard_artiq/target_zc706"]
 target_kasli_soc = ["libboard_zynq/target_kasli_soc", "libsupport_zynq/target_kasli_soc", "libconfig/target_kasli_soc", "libboard_artiq/target_kasli_soc"]
+target_ebaz4205 = ["libboard_zynq/target_ebaz4205", "libsupport_zynq/target_ebaz4205", "libconfig/target_ebaz4205", "libboard_artiq/target_ebaz4205"]
 default = ["target_zc706"]
 
 [build-dependencies]
