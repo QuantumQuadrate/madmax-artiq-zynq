@@ -364,7 +364,8 @@
       (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_satellite_100mhz"; }) //
       (board-package-set { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
       (board-package-set { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
-      (board-package-set { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; });
+      (board-package-set { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; }) //
+      (board-package-set { target = "ebaz4205"; variant = "base"; });
 
     hydraJobs = packages.x86_64-linux // { inherit zc706-hitl-tests; inherit gateware-sim; inherit fmt-check; };
 

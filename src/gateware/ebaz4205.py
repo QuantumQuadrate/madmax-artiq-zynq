@@ -212,6 +212,14 @@ class EBAZ4205(SoCCore):
         self.csr_devices.append("rtio_analyzer")
 
 
+class BASE(EBAZ4205):
+    def __init__(self, rtio_clk, acpki):
+        EBAZ4205.__init__(self, rtio_clk, acpki)
+
+
+VARIANTS = {cls.__name__.lower(): cls for cls in [BASE]}
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="ARTIQ port to the EBAZ4205 control card of Ebit E9+ BTC miner"
@@ -232,11 +240,25 @@ def main():
     )
     parser.add_argument("--rtio-clk", default=125e6, help="RTIO Clock Frequency (Hz)")
     parser.add_argument(
-        "--acpki", default=False, action="store_true", help="enable ACPKI"
+        "-V",
+        "--variant",
+        default="base",
+        help="variant: " "[acpki_]base" "(default: %(default)s)",
     )
     args = parser.parse_args()
 
-    soc = EBAZ4205(rtio_clk=int(args.rtio_clk), acpki=args.acpki)
+    rtio_clk = int(args.rtio_clk)
+    variant = args.variant.lower()
+    acpki = variant.startswith("acpki_")
+    if acpki:
+        variant = variant[6:]
+
+    try:
+        cls = VARIANTS[variant]
+    except KeyError:
+        raise SystemExit("Invalid variant (-V/--variant)")
+
+    soc = cls(rtio_clk=rtio_clk, acpki=acpki)
     soc.finalize()
 
     if args.r is not None:
