@@ -59,6 +59,16 @@ Notes:
 - Firmware type must be either ``runtime`` for DRTIO-less or DRTIO master variants, or ``satman`` for DRTIO satellite.
 - If the board is connected to the local machine, use the ``local_run.sh`` script.
 
+Pre-Commit Hooks
+----------------
+
+You are strongly recommended to use the provided pre-commit hooks to automatically reformat files and check for non-optimal Rust/C/C++ practices. Run `pre-commit install` to install the hook and `pre-commit` will automatically run `cargo fmt`, `cargo clippy`, and `clang-format` for you.
+
+Several things to note:
+
+- If `cargo fmt`, `cargo clippy`, or `clang-format` returns an error, the pre-commit hook will fail. You should fix all errors before trying to commit again.
+- If `cargo fmt` or `clang-format` reformats some files, the pre-commit hook will also fail. You should review the changes and, if satisfied, try to commit again.
+
 License
 -------
 

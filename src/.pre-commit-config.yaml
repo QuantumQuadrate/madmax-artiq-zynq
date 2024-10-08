@@ -1,0 +1,32 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+default_stages: [commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: artiq-zynq cargo format
+        entry: nix
+        language: system
+        types: [file, rust]
+        pass_filenames: false
+        description: Runs cargo fmt on the codebase.
+        args: [develop, -c, cargo, fmt, --manifest-path, src/Cargo.toml, --all]
+      - id: cargo-clippy
+        name: artiq-zynq cargo clippy
+        entry: nix
+        language: system
+        types: [file, rust]
+        pass_filenames: false
+        description: Runs cargo clippy on the codebase.
+        args: [develop, -c, cargo, clippy, --manifest-path, src/Cargo.toml, --tests]
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v19.1.0
+    hooks:
+      - id: clang-format
+        name: artiq-zynq clang-format
+        description: Runs clang-format on the codebase.
+        files: \.(cpp|h|hpp|c)$
+        args: [-style=file, -fallback-style=none, -assume-filename=src/.clang-format]

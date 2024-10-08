@@ -385,6 +385,7 @@
         artiqpkgs.artiq
         artiqpkgs.vivado
         binutils-arm
+        pre-commit
       ];
       XARGO_RUST_SRC = "${rust}/lib/rustlib/src/rust/library";
       CLANG_EXTRA_INCLUDE_DIR = "${llvmPackages_11.clang-unwrapped.lib}/lib/clang/11.1.0/include";
