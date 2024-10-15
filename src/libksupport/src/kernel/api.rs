@@ -11,6 +11,8 @@ use super::{cache,
             core1::rtio_get_destination_status,
             dma, linalg,
             rpc::{rpc_recv, rpc_send, rpc_send_async}};
+#[cfg(has_cxp_grabber)]
+use crate::cxp;
 use crate::{eh_artiq, i2c, rtio};
 
 extern "C" {
@@ -125,6 +127,14 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(subkernel_send_message = subkernel::send_message),
         #[cfg(has_drtio)]
         api!(subkernel_await_message = subkernel::await_message),
+
+        // cxp grabber
+        #[cfg(has_cxp_grabber)]
+        api!(cxp_download_xml_file = cxp::download_xml_file),
+        #[cfg(has_cxp_grabber)]
+        api!(cxp_read32 = cxp::read32),
+        #[cfg(has_cxp_grabber)]
+        api!(cxp_write32 = cxp::write32),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2
