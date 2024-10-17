@@ -41,6 +41,9 @@ pub mod si5324;
 pub mod si549;
 use core::{cmp, str};
 
+#[cfg(has_cxp_grabber)]
+pub mod cxp_phys;
+
 pub fn identifier_read(buf: &mut [u8]) -> &str {
     unsafe {
         pl::csr::identifier::address_write(0);
