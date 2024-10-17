@@ -1,22 +1,18 @@
 #!/usr/bin/env python
 
 import argparse
-from operator import itemgetter
 
+import analyzer
+import dma
+from artiq.gateware import rtio
+from artiq.gateware.rtio.phy import dds, spi2, ttl_simple
+from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
+from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 from migen import *
+from migen.build.generic_platform import IOStandard, Misc, Pins, Subsignal
 from migen.build.platforms import ebaz4205
-from migen.build.generic_platform import Pins, Subsignal, IOStandard, Misc
 from migen_axi.integration.soc_core import SoCCore
 from misoc.interconnect.csr import *
-
-from artiq.gateware import rtio
-from artiq.gateware.rtio.phy import ttl_simple
-from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
-
-import dma
-import analyzer
-
-from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 
 _ps = [
     (
@@ -83,6 +79,17 @@ _i2c = [
     )
 ]
 
+_spi = [
+    (
+        "spi",
+        0,
+        Subsignal("clk", Pins("V20")),
+        Subsignal("mosi", Pins("U20")),
+        Subsignal("cs_n", Pins("P19")),
+        IOStandard("LVCMOS33"),
+    )
+]
+
 
 class EBAZ4205(SoCCore):
     def __init__(self, rtio_clk=125e6, acpki=False):
@@ -97,6 +104,7 @@ class EBAZ4205(SoCCore):
         platform.add_extension(_ps)
         platform.add_extension(_ddr)
         platform.add_extension(_i2c)
+        platform.add_extension(_spi)
 
         gmii = platform.request("gmii")
         platform.add_period_constraint(gmii.rx_clk, 10)
@@ -171,6 +179,11 @@ class EBAZ4205(SoCCore):
             phy = ttl_simple.Output(user_led)
             self.submodules += phy
             self.rtio_channels.append(rtio.Channel.from_phy(phy))
+
+        print("SPI at RTIO channel 0x{:06x}".format(len(self.rtio_channels)))
+        spi_phy = spi2.SPIMaster(platform.request("spi"))
+        self.submodules += spi_phy
+        self.rtio_channels.append(rtio.Channel.from_phy(spi_phy, ififo_depth=4))
         self.config["RTIO_LOG_CHANNEL"] = len(self.rtio_channels)
         self.rtio_channels.append(rtio.LogChannel())
 
