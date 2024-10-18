@@ -100,12 +100,13 @@ pub async fn load(
     timer: GlobalTimer,
     id: u32,
     run: bool,
+    timestamp: u64,
 ) -> Result<(), Error> {
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
         if subkernel.state != SubkernelState::Uploaded {
             return Err(Error::IncorrectState);
         }
-        drtio::subkernel_load(aux_mutex, routing_table, timer, id, subkernel.destination, run).await?;
+        drtio::subkernel_load(aux_mutex, routing_table, timer, id, subkernel.destination, run, timestamp).await?;
         if run {
             subkernel.state = SubkernelState::Running;
         }

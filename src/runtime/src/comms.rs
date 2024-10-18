@@ -405,8 +405,9 @@ async fn handle_run_kernel(
                 id,
                 destination: _,
                 run,
+                timestamp
             } => {
-                let succeeded = match subkernel::load(aux_mutex, routing_table, timer, id, run).await {
+                let succeeded = match subkernel::load(aux_mutex, routing_table, timer, id, run, timestamp).await {
                     Ok(()) => true,
                     Err(e) => {
                         error!("Error loading subkernel: {:?}", e);

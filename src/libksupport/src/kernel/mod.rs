@@ -81,6 +81,7 @@ pub enum Message {
         id: u32,
         destination: u8,
         run: bool,
+        timestamp: u64,
     },
     #[cfg(has_drtio)]
     SubkernelLoadRunReply {

@@ -8,7 +8,7 @@ use core_io::{Error as IoError, Write};
 use cslice::AsCSlice;
 use dma::{Error as DmaError, Manager as DmaManager};
 use io::{Cursor, ProtoWrite};
-use ksupport::{eh_artiq, kernel, rpc};
+use ksupport::{eh_artiq, kernel, rpc, rtio};
 use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux,
                      drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE},
@@ -349,7 +349,7 @@ impl<'a> Manager<'_> {
         }
     }
 
-    pub fn run(&mut self, source: u8, id: u32) -> Result<(), Error> {
+    pub fn run(&mut self, source: u8, id: u32, timestamp: u64) -> Result<(), Error> {
         if self.session.kernel_state != KernelState::Loaded || self.session.id != id {
             self.load(id)?;
         }
@@ -359,6 +359,7 @@ impl<'a> Manager<'_> {
             csr::cri_con::selected_write(2);
         }
 
+        rtio::at_mu(timestamp as i64);
         self.control.tx.send(kernel::Message::StartRequest);
         Ok(())
     }
@@ -812,6 +813,7 @@ impl<'a> Manager<'_> {
                 id,
                 destination: sk_destination,
                 run,
+                timestamp,
             } => {
                 self.session.kernel_state = KernelState::SubkernelAwaitLoad;
                 router.route(
@@ -820,6 +822,7 @@ impl<'a> Manager<'_> {
                         destination: sk_destination,
                         id: id,
                         run: run,
+                        timestamp,
                     },
                     routing_table,
                     rank,

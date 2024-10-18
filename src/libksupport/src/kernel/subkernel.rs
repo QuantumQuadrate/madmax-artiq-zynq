@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use cslice::CSlice;
 
 use super::{Message, SubkernelStatus, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
-use crate::{artiq_raise, eh_artiq, rpc::send_args};
+use crate::{artiq_raise, eh_artiq, rpc::send_args, rtio::now_mu};
 
 pub extern "C" fn load_run(id: u32, destination: u8, run: bool) {
     unsafe {
@@ -14,6 +14,7 @@ pub extern "C" fn load_run(id: u32, destination: u8, run: bool) {
                 id: id,
                 destination: destination,
                 run: run,
+                timestamp: now_mu() as u64,
             });
     }
     match unsafe { KERNEL_CHANNEL_0TO1.as_mut().unwrap() }.recv() {

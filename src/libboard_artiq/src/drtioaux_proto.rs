@@ -255,6 +255,7 @@ pub enum Packet {
         destination: u8,
         id: u32,
         run: bool,
+        timestamp: u64,
     },
     SubkernelLoadRunReply {
         destination: u8,
@@ -514,6 +515,7 @@ impl Packet {
                 destination: reader.read_u8()?,
                 id: reader.read_u32()?,
                 run: reader.read_bool()?,
+                timestamp: reader.read_u64()?,
             },
             0xc5 => Packet::SubkernelLoadRunReply {
                 destination: reader.read_u8()?,
@@ -877,12 +879,14 @@ impl Packet {
                 destination,
                 id,
                 run,
+                timestamp,
             } => {
                 writer.write_u8(0xc4)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(id)?;
                 writer.write_bool(run)?;
+                writer.write_u64(timestamp)?;
             }
             Packet::SubkernelLoadRunReply { destination, succeeded } => {
                 writer.write_u8(0xc5)?;

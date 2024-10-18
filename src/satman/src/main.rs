@@ -826,6 +826,7 @@ fn process_aux_packet(
             destination: _destination,
             id,
             run,
+            timestamp,
         } => {
             forward!(
                 router,
@@ -844,7 +845,7 @@ fn process_aux_packet(
                     // cannot run kernel while DDMA is running
                     succeeded = false;
                 } else {
-                    succeeded |= kernel_manager.run(source, id).is_ok();
+                    succeeded |= kernel_manager.run(source, id, timestamp).is_ok();
                 }
             }
             router.send(

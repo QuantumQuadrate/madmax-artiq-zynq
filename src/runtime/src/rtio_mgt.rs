@@ -792,6 +792,7 @@ pub mod drtio {
         id: u32,
         destination: u8,
         run: bool,
+        timestamp: u64,
     ) -> Result<(), Error> {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let reply = aux_transact(
@@ -803,6 +804,7 @@ pub mod drtio {
                 source: 0,
                 destination: destination,
                 run: run,
+                timestamp,
             },
             timer,
         )
