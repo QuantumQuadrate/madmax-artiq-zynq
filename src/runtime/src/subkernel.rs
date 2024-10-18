@@ -106,7 +106,16 @@ pub async fn load(
         if subkernel.state != SubkernelState::Uploaded {
             return Err(Error::IncorrectState);
         }
-        drtio::subkernel_load(aux_mutex, routing_table, timer, id, subkernel.destination, run, timestamp).await?;
+        drtio::subkernel_load(
+            aux_mutex,
+            routing_table,
+            timer,
+            id,
+            subkernel.destination,
+            run,
+            timestamp,
+        )
+        .await?;
         if run {
             subkernel.state = SubkernelState::Running;
         }
