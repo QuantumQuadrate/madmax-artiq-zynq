@@ -1,6 +1,8 @@
 use alloc::{rc::Rc, string::String, vec::Vec};
 use core::cell::RefCell;
 
+use byteorder::{ByteOrder, NativeEndian};
+use crc::crc32;
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::{drtio_routing::RoutingTable,
@@ -825,12 +827,27 @@ mod local_coremgmt {
     }
 
     pub async fn image_write(stream: &mut TcpStream, cfg: &Rc<Config>, image: Vec<u8>) -> Result<()> {
-        let value = cfg.write("boot", image);
-        if value.is_ok() {
+        let mut image = image.clone();
+        let image_ref = &image[..];
+        let bin_len = image.len() - 4;
+
+        let (image_ref, expected_crc) = {
+            let (image_ref, crc_slice) = image_ref.split_at(bin_len);
+            (image_ref, NativeEndian::read_u32(crc_slice))
+        };
+
+        let actual_crc = crc32::checksum_ieee(image_ref);
+
+        if actual_crc == expected_crc {
+            info!("CRC passed. Writing boot image to SD card...");
+            image.truncate(bin_len);
+            cfg.write("boot", image).expect("failed to write boot image");
             reboot(stream).await?;
         } else {
-            // this is an error because we do not expect write to fail
-            error!("failed to write boot file: {:?}", value);
+            error!(
+                "CRC failed, images have not been written to flash.\n(actual {:08x}, expected {:08x})",
+                actual_crc, expected_crc
+            );
             write_i8(stream, Reply::Error as i8).await?;
         }
         Ok(())

@@ -21,6 +21,7 @@ cslice = "0.3"
 log = "0.4"
 embedded-hal = "0.2"
 core_io = { version = "0.1", features = ["collections"] }
+crc = { version = "1.7", default-features = false }
 byteorder = { version = "1.3", default-features = false }
 void = { version = "1", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["async-await"] }
