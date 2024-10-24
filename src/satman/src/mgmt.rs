@@ -137,7 +137,7 @@ impl<'a> Manager<'_> {
             self.cfg.write("boot", image).expect("failed to write boot image");
         } else {
             panic!(
-                "CRC failed in SDRAM (actual {:08x}, expected {:08x})",
+                "CRC failed, images have not been written to flash.\n(actual {:08x}, expected {:08x})",
                 actual_crc, expected_crc
             );
         }
