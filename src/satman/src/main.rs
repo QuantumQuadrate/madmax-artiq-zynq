@@ -1282,7 +1282,7 @@ fn process_aux_packet(
         }
         drtioaux::Packet::CoreMgmtFlashRequest {
             destination: _destination,
-            payload_length
+            payload_length,
         } => {
             forward!(
                 router,

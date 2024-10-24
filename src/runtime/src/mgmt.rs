@@ -649,7 +649,8 @@ mod remote_coremgmt {
                 payload_length: image.len() as u32,
             },
             timer,
-        ).await;
+        )
+        .await;
 
         match alloc_reply {
             Ok(Packet::CoreMgmtReply { succeeded: true }) => Ok(()),

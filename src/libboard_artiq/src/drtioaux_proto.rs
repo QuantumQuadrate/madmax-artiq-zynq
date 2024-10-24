@@ -332,7 +332,7 @@ pub enum Packet {
     CoreMgmtAllocatorDebugRequest {
         destination: u8,
     },
-    CoreMgmtFlashRequest { 
+    CoreMgmtFlashRequest {
         destination: u8,
         payload_length: u32,
     },
@@ -340,7 +340,7 @@ pub enum Packet {
         destination: u8,
         last: bool,
         length: u16,
-        data: [u8; MASTER_PAYLOAD_MAX_SIZE]
+        data: [u8; MASTER_PAYLOAD_MAX_SIZE],
     },
     CoreMgmtDropLinkAck {
         destination: u8,
@@ -1190,7 +1190,10 @@ impl Packet {
                 writer.write_u8(0xda)?;
                 writer.write_u8(destination)?;
             }
-            Packet::CoreMgmtFlashRequest { destination, payload_length } => {
+            Packet::CoreMgmtFlashRequest {
+                destination,
+                payload_length,
+            } => {
                 writer.write_u8(0xdb)?;
                 writer.write_u8(destination)?;
                 writer.write_u32(payload_length)?;
