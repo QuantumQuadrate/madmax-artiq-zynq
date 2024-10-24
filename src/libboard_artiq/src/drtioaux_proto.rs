@@ -332,11 +332,15 @@ pub enum Packet {
     CoreMgmtAllocatorDebugRequest {
         destination: u8,
     },
-    CoreMgmtFlashRequest {
+    CoreMgmtFlashRequest { 
+        destination: u8,
+        payload_length: u32,
+    },
+    CoreMgmtFlashAddDataRequest {
         destination: u8,
         last: bool,
         length: u16,
-        data: [u8; MASTER_PAYLOAD_MAX_SIZE],
+        data: [u8; MASTER_PAYLOAD_MAX_SIZE]
     },
     CoreMgmtDropLinkAck {
         destination: u8,
@@ -694,24 +698,28 @@ impl Packet {
             0xda => Packet::CoreMgmtAllocatorDebugRequest {
                 destination: reader.read_u8()?,
             },
-            0xdb => {
+            0xdb => Packet::CoreMgmtFlashRequest {
+                destination: reader.read_u8()?,
+                payload_length: reader.read_u32()?,
+            },
+            0xdc => {
                 let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
-                Packet::CoreMgmtFlashRequest {
+                Packet::CoreMgmtFlashAddDataRequest {
                     destination: destination,
                     last: last,
                     length: length,
                     data: data,
                 }
             }
-            0xdc => Packet::CoreMgmtDropLinkAck {
+            0xdd => Packet::CoreMgmtDropLinkAck {
                 destination: reader.read_u8()?,
             },
-            0xdd => Packet::CoreMgmtDropLink,
-            0xde => {
+            0xde => Packet::CoreMgmtDropLink,
+            0xdf => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
                 let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -722,7 +730,7 @@ impl Packet {
                     data: data,
                 }
             }
-            0xdf => {
+            0xe0 => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16()?;
                 let mut value: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -733,7 +741,7 @@ impl Packet {
                     value: value,
                 }
             }
-            0xe0 => Packet::CoreMgmtReply {
+            0xe1 => Packet::CoreMgmtReply {
                 succeeded: reader.read_bool()?,
             },
 
@@ -1182,37 +1190,42 @@ impl Packet {
                 writer.write_u8(0xda)?;
                 writer.write_u8(destination)?;
             }
-            Packet::CoreMgmtFlashRequest {
+            Packet::CoreMgmtFlashRequest { destination, payload_length } => {
+                writer.write_u8(0xdb)?;
+                writer.write_u8(destination)?;
+                writer.write_u32(payload_length)?;
+            }
+            Packet::CoreMgmtFlashAddDataRequest {
                 destination,
                 last,
                 length,
                 data,
             } => {
-                writer.write_u8(0xdb)?;
+                writer.write_u8(0xdc)?;
                 writer.write_u8(destination)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
                 writer.write_all(&data[..length as usize])?;
             }
             Packet::CoreMgmtDropLinkAck { destination } => {
-                writer.write_u8(0xdc)?;
+                writer.write_u8(0xdd)?;
                 writer.write_u8(destination)?;
             }
-            Packet::CoreMgmtDropLink => writer.write_u8(0xdd)?,
+            Packet::CoreMgmtDropLink => writer.write_u8(0xde)?,
             Packet::CoreMgmtGetLogReply { last, length, data } => {
-                writer.write_u8(0xde)?;
+                writer.write_u8(0xdf)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::CoreMgmtConfigReadReply { last, length, value } => {
-                writer.write_u8(0xdf)?;
+                writer.write_u8(0xe0)?;
                 writer.write_bool(last)?;
                 writer.write_u16(length)?;
                 writer.write_all(&value[0..length as usize])?;
             }
             Packet::CoreMgmtReply { succeeded } => {
-                writer.write_u8(0xe0)?;
+                writer.write_u8(0xe1)?;
                 writer.write_bool(succeeded)?;
             }
         }

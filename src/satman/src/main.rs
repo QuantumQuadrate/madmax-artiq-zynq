@@ -1282,6 +1282,24 @@ fn process_aux_packet(
         }
         drtioaux::Packet::CoreMgmtFlashRequest {
             destination: _destination,
+            payload_length
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+                timer
+            );
+
+            core_manager.allocate_image_buffer(payload_length as usize);
+            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+        }
+        drtioaux::Packet::CoreMgmtFlashAddDataRequest {
+            destination: _destination,
             last,
             length,
             data,

@@ -640,6 +640,31 @@ mod remote_coremgmt {
     ) -> Result<()> {
         let mut image = &image[..];
 
+        let alloc_reply = drtio::aux_transact(
+            aux_mutex,
+            linkno,
+            routing_table,
+            &Packet::CoreMgmtFlashRequest {
+                destination: destination,
+                payload_length: image.len() as u32,
+            },
+            timer,
+        ).await;
+
+        match alloc_reply {
+            Ok(Packet::CoreMgmtReply { succeeded: true }) => Ok(()),
+            Ok(packet) => {
+                error!("received unexpected aux packet: {:?}", packet);
+                write_i8(stream, Reply::Error as i8).await?;
+                Err(drtio::Error::UnexpectedReply)
+            }
+            Err(e) => {
+                error!("aux packet error ({})", e);
+                write_i8(stream, Reply::Error as i8).await?;
+                Err(drtio::Error::AuxError)
+            }
+        }?;
+
         while !image.is_empty() {
             let mut data = [0; MASTER_PAYLOAD_MAX_SIZE];
             let len = image.read(&mut data).unwrap();
@@ -649,7 +674,7 @@ mod remote_coremgmt {
                 aux_mutex,
                 linkno,
                 routing_table,
-                &Packet::CoreMgmtFlashRequest {
+                &Packet::CoreMgmtFlashAddDataRequest {
                     destination: destination,
                     last: last,
                     length: len as u16,

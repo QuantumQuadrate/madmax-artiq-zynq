@@ -115,6 +115,10 @@ impl<'a> Manager<'_> {
             .map_err(|err| warn!("failed to erase: {:?}", err))
     }
 
+    pub fn allocate_image_buffer(&mut self, image_size: usize) {
+        self.image_payload = Vec::with_capacity(image_size);
+    }
+
     pub fn add_image_data(&mut self, data: &[u8], data_len: usize) {
         self.image_payload.extend(&data[..data_len]);
     }
