@@ -4,60 +4,92 @@ ARTIQ on Zynq
 How to use
 ----------
 
-1. Install the ARTIQ version that corresponds to the artiq-zynq version you are targeting.
-2. To obtain firmware binaries, select the latest successful build on [Hydra](https://nixbld.m-labs.hk/) for the targeted artiq-zynq version, or use AFWS. If using Hydra, search for the job named ``<board>-<variant>-sd`` (for example: ``zc706-nist_clock-sd`` or ``zc706-nist_qc2-sd``).
-3. Place the ``boot.bin`` file, obtained from Hydra's "binary distribution" download link or from AFWS, at the root of a FAT-formatted SD card.
-4. Optionally, create a ``config.txt`` configuration file at the root of the SD card containing ``key=value`` pairs on each line. Use the ``ip``, ``ip6`` and ``mac`` keys to respectively set the IPv4, IPv6 and MAC address of the board. Configuring an IPv6 address is entirely optional. If these keys are not found, the firmware will use default values that may or may not be compatible with your network.
-5. Insert the SD card into the board and set up the board to boot from the SD card. For the ZC706, this is achieved by placing the large DIP switch SW11 in the 00110 position.
-6. Power up the board. After the firmware starts successfully, it should respond to ping at its IP addresses, and boot messages can be observed from its UART at 115200bps.
-7. Create and use an ARTIQ device database as usual, but set ``"target": "cortexa9"`` in the arguments of the core device.
+1. [Install ARTIQ](https://m-labs.hk/artiq/manual/installing.html). Get the corresponding version to the ``artiq-zynq`` version you are targeting.
+2. To obtain firmware binaries, use AFWS or build your own; see [the ARTIQ manual](https://m-labs.hk/artiq/manual/building_developing.html) for detailed instructions or skip to "Development" below. ZC706 variants only can also be downloaded from latest successful build on [Hydra](https://nixbld.m-labs.hk/).
+3. Place ``boot.bin`` file at the root ``/`` of a FAT-formatted SD card.
+4. Optionally, create a ``config.txt`` configuration file containing ``key=value`` pairs on each line and place it at the root of the SD card. See below for valid keys. The ``ip``, ``ip6`` and ``mac`` keys can be used to set networking information. If these keys are not found, the firmware will use default values which may or may not be compatible with your network.
+5. Insert the SD card into the board and set the board to boot from the SD card. For ZC706, this is achieved by placing the large DIP switch SW11 into the 00110 position. On Kasli-SoC, place the BOOT MODE switches to SD.
+6. Power up the board. After successful boot the firmware should respond to ping at its IP addresses. Boot output can be observed from UART at 115200bps 8-N-1.
+7. Create and use an ARTIQ device database as usual.
 
 Configuration
 -------------
 
-Configuring the device is done using the ``config.txt`` text file at the root of the SD card, plus the contents of the ``config`` folder. When searching for a configuration key, the firmware first looks for a file named ``/config/[key].bin`` and, if it exists, returns the contents of that file. If not, it looks into ``/config.txt``, which contains a list of ``key=value`` pairs, one per line. The ``config`` folder allows configuration values that consist in binary data, such as the startup kernel.
+Configuring the device is done using the ``config.txt`` text file at the root of the SD card plus optionally a ``config`` folder. When searching for a configuration key, the firmware first looks for a file named ``/config/[key].bin`` and, if it exists, returns the contents of that file. If not, it looks into ``/config.txt``, which should contain a list of ``key=value`` pairs, one per line. ``config.txt`` should be used for most keys but the ``config`` folder allows for setting configuration values which consist of binary data, such as the startup kernel.
 
-The following configuration keys are available:
+The following configuration keys are available among others:
 
 - ``mac``: Ethernet MAC address.
 - ``ip``: IPv4 address.
 - ``ip6``: IPv6 address.
-- ``startup``: startup kernel in ELF format (as produced by ``artiq_compile``).
+- ``idle_kernel``: idle kernel in ELF format (as produced by ``artiq_compile``).
+- ``startup_kernel``: startup kernel in ELF format (as produced by ``artiq_compile``).
 - ``rtio_clock``: source of RTIO clock; valid values are ``ext0_bypass`` and ``int_125``.
-- ``boot``: SD card "boot.bin" file, for replacing the boot firmware/gateware. Write only.
 
-Configurations can be read/written/removed via ``artiq_coremgmt``. Config erase is
-not implemented as it seems not very useful.
+See [ARTIQ manual](https://m-labs.hk/artiq/manual-beta/core_device.html#configuration-storage) for full list. Configurations can be read/written/removed with ``artiq_coremgmt``. Config erase is not implemented, as it isn't particularly useful.
+
+For convenience, the ``boot`` key can be used with ``artiq_coremgmt`` and a ``boot.bin`` file to replace firmware/gateware in a running system. This key is read-only. When loading ``boot.bin`` onto the SD card directly, place it at the root and not in the ``config`` folder.
 
 Development instructions
 ------------------------
 
-ARTIQ on Zynq is packaged using the [Nix](https://nixos.org) Flakes system. Install Nix 2.8+ and enable flakes by adding ``experimental-features = nix-command flakes`` to ``nix.conf`` (e.g. ``~/.config/nix/nix.conf``).
+ARTIQ on Zynq is packaged using [Nix](https://nixos.org) Flakes. Install Nix 2.8+ and enable flakes by adding ``experimental-features = nix-command flakes`` to ``nix.conf`` (e.g. ``~/.config/nix/nix.conf``).
 
-Pure build with Nix and execution on a remote JTAG server:
+**Pure build with Nix:**
 
 ```shell
-nix build .#zc706-nist_clock-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock_satellite-jtag etc.
-./remote_run.sh
+nix build .#zc706-nist_clock-jtag  # or zc706-nist_qc2-jtag or zc706-nist_clock-sd or etc
 ```
 
-Impure incremental build and execution on a remote JTAG server:
+Run ``nix flake show`` to see all valid build targets. Targets suffixed with ``-jtag`` produce separate firmware and gateware files, intended for use in booting via JTAG server/Ethernet, e.g. ``./remote_run.sh -i`` with a remote JTAG server. Targets suffixed with ``-sd`` will produce ``boot.bin`` file suitable for SD card boot. ``-firmware`` and ``-gateware`` respectively build firmware and gateware only.
+
+The Kasli-SoC target requires a system description file as input. See ARTIQ manual for exact instructions or use incremental build.
+
+**Impure incremental build:**
+
+For boards with fixed variants, i.e. ZC706, etc. :
 
 ```shell
 nix develop
 cd src
-gateware/zc706.py -g ../build/gateware -V <variant> # build gateware
-make GWARGS="-V <variant>" <runtime/satman>    # build firmware
-cd ..
-./remote_run.sh -i
+gateware/<board>.py -g ../build/gateware -V <variant> # gateware
+make GWARGS="-V <variant>" <runtime/satman>    # firmware
+```
+
+For boards with system descriptions, i.e. Kasli-SoC, etc. :
+
+```shell
+nix develop
+cd src
+gateware/<board>.py -g ../build/gateware <description.json> # gateware
+make TARGET=<board> GWARGS="path/to/description.json" <runtime/satman> # firmware
+```
+
+``szl.elf`` can be obtained with:
+
+```shell
+nix build git+https://git.m-labs.hk/m-labs/zynq-rs#<board>-szl
+```
+
+To generate ``boot.bin`` use ``mkbootimage``, e.g.:
+
+```shell
+echo "the_ROM_image:
+    {
+        [bootloader]result/szl.elf
+        gateware/top.bit
+        firmware/armv7-none-eabihf/release/<runtime/satman>
+    }
+    EOF" >> boot.bif
+mkbootimage boot.bif boot.bin
 ```
 
 Notes:
 
 - The impure build process is also compatible with non-Nix systems.
-- When calling make, you need to specify both the variant and firmware type.
 - Firmware type must be either ``runtime`` for DRTIO-less or DRTIO master variants, or ``satman`` for DRTIO satellite.
-- If the board is connected to the local machine, use the ``local_run.sh`` script.
+- If the board is connected to the local machine by JTAG, use the ``local_run.sh`` script.
+- A known Xilinx hardware bug prevents repeatedly loading the bootloader over JTAG without a POR reset. If booting over JTAG, install a jumper on ``PS_POR_B`` and use the POR reset script [here](https://git.m-labs.hk/M-Labs/zynq-rs/src/branch/master/kasli_soc_por.py).
 
 Pre-Commit Hooks
 ----------------
