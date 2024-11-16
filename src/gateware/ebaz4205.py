@@ -5,7 +5,7 @@ import argparse
 import analyzer
 import dma
 from artiq.gateware import rtio
-from artiq.gateware.rtio.phy import dds, spi2, ttl_simple
+from artiq.gateware.rtio.phy import spi2, ttl_simple
 from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
 from config import write_csr_file, write_mem_file, write_rustc_cfg_file
 from migen import *
@@ -91,6 +91,17 @@ _spi = [
 ]
 
 
+# Connector DATA1
+def _create_ttl():
+    _ttl = []
+
+    for idx, elem in enumerate([x for x in range(5, 21) if x not in (10, 12)]):
+        _ttl.append(
+            ("ttl", idx, Pins("DATA1:DATA1-{}".format(elem)), IOStandard("LVCMOS33")),
+        )
+    return _ttl
+
+
 class EBAZ4205(SoCCore):
     def __init__(self, rtio_clk=125e6, acpki=False):
         self.acpki = acpki
@@ -105,6 +116,7 @@ class EBAZ4205(SoCCore):
         platform.add_extension(_ddr)
         platform.add_extension(_i2c)
         platform.add_extension(_spi)
+        platform.add_extension(_create_ttl())
 
         gmii = platform.request("gmii")
         platform.add_period_constraint(gmii.rx_clk, 10)
@@ -177,6 +189,13 @@ class EBAZ4205(SoCCore):
             print("USER LED at RTIO channel 0x{:06x}".format(len(self.rtio_channels)))
             user_led = self.platform.request("user_led", i)
             phy = ttl_simple.Output(user_led)
+            self.submodules += phy
+            self.rtio_channels.append(rtio.Channel.from_phy(phy))
+
+        for i in range(14):
+            print("TTL at RTIO channel 0x{:06x}".format(len(self.rtio_channels)))
+            ttl = self.platform.request("ttl", i)
+            phy = ttl_simple.InOut(ttl)
             self.submodules += phy
             self.rtio_channels.append(rtio.Channel.from_phy(phy))
 

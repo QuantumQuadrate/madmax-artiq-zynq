@@ -53,13 +53,21 @@ device_db = {
     },
 }
 
+# TTLs starting at RTIO channel 2, ending at RTIO channel 15
+for i in range(2, 16):
+    device_db["ttl" + str(i)] = {
+        "type": "local",
+        "module": "artiq.coredevice.ttl",
+        "class": "TTLInOut",
+        "arguments": {"channel": i},
+    }
 
 device_db.update(
     spi0={
         "type": "local",
         "module": "artiq.coredevice.spi2",
         "class": "SPIMaster",
-        "arguments": {"channel": 2},
+        "arguments": {"channel": 16},
     },
     dds0={
         "type": "local",
