@@ -12,9 +12,9 @@ use libboard_artiq::si549;
 use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
-#[cfg(not(feature = "target_ebaz4205"))]
-use log::info;
-use log::warn;
+use log::{info, warn};
+#[cfg(feature = "target_ebaz4205")]
+use {libboard_zynq::slcr, libregister::RegisterRW};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[allow(non_camel_case_types)]
@@ -410,6 +410,38 @@ fn get_si549_setting(clk: RtioClock) -> si549::FrequencySetting {
     }
 }
 
+#[cfg(feature = "target_ebaz4205")]
+fn set_fclk0_freq(clk: RtioClock, cfg: &Config) {
+    let io_pll_freq: u32 = 1_000_000_000; // Hardcoded in zynq-rs
+    let mut target_freq = 0;
+    let mut divisor0 = 1u8;
+
+    match clk {
+        RtioClock::Int_100 => {
+            target_freq = 100_000_000;
+            divisor0 = 10;
+        }
+        RtioClock::Int_125 => {
+            target_freq = 125_000_000;
+            divisor0 = 8;
+        }
+        _ => {
+            warn!("Unsupported RTIO Clock: '{:?}'", clk);
+            return;
+        }
+    }
+
+    slcr::RegisterBlock::unlocked(|slcr| {
+        slcr.fpga0_clk_ctrl.modify(|_, w| w.divisor0(divisor0));
+    });
+
+    info!(
+        "Set FCLK0 to {:.2} MHz (target: {} MHz).",
+        io_pll_freq as f64 / divisor0 as f64,
+        target_freq / 1_000_000
+    );
+}
+
 pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     let clk = get_rtio_clock_cfg(cfg);
     #[cfg(has_si5324)]
@@ -435,6 +467,16 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
 
     #[cfg(not(any(has_drtio, feature = "target_ebaz4205")))]
     init_rtio(timer);
+
+    #[cfg(feature = "target_ebaz4205")]
+    {
+        match clk {
+            RtioClock::Int_100 | RtioClock::Int_125 => {
+                set_fclk0_freq(clk, cfg);
+            }
+            _ => {} // Not set for external clocks
+        }
+    }
 
     #[cfg(all(has_si549, has_wrpll))]
     {
