@@ -881,10 +881,10 @@ mod local_coremgmt {
 
 #[cfg(has_drtio)]
 macro_rules! process {
-    ($stream: ident, $drtio_tuple:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
+    ($stream: ident, $drtio_context:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
         if $destination == 0 {
             local_coremgmt::$func($stream, $($param, )*).await
-        } else if let Some(DrtioTuple(ref aux_mutex, ref routing_table, timer)) = $drtio_tuple {
+        } else if let Some(DrtioContext(ref aux_mutex, ref routing_table, timer)) = $drtio_context {
             let routing_table = routing_table.borrow();
             let linkno = routing_table.0[$destination as usize][0] - 1 as u8;
             remote_coremgmt::$func($stream, &aux_mutex, &routing_table, timer, linkno, $destination, $($param, )*).await
@@ -898,20 +898,20 @@ macro_rules! process {
 
 #[cfg(not(has_drtio))]
 macro_rules! process {
-    ($stream: ident, $drtio_tuple:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
+    ($stream: ident, $drtio_context:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
         local_coremgmt::$func($stream, $($param, )*).await
     }}
 }
 
 #[derive(Clone)]
-pub struct DrtioTuple(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>, pub GlobalTimer);
+pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>, pub GlobalTimer);
 
 async fn handle_connection(
     stream: &mut TcpStream,
     pull_id: Rc<RefCell<u32>>,
     cfg: Rc<Config>,
     restart_idle: Rc<Semaphore>,
-    _drtio_tuple: Option<DrtioTuple>,
+    _drtio_context: Option<DrtioContext>,
 ) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
@@ -927,20 +927,20 @@ async fn handle_connection(
         }
         let msg: Request = FromPrimitive::from_i8(msg?).ok_or(Error::UnrecognizedPacket)?;
         match msg {
-            Request::GetLog => process!(stream, _drtio_tuple, _destination, get_log),
-            Request::ClearLog => process!(stream, _drtio_tuple, _destination, clear_log),
-            Request::PullLog => process!(stream, _drtio_tuple, _destination, pull_log, &pull_id),
+            Request::GetLog => process!(stream, _drtio_context, _destination, get_log),
+            Request::ClearLog => process!(stream, _drtio_context, _destination, clear_log),
+            Request::PullLog => process!(stream, _drtio_context, _destination, pull_log, &pull_id),
             Request::SetLogFilter => {
                 let lvl = read_log_level_filter(stream).await?;
-                process!(stream, _drtio_tuple, _destination, set_log_filter, lvl)
+                process!(stream, _drtio_context, _destination, set_log_filter, lvl)
             }
             Request::SetUartLogFilter => {
                 let lvl = read_log_level_filter(stream).await?;
-                process!(stream, _drtio_tuple, _destination, set_uart_log_filter, lvl)
+                process!(stream, _drtio_context, _destination, set_uart_log_filter, lvl)
             }
             Request::ConfigRead => {
                 let key = read_key(stream).await?;
-                process!(stream, _drtio_tuple, _destination, config_read, &cfg, &key)
+                process!(stream, _drtio_context, _destination, config_read, &cfg, &key)
             }
             Request::ConfigWrite => {
                 let key = read_key(stream).await?;
@@ -953,7 +953,7 @@ async fn handle_connection(
                 read_chunk(stream, &mut buffer).await?;
                 process!(
                     stream,
-                    _drtio_tuple,
+                    _drtio_context,
                     _destination,
                     config_write,
                     &cfg,
@@ -966,7 +966,7 @@ async fn handle_connection(
                 let key = read_key(stream).await?;
                 process!(
                     stream,
-                    _drtio_tuple,
+                    _drtio_context,
                     _destination,
                     config_remove,
                     &cfg,
@@ -975,13 +975,13 @@ async fn handle_connection(
                 )
             }
             Request::Reboot => {
-                process!(stream, _drtio_tuple, _destination, reboot)
+                process!(stream, _drtio_context, _destination, reboot)
             }
             Request::ConfigErase => {
-                process!(stream, _drtio_tuple, _destination, config_erase)
+                process!(stream, _drtio_context, _destination, config_erase)
             }
             Request::DebugAllocator => {
-                process!(stream, _drtio_tuple, _destination, debug_allocator)
+                process!(stream, _drtio_context, _destination, debug_allocator)
             }
             Request::Flash => {
                 let len = read_i32(stream).await?;
@@ -994,13 +994,13 @@ async fn handle_connection(
                     buffer.set_len(len as usize);
                 }
                 read_chunk(stream, &mut buffer).await?;
-                process!(stream, _drtio_tuple, _destination, image_write, &cfg, buffer)
+                process!(stream, _drtio_context, _destination, image_write, &cfg, buffer)
             }
         }?;
     }
 }
 
-pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>, drtio_tuple: Option<DrtioTuple>) {
+pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>, drtio_context: Option<DrtioContext>) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
         loop {
@@ -1008,10 +1008,10 @@ pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>, drtio_tuple: Option<D
             let pull_id = pull_id.clone();
             let cfg = cfg.clone();
             let restart_idle = restart_idle.clone();
-            let drtio_tuple = drtio_tuple.clone();
+            let drtio_context = drtio_context.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id, cfg, restart_idle, drtio_tuple)
+                let _ = handle_connection(&mut stream, pull_id, cfg, restart_idle, drtio_context)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;
