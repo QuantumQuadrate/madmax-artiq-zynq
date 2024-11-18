@@ -563,7 +563,6 @@ mod remote_coremgmt {
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
-        info!("initited reboot request to satellite destination {}", destination);
         let reply = drtio::aux_transact(
             aux_mutex,
             linkno,
