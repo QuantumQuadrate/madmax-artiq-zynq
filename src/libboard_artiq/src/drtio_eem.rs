@@ -185,6 +185,24 @@ unsafe fn align_comma(timer: &mut GlobalTimer) {
     }
 }
 
+pub unsafe fn align_wordslip(timer: &mut GlobalTimer, trx_no: u8) -> bool {
+    pl::csr::eem_transceiver::transceiver_sel_write(trx_no);
+
+    for slip in 0..=1 {
+        pl::csr::eem_transceiver::wordslip_write(slip as u8);
+        timer.delay_us(1);
+        pl::csr::eem_transceiver::comma_align_reset_write(1);
+        timer.delay_us(100);
+
+        if pl::csr::eem_transceiver::comma_read() == 1 {
+            debug!("comma alignment completed with {} wordslip", slip);
+            return true;
+        }
+    }
+
+    false
+}
+
 pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     for trx_no in 0..pl::csr::CONFIG_EEM_DRTIO_COUNT {
         unsafe {
@@ -222,7 +240,6 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
 
         unsafe {
             align_comma(timer);
-            pl::csr::eem_transceiver::rx_ready_write(1);
         }
     }
 }

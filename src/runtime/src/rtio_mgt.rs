@@ -13,9 +13,13 @@ pub mod drtio {
     use core::fmt;
 
     use embedded_hal::blocking::delay::DelayMs;
+    #[cfg(has_drtio_eem)]
+    use embedded_hal::blocking::delay::DelayUs;
     use ksupport::{resolve_channel_name, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR,
                    SEEN_ASYNC_ERRORS};
     use libasync::{delay, task};
+    #[cfg(has_drtio_eem)]
+    use libboard_artiq::drtio_eem;
     use libboard_artiq::{drtioaux::Error as DrtioError,
                          drtioaux_async,
                          drtioaux_async::Packet,
@@ -25,6 +29,10 @@ pub mod drtio {
 
     use super::*;
     use crate::{analyzer::remote_analyzer::RemoteBuffer, rtio_dma::remote_dma, subkernel};
+
+    #[cfg(has_drtio_eem)]
+    const DRTIO_EEM_LINKNOS: core::ops::Range<usize> =
+        (csr::DRTIO.len() - csr::CONFIG_EEM_DRTIO_COUNT as usize)..csr::DRTIO.len();
 
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub enum Error {
@@ -76,8 +84,18 @@ pub mod drtio {
         });
     }
 
-    async fn link_rx_up(linkno: u8) -> bool {
+    async fn link_rx_up(linkno: u8, _timer: &mut GlobalTimer) -> bool {
         let linkno = linkno as usize;
+        #[cfg(has_drtio_eem)]
+        if DRTIO_EEM_LINKNOS.contains(&linkno) {
+            let eem_trx_no = linkno - DRTIO_EEM_LINKNOS.start;
+            unsafe {
+                csr::eem_transceiver::transceiver_sel_write(eem_trx_no as u8);
+                csr::eem_transceiver::comma_align_reset_write(1);
+            }
+            _timer.delay_us(100);
+            return unsafe { csr::eem_transceiver::comma_read() == 1 };
+        }
         unsafe { (csr::DRTIO[linkno].rx_up_read)() == 1 }
     }
 
@@ -152,8 +170,8 @@ pub mod drtio {
         }
     }
 
-    async fn recv_aux_timeout(linkno: u8, timeout: u64, timer: GlobalTimer) -> Result<Packet, Error> {
-        if !link_rx_up(linkno).await {
+    async fn recv_aux_timeout(linkno: u8, timeout: u64, mut timer: GlobalTimer) -> Result<Packet, Error> {
+        if !link_rx_up(linkno, &mut timer).await {
             return Err(Error::LinkDown);
         }
         match drtioaux_async::recv_timeout(linkno, Some(timeout), timer).await {
@@ -168,9 +186,9 @@ pub mod drtio {
         linkno: u8,
         routing_table: &RoutingTable,
         request: &Packet,
-        timer: GlobalTimer,
+        mut timer: GlobalTimer,
     ) -> Result<Packet, Error> {
-        if !link_rx_up(linkno).await {
+        if !link_rx_up(linkno, &mut timer).await {
             return Err(Error::LinkDown);
         }
         let _lock = aux_mutex.async_lock().await;
@@ -194,11 +212,11 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         linkno: u8,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
+        mut timer: GlobalTimer,
     ) -> u32 {
         let mut count = 0;
         loop {
-            if !link_rx_up(linkno).await {
+            if !link_rx_up(linkno, &mut timer).await {
                 return 0;
             }
             count += 1;
@@ -462,7 +480,7 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        timer: GlobalTimer,
+        mut timer: GlobalTimer,
     ) {
         let mut up_links = [false; csr::DRTIO.len()];
         loop {
@@ -470,16 +488,35 @@ pub mod drtio {
                 let linkno = linkno as u8;
                 if up_links[linkno as usize] {
                     /* link was previously up */
-                    if link_rx_up(linkno).await {
+                    if link_rx_up(linkno, &mut timer).await {
                         process_unsolicited_aux(aux_mutex, linkno, routing_table).await;
                         process_local_errors(linkno).await;
                     } else {
                         info!("[LINK#{}] link is down", linkno);
                         up_links[linkno as usize] = false;
+
+                        #[cfg(has_drtio_eem)]
+                        if DRTIO_EEM_LINKNOS.contains(&(linkno as usize)) {
+                            unsafe {
+                                csr::eem_transceiver::rx_ready_write(0);
+                            }
+                            while !matches!(drtioaux_async::recv(linkno).await, Ok(None)) {}
+                        }
                     }
                 } else {
                     /* link was previously down */
-                    if link_rx_up(linkno).await {
+                    #[cfg(has_drtio_eem)]
+                    if DRTIO_EEM_LINKNOS.contains(&(linkno as usize)) {
+                        let eem_trx_no = linkno - DRTIO_EEM_LINKNOS.start as u8;
+                        if !unsafe { drtio_eem::align_wordslip(&mut timer, eem_trx_no) } {
+                            continue;
+                        }
+                        unsafe {
+                            csr::eem_transceiver::rx_ready_write(1);
+                        }
+                    }
+
+                    if link_rx_up(linkno, &mut timer).await {
                         info!("[LINK#{}] link RX became up, pinging", linkno);
                         let ping_count = ping_remote(aux_mutex, linkno, routing_table, timer).await;
                         if ping_count > 0 {
@@ -523,7 +560,7 @@ pub mod drtio {
 
         for linkno in 0..csr::DRTIO.len() {
             let linkno = linkno as u8;
-            if task::block_on(link_rx_up(linkno)) {
+            if task::block_on(link_rx_up(linkno, &mut timer)) {
                 let reply = task::block_on(aux_transact(
                     &aux_mutex,
                     linkno,
