@@ -85,10 +85,7 @@ unsafe fn get_ttype_entry(
         encoding | DW_EH_PE_pcrel,
         ttype_base,
     )
-    .map(|v| match v {
-        ttype_base => None,
-        ttype_entry => Some(ttype_entry as *const u8),
-    })
+    .map(|v| (v != ttype_base).then(|| v as *const u8))
 }
 
 pub unsafe fn find_eh_action(
