@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1732062306,
-        "narHash": "sha256-UjMOutOPgt84HKJTeNuPqLxSv3sXedQQxFnTNU72BFE=",
+        "lastModified": 1732066716,
+        "narHash": "sha256-krjvt9+RccnAxSEZcFhRpjA2S3CoqE4MSa1JUg421b4=",
         "ref": "refs/heads/master",
-        "rev": "8b335c4459328ff297fbeae9267c766fffe35fe2",
-        "revCount": 9100,
+        "rev": "270a417a28b516d36983779a1adb6d33a3c55a4a",
+        "revCount": 9102,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
