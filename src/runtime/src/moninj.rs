@@ -79,7 +79,7 @@ mod remote_moninj {
     }
 
     pub async fn inject(aux_mutex: &Rc<Mutex<bool>>, timer: GlobalTimer, linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
-        let _lock = aux_mutex.lock();
+        let _lock = aux_mutex.async_lock().await;
         drtioaux_async::send(linkno, &drtioaux_async::Packet::InjectionRequest {
             destination: destination,
             channel: channel as _,
