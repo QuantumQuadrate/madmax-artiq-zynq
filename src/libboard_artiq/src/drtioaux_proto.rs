@@ -1268,7 +1268,8 @@ impl Packet {
             | Packet::SubkernelMessageAck { .. }
             | Packet::DmaPlaybackStatus { .. }
             | Packet::SubkernelFinished { .. }
-            | Packet::CoreMgmtDropLinkAck { .. } => false,
+            | Packet::CoreMgmtDropLinkAck { .. }
+            | Packet::InjectionRequest { .. } => false,
             _ => true,
         }
     }
