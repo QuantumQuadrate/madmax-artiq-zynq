@@ -9,8 +9,8 @@ use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use nb;
 use void::Void;
 
-pub use crate::drtioaux_proto::Packet;
-use crate::{drtioaux::{has_rx_error, Error},
+pub use crate::drtioaux_proto::{Packet, MAX_PACKET};
+use crate::{drtioaux::{copy_work_buffer, has_rx_error, Error},
             mem::mem::DRTIOAUX_MEM,
             pl::csr::DRTIOAUX};
 
@@ -102,7 +102,9 @@ where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     unsafe {
         let _ = block_async!(tx_ready(linkno)).await;
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
-        let len = f(slice::from_raw_parts_mut(ptr as *mut u8, 0x400 as usize))?;
+        let mut buf: [u8; MAX_PACKET] = [0; MAX_PACKET];
+        let len = f(&mut buf)?;
+        copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);
         Ok(())

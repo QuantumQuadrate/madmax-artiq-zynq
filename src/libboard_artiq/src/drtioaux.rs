@@ -6,7 +6,7 @@ use io::{proto::{ProtoRead, ProtoWrite},
          Cursor};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 
-pub use crate::drtioaux_proto::Packet;
+pub use crate::drtioaux_proto::{Packet, MAX_PACKET};
 use crate::{drtioaux_proto::Error as ProtocolError, mem::mem::DRTIOAUX_MEM, pl::csr::DRTIOAUX};
 
 #[derive(Debug)]
@@ -32,6 +32,15 @@ impl From<ProtocolError> for Error {
 impl From<IoError> for Error {
     fn from(value: IoError) -> Error {
         Error::Protocol(ProtocolError::Io(value))
+    }
+}
+
+pub fn copy_work_buffer(src: *mut u32, dst: *mut u32, len: isize) {
+    // fix for artiq-zynq#344
+    unsafe {
+        for i in 0..(len / 4) {
+            *dst.offset(i) = *src.offset(i);
+        }
     }
 }
 
@@ -115,7 +124,9 @@ where F: FnOnce(&mut [u8]) -> Result<usize, Error> {
     unsafe {
         while (DRTIOAUX[linkno].aux_tx_read)() != 0 {}
         let ptr = DRTIOAUX_MEM[linkno].base as *mut u32;
-        let len = f(slice::from_raw_parts_mut(ptr as *mut u8, 0x400 as usize))?;
+        let mut buf: [u8; MAX_PACKET] = [0; MAX_PACKET];
+        let len = f(&mut buf)?;
+        copy_work_buffer(buf.as_mut_ptr() as *mut u32, ptr, len as isize);
         (DRTIOAUX[linkno].aux_tx_length_write)(len as u16);
         (DRTIOAUX[linkno].aux_tx_write)(1);
         Ok(())

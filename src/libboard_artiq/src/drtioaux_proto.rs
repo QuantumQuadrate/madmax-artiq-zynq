@@ -1,7 +1,7 @@
 use core_io::{Error as IoError, Read, Write};
 use io::proto::{ProtoRead, ProtoWrite};
 
-const MAX_PACKET: usize = 1024;
+pub const MAX_PACKET: usize = 1024;
 
 // maximum size of arbitrary payloads
 // used by satellite -> master analyzer, subkernel exceptions
