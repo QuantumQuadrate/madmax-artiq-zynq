@@ -24,7 +24,7 @@ from artiq.gateware.wrpll import wrpll
 
 import dma
 import analyzer
-import acpki
+import acpki as acpki_lib
 import drtio_aux_controller
 import zynq_clocking
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
@@ -184,10 +184,10 @@ class GenericStandalone(SoCCore):
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
-            self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
-                                                         bus=self.ps7.s_axi_acp,
-                                                         user=self.ps7.s_axi_acp_user,
-                                                         evento=self.ps7.event.o)
+            self.submodules.rtio = acpki_lib.KernelInitiator(self.rtio_tsc,
+                                                             bus=self.ps7.s_axi_acp,
+                                                             user=self.ps7.s_axi_acp_user,
+                                                             evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
             self.config["KI_IMPL"] = "csr"
@@ -349,10 +349,10 @@ class GenericMaster(SoCCore):
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
-            self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
-                                                         bus=self.ps7.s_axi_acp,
-                                                         user=self.ps7.s_axi_acp_user,
-                                                         evento=self.ps7.event.o)
+            self.submodules.rtio = acpki_lib.KernelInitiator(self.rtio_tsc,
+                                                             bus=self.ps7.s_axi_acp,
+                                                             user=self.ps7.s_axi_acp_user,
+                                                             evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
             self.config["KI_IMPL"] = "csr"
@@ -544,10 +544,10 @@ class GenericSatellite(SoCCore):
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
-            self.submodules.rtio = acpki.KernelInitiator(self.rtio_tsc,
-                                                         bus=self.ps7.s_axi_acp,
-                                                         user=self.ps7.s_axi_acp_user,
-                                                         evento=self.ps7.event.o)
+            self.submodules.rtio = acpki_lib.KernelInitiator(self.rtio_tsc,
+                                                             bus=self.ps7.s_axi_acp,
+                                                             user=self.ps7.s_axi_acp_user,
+                                                             evento=self.ps7.event.o)
             self.csr_devices.append("rtio")
         else:
             self.config["KI_IMPL"] = "csr"
