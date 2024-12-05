@@ -25,6 +25,7 @@ import dma
 import analyzer
 import acpki
 import drtio_aux_controller
+from config import generate_ident
 
 
 class RTIOCRG(Module, AutoCSR):
@@ -147,7 +148,7 @@ class ZC706(SoCCore):
         platform = zc706.Platform()
         prepare_zc706_platform(platform)
 
-        ident = self.__class__.__name__
+        ident = generate_ident(self.__class__.__name__)
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
@@ -200,7 +201,7 @@ class _MasterBase(SoCCore):
 
         platform = zc706.Platform()
         prepare_zc706_platform(platform)
-        ident = self.__class__.__name__
+        ident = generate_ident(self.__class__.__name__)
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
@@ -335,7 +336,7 @@ class _SatelliteBase(SoCCore):
 
         platform = zc706.Platform()
         prepare_zc706_platform(platform)
-        ident = self.__class__.__name__
+        ident = generate_ident(self.__class__.__name__)
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)

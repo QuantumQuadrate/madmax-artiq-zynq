@@ -27,6 +27,7 @@ import dma
 import analyzer
 import acpki as acpki_lib
 import drtio_aux_controller
+from config import generate_ident
 
 class RTIOCRG(Module, AutoCSR):
     def __init__(self, platform):
@@ -120,7 +121,7 @@ class GenericStandalone(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = description["variant"]
+        ident = generate_ident(description["variant"])
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
@@ -211,7 +212,7 @@ class GenericMaster(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = description["variant"]
+        ident = generate_ident(description["variant"])
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
@@ -346,7 +347,7 @@ class GenericSatellite(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = description["variant"]
+        ident = generate_ident(description["variant"])
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)
