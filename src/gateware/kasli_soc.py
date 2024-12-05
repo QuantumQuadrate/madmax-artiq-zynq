@@ -27,7 +27,7 @@ import analyzer
 import acpki
 import drtio_aux_controller
 import zynq_clocking
-from config import write_csr_file, write_mem_file, write_rustc_cfg_file
+from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 
 eem_iostandard_dict = {
      0: "LVDS_25",
@@ -115,7 +115,7 @@ class GenericStandalone(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = description["variant"]
+        ident = generate_ident(description["variant"])
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
@@ -229,7 +229,7 @@ class GenericMaster(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = description["variant"]
+        ident = generate_ident(description["variant"])
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
@@ -438,7 +438,7 @@ class GenericSatellite(SoCCore):
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = description["variant"]
+        ident = generate_ident(description["variant"])
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)

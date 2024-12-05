@@ -7,7 +7,7 @@ import dma
 from artiq.gateware import rtio
 from artiq.gateware.rtio.phy import spi2, ttl_simple
 from artiq.gateware.rtio.xilinx_clocking import fix_serdes_timing_path
-from config import write_csr_file, write_mem_file, write_rustc_cfg_file
+from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 from migen import *
 from migen.build.generic_platform import IOStandard, Misc, Pins, Subsignal
 from migen.build.platforms import ebaz4205
@@ -125,7 +125,7 @@ class EBAZ4205(SoCCore):
             "set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets gmii_tx_clk_IBUF]"
         )
 
-        ident = self.__class__.__name__
+        ident = generate_ident(self.__class__.__name__)
         if self.acpki:
             ident = "acpki_" + ident
         SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident)

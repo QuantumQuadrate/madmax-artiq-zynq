@@ -11,6 +11,7 @@
     zynqpkgs = zynq-rs.packages.x86_64-linux;
     artiqpkgs = artiq.packages.x86_64-linux;
     llvmPackages_11 = zynq-rs.llvmPackages_11;
+    zynqRev = self.sourceInfo.rev or "unknown";
 
     rust = zynq-rs.rust;
     rustPlatform = zynq-rs.rustPlatform;
@@ -137,6 +138,7 @@
           llvmPackages_11.clang-unwrapped
         ];
         buildPhase = ''
+          export ZYNQ_REV=${zynqRev}
           export XARGO_RUST_SRC="${rust}/lib/rustlib/src/rust/library"
           export CLANG_EXTRA_INCLUDE_DIR="${llvmPackages_11.clang-unwrapped.lib}/lib/clang/11.1.0/include"
           export CARGO_HOME=$(mktemp -d cargo-home.XXX)
@@ -164,6 +166,7 @@
           ];
         }
         ''
+          export ZYNQ_REV=${zynqRev}
           python ${./src/gateware}/${target}.py -g build ${if json == null then "-V ${variant}" else json}
           mkdir -p $out $out/nix-support
           cp build/top.bit $out
@@ -386,6 +389,7 @@
         binutils-arm
         pre-commit
       ];
+      ZYNQ_REV="${zynqRev}";
       XARGO_RUST_SRC = "${rust}/lib/rustlib/src/rust/library";
       CLANG_EXTRA_INCLUDE_DIR = "${llvmPackages_11.clang-unwrapped.lib}/lib/clang/11.1.0/include";
       ZYNQ_RS = "${zynq-rs}";
