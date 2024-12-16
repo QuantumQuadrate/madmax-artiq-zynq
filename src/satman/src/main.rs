@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(alloc_error_handler, try_trait, never_type, panic_info_message)]
+#![feature(alloc_error_handler, never_type, panic_info_message)]
 
 #[macro_use]
 extern crate log;

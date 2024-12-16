@@ -2,7 +2,7 @@ use alloc::{collections::BTreeMap,
             format,
             string::{String, ToString},
             vec::Vec};
-use core::{option::NoneError, slice, str};
+use core::{slice, str};
 
 use core_io::{Error as IoError, Write};
 use cslice::AsCSlice;
@@ -63,12 +63,6 @@ pub enum Error {
     DrtioError,
     KernelException(Sliceable),
     DmaError(DmaError),
-}
-
-impl From<NoneError> for Error {
-    fn from(_: NoneError) -> Error {
-        Error::KernelNotFound
-    }
 }
 
 impl From<IoError> for Error {
@@ -316,7 +310,7 @@ impl<'a> Manager<'_> {
                             complete: false,
                         },
                     );
-                    self.kernels.get_mut(&id)?
+                    self.kernels.get_mut(&id).ok_or_else(|| Error::KernelNotFound)?
                 } else {
                     kernel
                 }
@@ -329,7 +323,7 @@ impl<'a> Manager<'_> {
                         complete: false,
                     },
                 );
-                self.kernels.get_mut(&id)?
+                self.kernels.get_mut(&id).ok_or_else(|| Error::KernelNotFound)?
             }
         };
         kernel.library.extend(&data[0..data_len]);
@@ -396,7 +390,7 @@ impl<'a> Manager<'_> {
         if self.session.id == id && self.session.kernel_state == KernelState::Loaded {
             return Ok(());
         }
-        if !self.kernels.get(&id)?.complete {
+        if !self.kernels.get(&id).ok_or_else(|| Error::KernelNotFound)?.complete {
             return Err(Error::KernelNotFound);
         }
         self.session = Session::new(id);
@@ -404,7 +398,7 @@ impl<'a> Manager<'_> {
 
         self.control
             .tx
-            .send(kernel::Message::LoadRequest(self.kernels.get(&id)?.library.clone()));
+            .send(kernel::Message::LoadRequest(self.kernels.get(&id).ok_or_else(|| Error::KernelNotFound)?.library.clone()));
         let reply = self.control.rx.recv();
         match reply {
             kernel::Message::LoadCompleted => Ok(()),
