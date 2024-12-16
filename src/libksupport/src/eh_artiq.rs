@@ -96,30 +96,30 @@ struct ExceptionBuffer {
 }
 
 static mut EXCEPTION_BUFFER: ExceptionBuffer = ExceptionBuffer {
-    uw_exceptions: [uw::_Unwind_Exception {
+    uw_exceptions: [const { uw::_Unwind_Exception {
         exception_class: EXCEPTION_CLASS,
         exception_cleanup: cleanup,
         private: [0; uw::unwinder_private_data_size],
-    }; MAX_INFLIGHT_EXCEPTIONS],
+    }}; MAX_INFLIGHT_EXCEPTIONS],
     exceptions: [None; MAX_INFLIGHT_EXCEPTIONS + 1],
     exception_stack: [-1; MAX_INFLIGHT_EXCEPTIONS + 1],
     backtrace: [(0, 0); MAX_BACKTRACE_SIZE],
     backtrace_size: 0,
-    stack_pointers: [StackPointerBacktrace {
+    stack_pointers: [const { StackPointerBacktrace {
         stack_pointer: 0,
         initial_backtrace_size: 0,
         current_backtrace_size: 0,
-    }; MAX_INFLIGHT_EXCEPTIONS + 1],
+    }}; MAX_INFLIGHT_EXCEPTIONS + 1],
     exception_count: 0,
 };
 
 pub unsafe extern "C" fn reset_exception_buffer() {
     trace!("reset exception buffer");
-    EXCEPTION_BUFFER.uw_exceptions = [uw::_Unwind_Exception {
+    EXCEPTION_BUFFER.uw_exceptions = [const { uw::_Unwind_Exception {
         exception_class: EXCEPTION_CLASS,
         exception_cleanup: cleanup,
         private: [0; uw::unwinder_private_data_size],
-    }; MAX_INFLIGHT_EXCEPTIONS];
+    }}; MAX_INFLIGHT_EXCEPTIONS];
     EXCEPTION_BUFFER.exceptions = [None; MAX_INFLIGHT_EXCEPTIONS + 1];
     EXCEPTION_BUFFER.exception_stack = [-1; MAX_INFLIGHT_EXCEPTIONS + 1];
     EXCEPTION_BUFFER.backtrace_size = 0;
