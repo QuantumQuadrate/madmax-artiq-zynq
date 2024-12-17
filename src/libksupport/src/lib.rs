@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(incomplete_features)]
 #![feature(c_variadic)]
 #![feature(const_btree_new)]
 #![feature(inline_const)]
