@@ -12,7 +12,7 @@ build_zynq = { path = "../libbuild_zynq" }
 cslice = "0.3"
 log = "0.4"
 nb = "0.1"
-core_io = { version = "0.1", features = ["collections"] }
+core_io = { git = "https://git.m-labs.hk/M-Labs/rs-core_io.git", rev = "e9d3edf027", features = ["collections"] }
 byteorder = { version = "1.3", default-features = false }
 void = { version = "1", default-features = false }
 log_buffer = { version = "1.2" }
@@ -35,6 +35,6 @@ libboard_artiq = { path = "../libboard_artiq" }
 
 [dependencies.nalgebra]
 git = "https://git.m-labs.hk/M-Labs/nalgebra.git"
-rev = "dd00f9b"
+rev = "ad42410ab0"
 default-features = false
 features = ["libm", "alloc"]

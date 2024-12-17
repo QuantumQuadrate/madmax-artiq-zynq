@@ -20,7 +20,7 @@ build_zynq = { path = "../libbuild_zynq" }
 log = "0.4"
 log_buffer = { version = "1.2" }
 crc = { version = "1.7", default-features = false }
-core_io = { version = "0.1", features = ["collections"] }
+core_io = { git = "https://git.m-labs.hk/M-Labs/rs-core_io.git", rev = "e9d3edf027", features = ["collections"] }
 embedded-hal = "0.2"
 nb = "1.0"
 void = { version = "1", default-features = false }
