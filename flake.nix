@@ -125,7 +125,9 @@
           lockFile = src/Cargo.lock;
           outputHashes = {
               "tar-no-std-0.1.8" = "sha256-xm17108v4smXOqxdLvHl9CxTCJslmeogjm4Y87IXFuM=";
-              "nalgebra-0.32.6" = "sha256-L/YudkVOtfGYoNQKBD7LMk/sMYgRDzPDdpGL5rO7G2I=";
+              "nalgebra-0.32.6" = "sha256-ZbQQZbM3A5cJ4QbujtUxkrI0/qGlI4UzfahtyQnvMZA=";
+              "core_io-0.1.0" = "sha256-0HINFWRiJx8pjMgUOL/CS336ih7SENSRh3Kah9LPRrw=";
+              "fatfs-0.3.6" = "sha256-Nz9hCq/1YgSXF8ltJ5ZawV0Hc8WV44KNK0tJdVnNb4U=";
             };
         };
 
