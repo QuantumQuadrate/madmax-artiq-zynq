@@ -10,15 +10,11 @@ use io::Cursor;
 #[cfg(has_drtio)]
 use ksupport::rpc;
 use ksupport::{kernel, resolve_channel_name};
-#[cfg(has_drtio)]
-use libasync::delay;
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
-#[cfg(has_drtio)]
-use libboard_zynq::time::Milliseconds;
 use libboard_zynq::{self as zynq,
                     smoltcp::{self,
                               iface::{EthernetInterfaceBuilder, NeighborCache},
