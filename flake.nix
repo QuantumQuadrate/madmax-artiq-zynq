@@ -3,7 +3,7 @@
 
   inputs.artiq.url = git+https://github.com/m-labs/artiq.git?ref=release-7;
   inputs.mozilla-overlay = { url = github:mozilla/nixpkgs-mozilla; flake = false; };
-  inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs;
+  inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs?ref=release-7;
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
   outputs = { self, mozilla-overlay, zynq-rs, artiq }:
