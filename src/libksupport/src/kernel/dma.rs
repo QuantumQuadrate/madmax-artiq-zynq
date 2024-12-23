@@ -82,7 +82,7 @@ pub extern "C" fn dma_record_stop(duration: i64, enable_ddma: bool) {
 #[inline(always)]
 unsafe fn dma_record_output_prepare(timestamp: i64, target: i32, words: usize) {
     // See gateware/rtio/dma.py.
-    const HEADER_LENGTH: usize = /*length*/1 + /*channel*/3 + /*timestamp*/8 + /*address*/1;
+    const HEADER_LENGTH: usize = /*length*/ 1 + /*channel*/3 + /*timestamp*/8 + /*address*/1;
     let length = HEADER_LENGTH + /*data*/words * 4;
 
     let buffer = &mut RECORDER.as_mut().unwrap().buffer;

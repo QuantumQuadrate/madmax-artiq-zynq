@@ -1,8 +1,8 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
+use core::arch::asm;
 
 use core_io::{Error as IoError, Read, Write};
-use core::arch::asm;
 
 #[derive(Debug, Clone)]
 pub struct Cursor<T> {
@@ -48,7 +48,9 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
         let len = buf.len().min(data.len());
         // ``copy_from_slice`` generates AXI bursts, use a regular loop instead
         for i in 0..len {
-            unsafe { asm!("", options(preserves_flags, nostack, readonly)); }            
+            unsafe {
+                asm!("", options(preserves_flags, nostack, readonly));
+            }
             buf[i] = data[i];
         }
         self.pos += len;
@@ -61,7 +63,9 @@ impl Write for Cursor<&mut [u8]> {
         let data = &mut self.inner[self.pos..];
         let len = buf.len().min(data.len());
         for i in 0..len {
-            unsafe { asm!("", options(preserves_flags, nostack, readonly)); }            
+            unsafe {
+                asm!("", options(preserves_flags, nostack, readonly));
+            }
             data[i] = buf[i];
         }
         self.pos += len;

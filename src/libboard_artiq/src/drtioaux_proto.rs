@@ -5,7 +5,8 @@ pub const MAX_PACKET: usize = 1024;
 
 // maximum size of arbitrary payloads
 // used by satellite -> master analyzer, subkernel exceptions
-pub const SAT_PAYLOAD_MAX_SIZE: usize  = /*max size*/MAX_PACKET - /*CRC*/4 - /*packet ID*/1 - /*last*/1 - /*length*/2;
+pub const SAT_PAYLOAD_MAX_SIZE: usize = /*max size*/
+    MAX_PACKET - /*CRC*/4 - /*packet ID*/1 - /*last*/1 - /*length*/2;
 // used by DDMA, subkernel program data (need to provide extra ID and destination)
 pub const MASTER_PAYLOAD_MAX_SIZE: usize = SAT_PAYLOAD_MAX_SIZE - /*source*/1 - /*destination*/1 - /*ID*/4;
 

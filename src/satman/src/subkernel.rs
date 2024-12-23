@@ -396,9 +396,13 @@ impl<'a> Manager<'_> {
         self.session = Session::new(id);
         self.control.restart();
 
-        self.control
-            .tx
-            .send(kernel::Message::LoadRequest(self.kernels.get(&id).ok_or_else(|| Error::KernelNotFound)?.library.clone()));
+        self.control.tx.send(kernel::Message::LoadRequest(
+            self.kernels
+                .get(&id)
+                .ok_or_else(|| Error::KernelNotFound)?
+                .library
+                .clone(),
+        ));
         let reply = self.control.rx.recv();
         match reply {
             kernel::Message::LoadCompleted => Ok(()),
