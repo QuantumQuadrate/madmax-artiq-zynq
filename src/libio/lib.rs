@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(never_type)]
-#![feature(asm)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;

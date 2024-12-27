@@ -3,7 +3,6 @@
 #![feature(const_btree_new)]
 #![feature(inline_const)]
 #![feature(naked_functions)]
-#![feature(asm)]
 
 #[macro_use]
 extern crate alloc;
