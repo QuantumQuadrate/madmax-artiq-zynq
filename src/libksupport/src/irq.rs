@@ -3,6 +3,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use libboard_zynq::{gic, mpcore, println, stdio};
 use libcortex_a9::{asm, interrupt_handler, notify_spin_lock, regs::MPIDR, spin_lock_yield};
 use libregister::RegisterR;
+use core::arch::asm;
 
 extern "C" {
     static mut __stack1_start: u32;

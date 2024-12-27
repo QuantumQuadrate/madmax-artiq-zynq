@@ -1,6 +1,7 @@
 use libboard_zynq::{println, stdio};
 use libcortex_a9::{interrupt_handler, regs::MPIDR};
 use libregister::RegisterR;
+use core::arch::asm;
 
 #[cfg(has_si549)]
 use crate::si549;
