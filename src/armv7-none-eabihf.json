@@ -4,7 +4,7 @@
   "emit-debug-gdb-scripts": false,
   "env": "",
   "executables": true,
-  "features": "+v7,+vfp3,-d32,+thumb2,-neon",
+  "features": "+v7,+vfp3,-d32,+thumb2,+neon,+a9,+armv7-a",
   "is-builtin": false,
   "linker": "rust-lld",
   "linker-flavor": "ld.lld",
