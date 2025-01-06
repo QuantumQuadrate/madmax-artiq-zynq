@@ -1,4 +1,5 @@
 use core::slice;
+use core::arch::asm;
 
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
@@ -39,6 +40,7 @@ pub fn copy_work_buffer(src: *mut u32, dst: *mut u32, len: isize) {
     // fix for artiq-zynq#344
     unsafe {
         for i in 0..(len / 4) {
+            asm!("", options(preserves_flags, nostack, readonly));
             *dst.offset(i) = *src.offset(i);
         }
     }
