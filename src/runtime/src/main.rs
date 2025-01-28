@@ -4,6 +4,7 @@
 #![feature(alloc_error_handler)]
 #![feature(const_btree_len)]
 #![feature(panic_info_message)]
+#![allow(internal_features)]
 #![feature(lang_items)]
 
 #[macro_use]
