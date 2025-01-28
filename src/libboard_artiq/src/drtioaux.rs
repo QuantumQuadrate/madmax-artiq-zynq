@@ -2,7 +2,6 @@ use core::{arch::asm, slice};
 
 use byteorder::NativeEndian;
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
-use crc;
 use io::{proto::{ProtoRead, ProtoWrite},
          Cursor};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};

@@ -4,7 +4,7 @@ use alloc::borrow::ToOwned;
 use core::{cell::UnsafeCell, mem, ptr};
 
 use cslice::CSlice;
-use dyld::{self, elf::EXIDX_Entry, Library};
+use dyld::{elf::EXIDX_Entry, Library};
 use libboard_zynq::{gic, mpcore};
 use libcortex_a9::{asm::{dsb, isb},
                    cache::{bpiall, dcci_slice, iciallu},

@@ -12,7 +12,6 @@ extern crate alloc;
 #[cfg(all(feature = "target_kasli_soc", has_virtual_leds))]
 use core::cell::RefCell;
 
-use ksupport;
 use libasync::task;
 #[cfg(has_cxp_grabber)]
 use libboard_artiq::cxp_phys;

@@ -2,12 +2,10 @@ use core::slice;
 
 use byteorder::NativeEndian;
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
-use crc;
 use io::{proto::{ProtoRead, ProtoWrite},
          Cursor};
 use libasync::{block_async, task};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
-use nb;
 use void::Void;
 
 pub use crate::drtioaux_proto::{Packet, MAX_PACKET};

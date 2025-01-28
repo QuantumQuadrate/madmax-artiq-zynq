@@ -2,7 +2,6 @@ use alloc::vec;
 use core::{ffi::VaList, ptr, str};
 
 use libc::{c_char, c_int, size_t};
-use libm;
 use log::{info, warn};
 
 #[cfg(has_drtio)]
