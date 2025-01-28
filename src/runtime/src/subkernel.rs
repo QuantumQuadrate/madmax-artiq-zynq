@@ -40,6 +40,7 @@ impl From<DrtioError> for Error {
     }
 }
 
+#[allow(dead_code)]
 pub struct SubkernelFinished {
     pub id: u32,
     pub status: FinishStatus,
