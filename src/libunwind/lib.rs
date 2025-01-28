@@ -1,8 +1,6 @@
 #![no_std]
 #![feature(link_cfg)]
-#![feature(nll)]
 #![feature(c_unwind)]
-#![feature(static_nobundle)]
 #![cfg_attr(not(target_env = "msvc"), feature(libc))]
 
 cfg_if::cfg_if! {
@@ -24,7 +22,12 @@ cfg_if::cfg_if! {
 extern "C" {}
 
 #[cfg(target_os = "redox")]
-#[link(name = "gcc_eh", kind = "static-nobundle", cfg(target_feature = "crt-static"))]
+#[link(
+    name = "gcc_eh",
+    kind = "static",
+    modifiers = "-bundle",
+    cfg(target_feature = "crt-static")
+)]
 #[link(name = "gcc_s", cfg(not(target_feature = "crt-static")))]
 extern "C" {}
 
