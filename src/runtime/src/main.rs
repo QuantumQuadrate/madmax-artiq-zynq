@@ -2,7 +2,7 @@
 #![no_main]
 #![recursion_limit = "1024"] // for futures_util::select!
 #![feature(alloc_error_handler)]
-#![feature(const_btree_new)]
+#![feature(const_btree_len)]
 #![feature(panic_info_message)]
 #![feature(lang_items)]
 
