@@ -85,7 +85,7 @@ unsafe fn get_ttype_entry(
         encoding | DW_EH_PE_pcrel,
         ttype_base,
     )
-    .map(|v| (v != ttype_base).then(|| v as *const u8))
+    .map(|v| (v != 0).then(|| v as *const u8))
 }
 
 pub unsafe fn find_eh_action(
@@ -274,6 +274,11 @@ unsafe fn read_encoded_pointer_with_base(reader: &mut DwarfReader, encoding: u8,
         DW_EH_PE_sdata8 => reader.read::<i64>() as usize,
         _ => return Err(()),
     };
+
+    if result == 0 {
+        // null is just encoded as 0, even if a relative encoding is used for the table.
+        return Ok(0);
+    }
 
     result += if (encoding & 0x70) == DW_EH_PE_pcrel {
         original_ptr as usize
