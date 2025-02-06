@@ -38,7 +38,7 @@ where
             let ptr = storage as *mut u32;
             let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 4);
             proto_async::read_chunk(stream, dest).await?;
-            drop(dest);
+            let _ = dest;
             let dest = core::slice::from_raw_parts_mut(ptr, length);
             NativeEndian::from_slice_u32(dest);
         }
@@ -46,7 +46,7 @@ where
             let ptr = storage as *mut u64;
             let dest = core::slice::from_raw_parts_mut(ptr as *mut u8, length * 8);
             proto_async::read_chunk(stream, dest).await?;
-            drop(dest);
+            let _ = dest;
             let dest = core::slice::from_raw_parts_mut(ptr, length);
             NativeEndian::from_slice_u64(dest);
         }
