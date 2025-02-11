@@ -8,7 +8,7 @@ use dyld::{self, elf::EXIDX_Entry, Library};
 use libboard_zynq::{gic, mpcore};
 use libcortex_a9::{asm::{dsb, isb},
                    cache::{bpiall, dcci_slice, iciallu},
-                   enable_fpu, sync_channel};
+                   sync_channel};
 use libsupport_zynq::ram;
 use log::{debug, error, info};
 
@@ -128,7 +128,6 @@ impl KernelImage {
 
 #[no_mangle]
 pub extern "C" fn main_core1() {
-    enable_fpu();
     debug!("Core1 started");
 
     ram::init_alloc_core1();
