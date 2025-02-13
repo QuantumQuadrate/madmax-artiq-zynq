@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(alloc_error_handler, never_type, panic_info_message)]
+#![feature(lang_items)]
 
 #[macro_use]
 extern crate log;
@@ -1810,3 +1811,7 @@ pub fn panic_fmt(info: &core::panic::PanicInfo) -> ! {
 
     loop {}
 }
+
+#[lang = "eh_personality"]
+#[no_mangle]
+pub extern "C" fn rust_eh_personality() {}

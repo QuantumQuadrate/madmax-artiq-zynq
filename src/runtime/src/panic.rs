@@ -71,3 +71,7 @@ fn soft_panic(info: &core::panic::PanicInfo) -> ! {
     };
     soft_panic_main(timer, cfg);
 }
+
+#[lang = "eh_personality"]
+#[no_mangle]
+pub extern "C" fn rust_eh_personality() {}
