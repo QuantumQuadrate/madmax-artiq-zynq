@@ -1,5 +1,4 @@
-use core::slice;
-use core::arch::asm;
+use core::{arch::asm, slice};
 
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
