@@ -134,7 +134,7 @@
         nativeBuildInputs = [
           pkgs.gnumake
           (pkgs.python3.withPackages(ps: [ ps.jsonschema artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq ]))
-          zynqpkgs.cargo-xbuild
+          pkgs.cargo-xbuild
           pkgs.llvmPackages_14.llvm
           pkgs.llvmPackages_14.clang-unwrapped
         ];
@@ -380,7 +380,7 @@
         llvmPackages_14.clang-unwrapped
         gnumake
         cacert
-        zynqpkgs.cargo-xbuild
+        pkgs.cargo-xbuild
         zynqpkgs.mkbootimage
         openocd  
         openssh rsync
