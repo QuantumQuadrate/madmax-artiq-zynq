@@ -1,5 +1,5 @@
 use alloc::{string::String, vec::Vec};
-use core::mem;
+use core::{mem, ptr};
 
 use cslice::CSlice;
 
@@ -26,7 +26,7 @@ static mut RECORDER: Option<DmaRecorder> = None;
 pub unsafe fn init_dma_recorder() {
     // as static would remain after restart, we have to reset it,
     // without running its destructor.
-    mem::forget(mem::replace(&mut RECORDER, None));
+    mem::forget(ptr::replace(&raw mut RECORDER, None));
 }
 
 pub extern "C" fn dma_record_start(name: CSlice<u8>) {
