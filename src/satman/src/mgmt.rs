@@ -28,7 +28,7 @@ pub fn byte_to_level_filter(level_byte: u8) -> Result<LevelFilter> {
 }
 
 fn get_logger_buffer() -> LogBufferRef<'static> {
-    let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
+    let logger = BufferLogger::get_logger();
     loop {
         if let Some(buffer_ref) = logger.buffer() {
             return buffer_ref;

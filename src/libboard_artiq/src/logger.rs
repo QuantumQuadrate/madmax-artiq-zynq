@@ -1,4 +1,4 @@
-use core::{cell::Cell, fmt::Write};
+use core::{cell::Cell, fmt::Write, mem::MaybeUninit};
 
 use libboard_zynq::{println, timer::GlobalTimer};
 use libcortex_a9::mutex::{Mutex, MutexGuard};
@@ -42,7 +42,7 @@ pub struct BufferLogger {
     buffer_filter: Cell<LevelFilter>,
 }
 
-static mut LOGGER: Option<BufferLogger> = None;
+static mut LOGGER: MaybeUninit<BufferLogger> = MaybeUninit::uninit();
 
 impl BufferLogger {
     pub fn new(buffer: &'static mut [u8]) -> BufferLogger {
@@ -55,13 +55,13 @@ impl BufferLogger {
 
     pub fn register(self) {
         unsafe {
-            LOGGER = Some(self);
-            log::set_logger(LOGGER.as_ref().unwrap()).expect("global logger can only be initialized once");
+            LOGGER.write(self);
+            log::set_logger(LOGGER.assume_init_ref()).expect("global logger can only be initialized once");
         }
     }
 
-    pub unsafe fn get_logger() -> &'static mut Option<BufferLogger> {
-        &mut LOGGER
+    pub fn get_logger() -> &'static mut BufferLogger {
+        unsafe { LOGGER.assume_init_mut() }
     }
 
     pub fn buffer<'a>(&'a self) -> Option<LogBufferRef<'a>> {

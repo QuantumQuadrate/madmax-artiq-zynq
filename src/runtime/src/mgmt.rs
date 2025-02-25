@@ -99,7 +99,7 @@ async fn read_log_level_filter(stream: &mut TcpStream) -> Result<log::LevelFilte
 async fn get_logger_buffer_pred<F>(f: F) -> LogBufferRef<'static>
 where F: Fn(&LogBufferRef) -> bool {
     poll_fn(|ctx| {
-        let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
+        let logger = BufferLogger::get_logger();
         match logger.buffer() {
             Some(buffer) if f(&buffer) => Poll::Ready(buffer),
             _ => {
@@ -750,7 +750,7 @@ mod local_coremgmt {
             write_chunk(stream, &bytes).await?;
             if log::max_level() == log::LevelFilter::Trace {
                 // temporarily discard all trace level log
-                let logger = unsafe { BufferLogger::get_logger().as_mut().unwrap() };
+                let logger = BufferLogger::get_logger();
                 logger.set_buffer_log_level(log::LevelFilter::Debug);
                 stream.flush().await?;
                 logger.set_buffer_log_level(log::LevelFilter::Trace);
@@ -768,9 +768,7 @@ mod local_coremgmt {
 
     pub async fn set_uart_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
         info!("Changing UART log level to {}", lvl);
-        unsafe {
-            BufferLogger::get_logger().as_ref().unwrap().set_uart_log_level(lvl);
-        }
+        BufferLogger::get_logger().set_uart_log_level(lvl);
         write_i8(stream, Reply::Success as i8).await?;
         Ok(())
     }

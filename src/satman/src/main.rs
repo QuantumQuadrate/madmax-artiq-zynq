@@ -1098,12 +1098,7 @@ fn process_aux_packet(
 
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
                 info!("Changing UART log level to {}", level_filter);
-                unsafe {
-                    logger::BufferLogger::get_logger()
-                        .as_ref()
-                        .unwrap()
-                        .set_uart_log_level(level_filter);
-                }
+                logger::BufferLogger::get_logger().set_uart_log_level(level_filter);
                 drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
             } else {
                 drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
