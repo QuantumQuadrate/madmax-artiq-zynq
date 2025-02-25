@@ -1,17 +1,17 @@
-use libboard_zynq;
+use core::mem::MaybeUninit;
+
+use libboard_zynq::i2c::I2c;
 
 use crate::artiq_raise;
 
-pub static mut I2C_BUS: Option<libboard_zynq::i2c::I2c> = None;
+static mut I2C_BUS: MaybeUninit<I2c> = MaybeUninit::uninit();
 
 pub extern "C" fn start(busno: i32) {
     if busno > 0 {
         artiq_raise!("I2CError", "I2C bus could not be accessed");
     }
-    unsafe {
-        if (&mut I2C_BUS).as_mut().unwrap().start().is_err() {
-            artiq_raise!("I2CError", "I2C start failed");
-        }
+    if get_bus().start().is_err() {
+        artiq_raise!("I2CError", "I2C start failed");
     }
 }
 
@@ -19,10 +19,8 @@ pub extern "C" fn restart(busno: i32) {
     if busno > 0 {
         artiq_raise!("I2CError", "I2C bus could not be accessed");
     }
-    unsafe {
-        if (&mut I2C_BUS).as_mut().unwrap().restart().is_err() {
-            artiq_raise!("I2CError", "I2C restart failed");
-        }
+    if get_bus().restart().is_err() {
+        artiq_raise!("I2CError", "I2C restart failed");
     }
 }
 
@@ -30,10 +28,8 @@ pub extern "C" fn stop(busno: i32) {
     if busno > 0 {
         artiq_raise!("I2CError", "I2C bus could not be accessed");
     }
-    unsafe {
-        if (&mut I2C_BUS).as_mut().unwrap().stop().is_err() {
-            artiq_raise!("I2CError", "I2C stop failed");
-        }
+    if get_bus().stop().is_err() {
+        artiq_raise!("I2CError", "I2C stop failed");
     }
 }
 
@@ -41,11 +37,9 @@ pub extern "C" fn write(busno: i32, data: i32) -> bool {
     if busno > 0 {
         artiq_raise!("I2CError", "I2C bus could not be accessed");
     }
-    unsafe {
-        match (&mut I2C_BUS).as_mut().unwrap().write(data as u8) {
-            Ok(r) => r,
-            Err(_) => artiq_raise!("I2CError", "I2C write failed"),
-        }
+    match get_bus().write(data as u8) {
+        Ok(r) => r,
+        Err(_) => artiq_raise!("I2CError", "I2C write failed"),
     }
 }
 
@@ -53,11 +47,9 @@ pub extern "C" fn read(busno: i32, ack: bool) -> i32 {
     if busno > 0 {
         artiq_raise!("I2CError", "I2C bus could not be accessed");
     }
-    unsafe {
-        match (&mut I2C_BUS).as_mut().unwrap().read(ack) {
-            Ok(r) => r as i32,
-            Err(_) => artiq_raise!("I2CError", "I2C read failed"),
-        }
+    match get_bus().read(ack) {
+        Ok(r) => r as i32,
+        Err(_) => artiq_raise!("I2CError", "I2C read failed"),
     }
 }
 
@@ -78,20 +70,17 @@ pub extern "C" fn switch_select(busno: i32, address: i32, mask: i32) {
         0x80 => Some(7),
         _ => artiq_raise!("I2CError", "switch select supports only one channel"),
     };
-    unsafe {
-        if (&mut I2C_BUS)
-            .as_mut()
-            .unwrap()
-            .pca954x_select(address as u8, ch)
-            .is_err()
-        {
-            artiq_raise!("I2CError", "switch select failed");
-        }
+    if get_bus().pca954x_select(address as u8, ch).is_err() {
+        artiq_raise!("I2CError", "switch select failed");
     }
 }
 
 pub fn init() {
-    let mut i2c = libboard_zynq::i2c::I2c::i2c0();
+    let mut i2c = I2c::i2c0();
     i2c.init().expect("I2C bus initialization failed");
-    unsafe { I2C_BUS = Some(i2c) };
+    unsafe { I2C_BUS.write(i2c) };
+}
+
+pub fn get_bus() -> &'static mut I2c {
+    unsafe { I2C_BUS.assume_init_mut() }
 }

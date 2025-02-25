@@ -446,7 +446,7 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     let clk = get_rtio_clock_cfg(cfg);
     #[cfg(has_si5324)]
     {
-        let i2c = unsafe { (&mut i2c::I2C_BUS).as_mut().unwrap() };
+        let i2c = i2c::get_bus();
         match clk {
             RtioClock::Ext0_Bypass => {
                 info!("bypassing the PLL for RTIO clock");

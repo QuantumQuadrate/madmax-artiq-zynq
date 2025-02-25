@@ -1525,19 +1525,19 @@ pub extern "C" fn main_core0() -> i32 {
     ram::init_alloc_core0();
 
     ksupport::i2c::init();
-    let mut i2c = unsafe { (ksupport::i2c::I2C_BUS).as_mut().unwrap() };
+    let i2c = ksupport::i2c::get_bus();
 
     #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
     #[cfg(feature = "target_kasli_soc")]
     {
-        io_expander0 = io_expander::IoExpander::new(&mut i2c, 0).unwrap();
-        io_expander1 = io_expander::IoExpander::new(&mut i2c, 1).unwrap();
+        io_expander0 = io_expander::IoExpander::new(i2c, 0).unwrap();
+        io_expander1 = io_expander::IoExpander::new(i2c, 1).unwrap();
         io_expander0
-            .init(&mut i2c)
+            .init(i2c)
             .expect("I2C I/O expander #0 initialization failed");
         io_expander1
-            .init(&mut i2c)
+            .init(i2c)
             .expect("I2C I/O expander #1 initialization failed");
 
         // Drive CLK_SEL to true
@@ -1549,12 +1549,12 @@ pub extern "C" fn main_core0() -> i32 {
         io_expander1.set(0, 1, false);
         io_expander0.set(1, 1, false);
         io_expander1.set(1, 1, false);
-        io_expander0.service(&mut i2c).unwrap();
-        io_expander1.service(&mut i2c).unwrap();
+        io_expander0.service(i2c).unwrap();
+        io_expander1.service(i2c).unwrap();
     }
 
     #[cfg(has_si5324)]
-    si5324::setup(&mut i2c, &SI5324_SETTINGS, si5324::Input::Ckin1, &mut timer).expect("cannot initialize Si5324");
+    si5324::setup(i2c, &SI5324_SETTINGS, si5324::Input::Ckin1, &mut timer).expect("cannot initialize Si5324");
     #[cfg(has_si549)]
     si549::main_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize main Si549");
 
@@ -1625,12 +1625,8 @@ pub extern "C" fn main_core0() -> i32 {
             }
             #[cfg(feature = "target_kasli_soc")]
             {
-                io_expander0
-                    .service(&mut i2c)
-                    .expect("I2C I/O expander #0 service failed");
-                io_expander1
-                    .service(&mut i2c)
-                    .expect("I2C I/O expander #1 service failed");
+                io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
+                io_expander1.service(i2c).expect("I2C I/O expander #1 service failed");
             }
 
             hardware_tick(&mut hardware_tick_ts, &mut timer);
@@ -1639,7 +1635,7 @@ pub extern "C" fn main_core0() -> i32 {
         info!("uplink is up, switching to recovered clock");
         #[cfg(has_siphaser)]
         {
-            si5324::siphaser::select_recovered_clock(&mut i2c, true, &mut timer).expect("failed to switch clocks");
+            si5324::siphaser::select_recovered_clock(i2c, true, &mut timer).expect("failed to switch clocks");
             si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
         }
 
@@ -1666,7 +1662,7 @@ pub extern "C" fn main_core0() -> i32 {
                 &mut rank,
                 &mut destination,
                 &mut timer,
-                &mut i2c,
+                i2c,
                 &mut dma_manager,
                 &mut analyzer,
                 &mut kernel_manager,
@@ -1679,12 +1675,8 @@ pub extern "C" fn main_core0() -> i32 {
             }
             #[cfg(feature = "target_kasli_soc")]
             {
-                io_expander0
-                    .service(&mut i2c)
-                    .expect("I2C I/O expander #0 service failed");
-                io_expander1
-                    .service(&mut i2c)
-                    .expect("I2C I/O expander #1 service failed");
+                io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
+                io_expander1.service(i2c).expect("I2C I/O expander #1 service failed");
             }
             hardware_tick(&mut hardware_tick_ts, &mut timer);
             if drtiosat_tsc_loaded() {
@@ -1744,7 +1736,7 @@ pub extern "C" fn main_core0() -> i32 {
         drtiosat_tsc_loaded();
         info!("uplink is down, switching to local oscillator clock");
         #[cfg(has_siphaser)]
-        si5324::siphaser::select_recovered_clock(&mut i2c, false, &mut timer).expect("failed to switch clocks");
+        si5324::siphaser::select_recovered_clock(i2c, false, &mut timer).expect("failed to switch clocks");
         #[cfg(has_wrpll)]
         si549::wrpll::select_recovered_clock(false, &mut timer);
     }
