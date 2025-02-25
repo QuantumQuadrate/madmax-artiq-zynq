@@ -144,15 +144,13 @@ fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
     device_map
 }
 
-fn _resolve_channel_name(channel: u32, device_map: &BTreeMap<u32, String>) -> String {
-    match device_map.get(&channel) {
-        Some(val) => val.clone(),
-        None => String::from("unknown"),
-    }
-}
-
 pub fn resolve_channel_name(channel: u32) -> String {
-    _resolve_channel_name(channel, unsafe { &RTIO_DEVICE_MAP })
+    unsafe {
+        match RTIO_DEVICE_MAP.get(&channel) {
+            Some(val) => val.clone(),
+            None => String::from("unknown"),
+        }
+    }
 }
 
 pub fn setup_device_map(cfg: &Config) {
