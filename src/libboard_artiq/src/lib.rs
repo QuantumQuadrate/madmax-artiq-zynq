@@ -42,6 +42,8 @@ pub mod si549;
 use core::{cmp, str};
 
 #[cfg(has_cxp_grabber)]
+pub mod cxp_ctrl;
+#[cfg(has_cxp_grabber)]
 pub mod cxp_phys;
 
 pub fn identifier_read(buf: &mut [u8]) -> &str {
