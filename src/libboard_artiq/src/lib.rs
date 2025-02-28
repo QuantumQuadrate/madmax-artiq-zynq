@@ -24,7 +24,7 @@ pub mod fiq;
 #[cfg(feature = "target_kasli_soc")]
 pub mod io_expander;
 pub mod logger;
-#[cfg(has_drtio)]
+#[cfg(any(has_drtio, has_cxp_grabber))]
 #[rustfmt::skip]
 #[path = "../../../build/mem.rs"]
 pub mod mem;
@@ -43,6 +43,8 @@ use core::{cmp, str};
 
 #[cfg(has_cxp_grabber)]
 pub mod cxp_ctrl;
+#[cfg(has_cxp_grabber)]
+pub mod cxp_packet;
 #[cfg(has_cxp_grabber)]
 pub mod cxp_phys;
 
