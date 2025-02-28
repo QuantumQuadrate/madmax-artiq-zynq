@@ -46,6 +46,8 @@ pub mod cxp_camera_setup;
 #[cfg(has_cxp_grabber)]
 pub mod cxp_ctrl;
 #[cfg(has_cxp_grabber)]
+pub mod cxp_grabber;
+#[cfg(has_cxp_grabber)]
 pub mod cxp_packet;
 #[cfg(has_cxp_grabber)]
 pub mod cxp_phys;
