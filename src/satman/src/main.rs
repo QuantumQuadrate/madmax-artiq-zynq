@@ -27,6 +27,8 @@ extern crate alloc;
 use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use embedded_hal::blocking::delay::DelayUs;
+#[cfg(has_drtio_eem)]
+use libboard_artiq::drtio_eem;
 #[cfg(has_grabber)]
 use libboard_artiq::grabber;
 #[cfg(feature = "target_kasli_soc")]
@@ -1336,6 +1338,12 @@ fn process_aux_packet(
             unsafe {
                 csr::gt_drtio::txenable_write(0);
             }
+
+            #[cfg(has_drtio_eem)]
+            unsafe {
+                csr::eem_transceiver::txenable_write(0);
+            }
+
             core_manager.write_image();
             info!("reboot imminent");
             slcr::reboot();
@@ -1569,6 +1577,12 @@ pub extern "C" fn main_core0() -> i32 {
     unsafe {
         csr::gt_drtio::txenable_write(0xffffffffu32 as _);
     }
+
+    #[cfg(has_drtio_eem)]
+    unsafe {
+        csr::eem_transceiver::txenable_write(0xffffffffu32 as _);
+    }
+
     #[cfg(has_si549)]
     si549::helper_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize helper Si549");
 
@@ -1592,6 +1606,14 @@ pub extern "C" fn main_core0() -> i32 {
     } else {
         info!("SED spreading disabled by default");
         toggle_sed_spread(0);
+    }
+
+    #[cfg(has_drtio_eem)]
+    {
+        drtio_eem::init(&mut timer, &cfg);
+        unsafe {
+            csr::eem_transceiver::rx_ready_write(1)
+        }
     }
 
     #[cfg(has_drtio_routing)]

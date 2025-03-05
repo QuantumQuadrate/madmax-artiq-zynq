@@ -432,6 +432,7 @@ class GenericSatellite(SoCCore):
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
 
+        has_drtio_over_eem = any(peripheral["type"] == "shuttler" for peripheral in description["peripherals"])
         self.acpki = acpki
 
         platform = kasli_soc.Platform()
@@ -480,6 +481,8 @@ class GenericSatellite(SoCCore):
 
         self.rtio_channels = []
         has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
+        if has_drtio_over_eem:
+            self.eem_drtio_channels = []
         if has_grabber:
             self.grabber_csr_group = []
         eem_7series.add_peripherals(self, description["peripherals"], iostandard=eem_iostandard)
@@ -494,15 +497,15 @@ class GenericSatellite(SoCCore):
 
         self.submodules.rtio_tsc = rtio.TSC(glbl_fine_ts_width=3)
 
-        drtioaux_csr_group = []
-        drtioaux_memory_group = []
-        drtiorep_csr_group = []
+        self.drtioaux_csr_group = []
+        self.drtioaux_memory_group = []
+        self.drtiorep_csr_group = []
         self.drtio_cri = []
         for i in range(len(self.gt_drtio.channels)):
             coreaux_name = "drtioaux" + str(i)
             memory_name = "drtioaux" + str(i) + "_mem"
-            drtioaux_csr_group.append(coreaux_name)
-            drtioaux_memory_group.append(memory_name)
+            self.drtioaux_csr_group.append(coreaux_name)
+            self.drtioaux_memory_group.append(memory_name)
 
             cdr = ClockDomainsRenamer({"rtio_rx": "rtio_rx" + str(i)})
 
@@ -515,7 +518,7 @@ class GenericSatellite(SoCCore):
                 self.csr_devices.append("drtiosat")
             else:
                 corerep_name = "drtiorep" + str(i-1)
-                drtiorep_csr_group.append(corerep_name)
+                self.drtiorep_csr_group.append(corerep_name)
 
                 core = cdr(DRTIORepeater(
                     self.rtio_tsc, self.gt_drtio.channels[i]))
@@ -538,9 +541,9 @@ class GenericSatellite(SoCCore):
             self.add_memory_region(memory_name, self.mem_map["csr"] + memory_address, mem_size * 2)
         self.config["HAS_DRTIO"] = None
         self.config["HAS_DRTIO_ROUTING"] = None
-        self.add_csr_group("drtioaux", drtioaux_csr_group)
-        self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
-        self.add_csr_group("drtiorep", drtiorep_csr_group)
+        if has_drtio_over_eem:
+            self.add_eem_drtio(self.eem_drtio_channels)
+        self.add_drtio_cpuif_groups()
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
@@ -624,6 +627,50 @@ class GenericSatellite(SoCCore):
 
         self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
                 for i, channel in enumerate(self.gt_drtio.channels)]
+
+    def add_eem_drtio(self, eem_drtio_channels):
+        # Must be called before constructing CRIInterconnectShared
+        self.submodules.eem_transceiver = eem_serdes.EEMSerdes(self.platform, eem_drtio_channels)
+        self.csr_devices.append("eem_transceiver")
+        self.config["HAS_DRTIO_EEM"] = None
+        self.config["EEM_DRTIO_COUNT"] = len(eem_drtio_channels)
+
+        for i in range(len(self.eem_transceiver.channels)):
+            channel = i + len(self.gt_drtio.channels)
+            coreaux_name = "drtioaux" + str(channel)
+            memory_name = "drtioaux" + str(channel) + "_mem"
+            self.drtioaux_csr_group.append(coreaux_name)
+            self.drtioaux_memory_group.append(memory_name)
+
+            cdr = ClockDomainsRenamer({"rtio_rx": "sys"})
+            corerep_name = "drtiorep" + str(channel-1)
+            self.drtiorep_csr_group.append(corerep_name)
+
+            core = cdr(DRTIORepeater(
+                self.rtio_tsc, self.eem_transceiver.channels[i]))
+            setattr(self.submodules, corerep_name, core)
+            self.drtio_cri.append(core.cri)
+            self.csr_devices.append(corerep_name)
+
+            coreaux = cdr(drtio_aux_controller.DRTIOAuxControllerBare(core.link_layer))
+            setattr(self.submodules, coreaux_name, coreaux)
+            self.csr_devices.append(coreaux_name)
+
+            mem_size = coreaux.get_mem_size()
+            tx_port = coreaux.get_tx_port()
+            rx_port = coreaux.get_rx_port()
+            memory_address = self.axi2csr.register_port(tx_port, mem_size)
+            # rcv in upper half of the memory, thus added second
+            self.axi2csr.register_port(rx_port, mem_size)
+            # and registered in PS interface
+            # manually, because software refers to rx/tx by halves of entire memory block, not names
+            self.add_memory_region(memory_name, self.mem_map["csr"] + memory_address, mem_size * 2)
+
+    def add_drtio_cpuif_groups(self):
+        self.add_csr_group("drtiorep", self.drtiorep_csr_group)
+        self.add_csr_group("drtioaux", self.drtioaux_csr_group)
+        self.add_memory_group("drtioaux_mem", self.drtioaux_memory_group)
+
 
 def main():
     parser = argparse.ArgumentParser(
