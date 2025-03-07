@@ -9,10 +9,20 @@ use libboard_artiq::{cxp_ctrl::{Error as CtrlErr, DATA_MAXSIZE},
                      cxp_packet::{read_bytes, read_u32, write_u32}};
 use log::info;
 
-use crate::artiq_raise;
+use crate::{artiq_raise, pl::csr::cxp_grabber};
+
+const ROI_MAX_SIZE: usize = 4096;
+
+#[repr(C)]
+pub struct ROIViewerFrame {
+    width: i32,
+    height: i32,
+    pixel_width: i32,
+}
 
 enum Error {
     BufferSizeTooSmall(usize, usize),
+    ROISizeTooBig(usize, usize),
     InvalidLocalUrl(String),
     CtrlPacketError(CtrlErr),
 }
@@ -31,6 +41,16 @@ impl fmt::Display for Error {
                     f,
                     "BufferSizeTooSmall - The required size is {} bytes but the buffer size is {} bytes",
                     required_size, buffer_size
+                )
+            }
+            &Error::ROISizeTooBig(width, height) => {
+                write!(
+                    f,
+                    "ROISizeTooBig - The maximum ROIViewer size is {} pixels but the ROI is set to {} ({}x{}) pixels",
+                    ROI_MAX_SIZE,
+                    width * height,
+                    width,
+                    height
                 )
             }
             &Error::InvalidLocalUrl(ref s) => {
@@ -147,5 +167,60 @@ pub extern "C" fn write32(addr: i32, val: i32) {
         }
     } else {
         artiq_raise!("CXPError", "Camera is not connected");
+    }
+}
+
+pub extern "C" fn start_roi_viewer(x0: i32, x1: i32, y0: i32, y1: i32) {
+    let (width, height) = ((x1 - x0) as usize, (y1 - y0) as usize);
+    if width * height > ROI_MAX_SIZE {
+        artiq_raise!("CXPError", format!("{}", Error::ROISizeTooBig(width, height)));
+    } else {
+        unsafe {
+            // flush the fifo before arming
+            while cxp_grabber::roi_viewer_fifo_stb_read() == 1 {
+                cxp_grabber::roi_viewer_fifo_ack_write(1);
+            }
+            cxp_grabber::roi_viewer_x0_write(x0 as u16);
+            cxp_grabber::roi_viewer_x1_write(x1 as u16);
+            cxp_grabber::roi_viewer_y0_write(y0 as u16);
+            cxp_grabber::roi_viewer_y1_write(y1 as u16);
+            cxp_grabber::roi_viewer_arm_write(1);
+        }
+    }
+}
+
+pub extern "C" fn download_roi_viewer_frame(buffer: &mut CMutSlice<i64>) -> ROIViewerFrame {
+    if buffer.len() * 4 < ROI_MAX_SIZE {
+        // each pixel is 16 bits
+        artiq_raise!(
+            "CXPError",
+            format!("{}", Error::BufferSizeTooSmall(ROI_MAX_SIZE * 2, buffer.len() * 8))
+        );
+    };
+
+    let buf = buffer.as_mut_slice();
+    unsafe {
+        while cxp_grabber::roi_viewer_ready_read() == 0 {}
+        let mut i = 0;
+        while cxp_grabber::roi_viewer_fifo_stb_read() == 1 {
+            buf[i] = cxp_grabber::roi_viewer_fifo_data_read() as i64;
+            i += 1;
+            cxp_grabber::roi_viewer_fifo_ack_write(1);
+        }
+        let width = (cxp_grabber::roi_viewer_x1_read() - cxp_grabber::roi_viewer_x0_read()) as i32;
+        let height = (cxp_grabber::roi_viewer_y1_read() - cxp_grabber::roi_viewer_y0_read()) as i32;
+        let pixel_width = match cxp_grabber::stream_decoder_pixel_format_code_read() {
+            0x0101 => 8,
+            0x0102 => 10,
+            0x0103 => 12,
+            0x0104 => 14,
+            0x0105 => 16,
+            _ => artiq_raise!("CXPError", "UnsupportedPixelFormat"),
+        };
+        ROIViewerFrame {
+            width,
+            height,
+            pixel_width,
+        }
     }
 }

@@ -134,6 +134,10 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(cxp_read32 = cxp::read32),
         #[cfg(has_cxp_grabber)]
         api!(cxp_write32 = cxp::write32),
+        #[cfg(has_cxp_grabber)]
+        api!(cxp_start_roi_viewer = cxp::start_roi_viewer),
+        #[cfg(has_cxp_grabber)]
+        api!(cxp_download_roi_viewer_frame = cxp::download_roi_viewer_frame),
 
         // Double-precision floating-point arithmetic helper functions
         // RTABI chapter 4.1.2, Table 2
