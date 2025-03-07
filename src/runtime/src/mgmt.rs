@@ -435,8 +435,8 @@ mod remote_coremgmt {
         _restart_idle: &Rc<Semaphore>,
     ) -> Result<()> {
         let mut message = Vec::with_capacity(key.len() + value.len() + 4 * 2);
-        message.write_string(key).unwrap();
-        message.write_bytes(&value).unwrap();
+        message.write_string::<NativeEndian>(key).unwrap();
+        message.write_bytes::<NativeEndian>(&value).unwrap();
 
         match drtio::partition_data(
             linkno,

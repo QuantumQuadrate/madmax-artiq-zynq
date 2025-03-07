@@ -1,4 +1,5 @@
-use core_io::{Error as IoError, Read, Write};
+use byteorder::NativeEndian;
+use core_io::Error as IoError;
 use io::proto::{ProtoRead, ProtoWrite};
 
 pub const MAX_PACKET: usize = 1024;
@@ -363,8 +364,7 @@ pub enum Packet {
 }
 
 impl Packet {
-    pub fn read_from<R>(reader: &mut R) -> Result<Self, Error>
-    where R: Read + ?Sized {
+    pub fn read_from<R: ProtoRead>(reader: &mut R) -> Result<Self, Error> {
         Ok(match reader.read_u8()? {
             0x00 => Packet::EchoRequest,
             0x01 => Packet::EchoReply,
@@ -378,13 +378,13 @@ impl Packet {
             0x21 => Packet::DestinationDownReply,
             0x22 => Packet::DestinationOkReply,
             0x23 => Packet::DestinationSequenceErrorReply {
-                channel: reader.read_u16()?,
+                channel: reader.read_u16::<NativeEndian>()?,
             },
             0x24 => Packet::DestinationCollisionReply {
-                channel: reader.read_u16()?,
+                channel: reader.read_u16::<NativeEndian>()?,
             },
             0x25 => Packet::DestinationBusyReply {
-                channel: reader.read_u16()?,
+                channel: reader.read_u16::<NativeEndian>()?,
             },
 
             0x30 => {
@@ -403,21 +403,21 @@ impl Packet {
 
             0x40 => Packet::MonitorRequest {
                 destination: reader.read_u8()?,
-                channel: reader.read_u16()?,
+                channel: reader.read_u16::<NativeEndian>()?,
                 probe: reader.read_u8()?,
             },
             0x41 => Packet::MonitorReply {
-                value: reader.read_u64()?,
+                value: reader.read_u64::<NativeEndian>()?,
             },
             0x50 => Packet::InjectionRequest {
                 destination: reader.read_u8()?,
-                channel: reader.read_u16()?,
+                channel: reader.read_u16::<NativeEndian>()?,
                 overrd: reader.read_u8()?,
                 value: reader.read_u8()?,
             },
             0x51 => Packet::InjectionStatusRequest {
                 destination: reader.read_u8()?,
-                channel: reader.read_u16()?,
+                channel: reader.read_u16::<NativeEndian>()?,
                 overrd: reader.read_u8()?,
             },
             0x52 => Packet::InjectionStatusReply {
@@ -476,7 +476,7 @@ impl Packet {
             0x92 => Packet::SpiWriteRequest {
                 destination: reader.read_u8()?,
                 busno: reader.read_u8()?,
-                data: reader.read_u32()?,
+                data: reader.read_u32::<NativeEndian>()?,
             },
             0x93 => Packet::SpiReadRequest {
                 destination: reader.read_u8()?,
@@ -484,7 +484,7 @@ impl Packet {
             },
             0x94 => Packet::SpiReadReply {
                 succeeded: reader.read_bool()?,
-                data: reader.read_u32()?,
+                data: reader.read_u32::<NativeEndian>()?,
             },
             0x95 => Packet::SpiBasicReply {
                 succeeded: reader.read_bool()?,
@@ -494,8 +494,8 @@ impl Packet {
                 destination: reader.read_u8()?,
             },
             0xa1 => Packet::AnalyzerHeader {
-                sent_bytes: reader.read_u32()?,
-                total_byte_count: reader.read_u64()?,
+                sent_bytes: reader.read_u32::<NativeEndian>()?,
+                total_byte_count: reader.read_u64::<NativeEndian>()?,
                 overflow_occurred: reader.read_bool()?,
             },
             0xa2 => Packet::AnalyzerDataRequest {
@@ -503,7 +503,7 @@ impl Packet {
             },
             0xa3 => {
                 let last = reader.read_bool()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::AnalyzerData {
@@ -516,9 +516,9 @@ impl Packet {
             0xb0 => {
                 let source = reader.read_u8()?;
                 let destination = reader.read_u8()?;
-                let id = reader.read_u32()?;
+                let id = reader.read_u32::<NativeEndian>()?;
                 let status = reader.read_u8()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut trace: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut trace[0..length as usize])?;
                 Packet::DmaAddTraceRequest {
@@ -533,13 +533,13 @@ impl Packet {
             0xb1 => Packet::DmaAddTraceReply {
                 source: reader.read_u8()?,
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?,
+                id: reader.read_u32::<NativeEndian>()?,
                 succeeded: reader.read_bool()?,
             },
             0xb2 => Packet::DmaRemoveTraceRequest {
                 source: reader.read_u8()?,
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?,
+                id: reader.read_u32::<NativeEndian>()?,
             },
             0xb3 => Packet::DmaRemoveTraceReply {
                 destination: reader.read_u8()?,
@@ -548,8 +548,8 @@ impl Packet {
             0xb4 => Packet::DmaPlaybackRequest {
                 source: reader.read_u8()?,
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?,
-                timestamp: reader.read_u64()?,
+                id: reader.read_u32::<NativeEndian>()?,
+                timestamp: reader.read_u64::<NativeEndian>()?,
             },
             0xb5 => Packet::DmaPlaybackReply {
                 destination: reader.read_u8()?,
@@ -558,17 +558,17 @@ impl Packet {
             0xb6 => Packet::DmaPlaybackStatus {
                 source: reader.read_u8()?,
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?,
+                id: reader.read_u32::<NativeEndian>()?,
                 error: reader.read_u8()?,
-                channel: reader.read_u32()?,
-                timestamp: reader.read_u64()?,
+                channel: reader.read_u32::<NativeEndian>()?,
+                timestamp: reader.read_u64::<NativeEndian>()?,
             },
 
             0xc0 => {
                 let destination = reader.read_u8()?;
-                let id = reader.read_u32()?;
+                let id = reader.read_u32::<NativeEndian>()?;
                 let status = PayloadStatus::from(reader.read_u8()?);
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::SubkernelAddDataRequest {
@@ -585,9 +585,9 @@ impl Packet {
             0xc4 => Packet::SubkernelLoadRunRequest {
                 source: reader.read_u8()?,
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?,
+                id: reader.read_u32::<NativeEndian>()?,
                 run: reader.read_bool()?,
-                timestamp: reader.read_u64()?,
+                timestamp: reader.read_u64::<NativeEndian>()?,
             },
             0xc5 => Packet::SubkernelLoadRunReply {
                 destination: reader.read_u8()?,
@@ -595,7 +595,7 @@ impl Packet {
             },
             0xc8 => Packet::SubkernelFinished {
                 destination: reader.read_u8()?,
-                id: reader.read_u32()?,
+                id: reader.read_u32::<NativeEndian>()?,
                 with_exception: reader.read_bool()?,
                 exception_src: reader.read_u8()?,
             },
@@ -606,7 +606,7 @@ impl Packet {
             0xca => {
                 let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::SubkernelException {
@@ -619,9 +619,9 @@ impl Packet {
             0xcb => {
                 let source = reader.read_u8()?;
                 let destination = reader.read_u8()?;
-                let id = reader.read_u32()?;
+                let id = reader.read_u32::<NativeEndian>()?;
                 let status = reader.read_u8()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::SubkernelMessage {
@@ -654,7 +654,7 @@ impl Packet {
             },
             0xd4 => {
                 let destination = reader.read_u8()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut key: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut key[0..length as usize])?;
                 Packet::CoreMgmtConfigReadRequest {
@@ -669,7 +669,7 @@ impl Packet {
             0xd6 => {
                 let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::CoreMgmtConfigWriteRequest {
@@ -681,7 +681,7 @@ impl Packet {
             }
             0xd7 => {
                 let destination = reader.read_u8()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut key: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut key[0..length as usize])?;
                 Packet::CoreMgmtConfigRemoveRequest {
@@ -701,12 +701,12 @@ impl Packet {
             },
             0xdb => Packet::CoreMgmtFlashRequest {
                 destination: reader.read_u8()?,
-                payload_length: reader.read_u32()?,
+                payload_length: reader.read_u32::<NativeEndian>()?,
             },
             0xdc => {
                 let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::CoreMgmtFlashAddDataRequest {
@@ -722,7 +722,7 @@ impl Packet {
             0xde => Packet::CoreMgmtDropLink,
             0xdf => {
                 let last = reader.read_bool()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::CoreMgmtGetLogReply {
@@ -733,7 +733,7 @@ impl Packet {
             }
             0xe0 => {
                 let last = reader.read_bool()?;
-                let length = reader.read_u16()?;
+                let length = reader.read_u16::<NativeEndian>()?;
                 let mut value: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut value[0..length as usize])?;
                 Packet::CoreMgmtConfigReadReply {
@@ -750,8 +750,7 @@ impl Packet {
         })
     }
 
-    pub fn write_to<W>(&self, writer: &mut W) -> Result<(), IoError>
-    where W: Write + ?Sized {
+    pub fn write_to<W: ProtoWrite>(&self, writer: &mut W) -> Result<(), IoError> {
         match *self {
             Packet::EchoRequest => writer.write_u8(0x00)?,
             Packet::EchoReply => writer.write_u8(0x01)?,
@@ -767,15 +766,15 @@ impl Packet {
             Packet::DestinationOkReply => writer.write_u8(0x22)?,
             Packet::DestinationSequenceErrorReply { channel } => {
                 writer.write_u8(0x23)?;
-                writer.write_u16(channel)?;
+                writer.write_u16::<NativeEndian>(channel)?;
             }
             Packet::DestinationCollisionReply { channel } => {
                 writer.write_u8(0x24)?;
-                writer.write_u16(channel)?;
+                writer.write_u16::<NativeEndian>(channel)?;
             }
             Packet::DestinationBusyReply { channel } => {
                 writer.write_u8(0x25)?;
-                writer.write_u16(channel)?;
+                writer.write_u16::<NativeEndian>(channel)?;
             }
 
             Packet::RoutingSetPath { destination, hops } => {
@@ -796,12 +795,12 @@ impl Packet {
             } => {
                 writer.write_u8(0x40)?;
                 writer.write_u8(destination)?;
-                writer.write_u16(channel)?;
+                writer.write_u16::<NativeEndian>(channel)?;
                 writer.write_u8(probe)?;
             }
             Packet::MonitorReply { value } => {
                 writer.write_u8(0x41)?;
-                writer.write_u64(value)?;
+                writer.write_u64::<NativeEndian>(value)?;
             }
             Packet::InjectionRequest {
                 destination,
@@ -811,7 +810,7 @@ impl Packet {
             } => {
                 writer.write_u8(0x50)?;
                 writer.write_u8(destination)?;
-                writer.write_u16(channel)?;
+                writer.write_u16::<NativeEndian>(channel)?;
                 writer.write_u8(overrd)?;
                 writer.write_u8(value)?;
             }
@@ -822,7 +821,7 @@ impl Packet {
             } => {
                 writer.write_u8(0x51)?;
                 writer.write_u8(destination)?;
-                writer.write_u16(channel)?;
+                writer.write_u16::<NativeEndian>(channel)?;
                 writer.write_u8(overrd)?;
             }
             Packet::InjectionStatusReply { value } => {
@@ -916,7 +915,7 @@ impl Packet {
                 writer.write_u8(0x92)?;
                 writer.write_u8(destination)?;
                 writer.write_u8(busno)?;
-                writer.write_u32(data)?;
+                writer.write_u32::<NativeEndian>(data)?;
             }
             Packet::SpiReadRequest { destination, busno } => {
                 writer.write_u8(0x93)?;
@@ -926,7 +925,7 @@ impl Packet {
             Packet::SpiReadReply { succeeded, data } => {
                 writer.write_u8(0x94)?;
                 writer.write_bool(succeeded)?;
-                writer.write_u32(data)?;
+                writer.write_u32::<NativeEndian>(data)?;
             }
             Packet::SpiBasicReply { succeeded } => {
                 writer.write_u8(0x95)?;
@@ -943,8 +942,8 @@ impl Packet {
                 overflow_occurred,
             } => {
                 writer.write_u8(0xa1)?;
-                writer.write_u32(sent_bytes)?;
-                writer.write_u64(total_byte_count)?;
+                writer.write_u32::<NativeEndian>(sent_bytes)?;
+                writer.write_u64::<NativeEndian>(total_byte_count)?;
                 writer.write_bool(overflow_occurred)?;
             }
             Packet::AnalyzerDataRequest { destination } => {
@@ -954,7 +953,7 @@ impl Packet {
             Packet::AnalyzerData { last, length, data } => {
                 writer.write_u8(0xa3)?;
                 writer.write_bool(last)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
 
@@ -969,11 +968,11 @@ impl Packet {
                 writer.write_u8(0xb0)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_u8(status as u8)?;
                 // trace may be broken down to fit within drtio aux memory limit
                 // will be reconstructed by satellite
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&trace[0..length as usize])?;
             }
             Packet::DmaAddTraceReply {
@@ -985,7 +984,7 @@ impl Packet {
                 writer.write_u8(0xb1)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_bool(succeeded)?;
             }
             Packet::DmaRemoveTraceRequest {
@@ -996,7 +995,7 @@ impl Packet {
                 writer.write_u8(0xb2)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
             }
             Packet::DmaRemoveTraceReply { destination, succeeded } => {
                 writer.write_u8(0xb3)?;
@@ -1012,8 +1011,8 @@ impl Packet {
                 writer.write_u8(0xb4)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
-                writer.write_u64(timestamp)?;
+                writer.write_u32::<NativeEndian>(id)?;
+                writer.write_u64::<NativeEndian>(timestamp)?;
             }
             Packet::DmaPlaybackReply { destination, succeeded } => {
                 writer.write_u8(0xb5)?;
@@ -1031,10 +1030,10 @@ impl Packet {
                 writer.write_u8(0xb6)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_u8(error)?;
-                writer.write_u32(channel)?;
-                writer.write_u64(timestamp)?;
+                writer.write_u32::<NativeEndian>(channel)?;
+                writer.write_u64::<NativeEndian>(timestamp)?;
             }
 
             Packet::SubkernelAddDataRequest {
@@ -1046,9 +1045,9 @@ impl Packet {
             } => {
                 writer.write_u8(0xc0)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_u8(status as u8)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::SubkernelAddDataReply { succeeded } => {
@@ -1065,9 +1064,9 @@ impl Packet {
                 writer.write_u8(0xc4)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_bool(run)?;
-                writer.write_u64(timestamp)?;
+                writer.write_u64::<NativeEndian>(timestamp)?;
             }
             Packet::SubkernelLoadRunReply { destination, succeeded } => {
                 writer.write_u8(0xc5)?;
@@ -1082,7 +1081,7 @@ impl Packet {
             } => {
                 writer.write_u8(0xc8)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_bool(with_exception)?;
                 writer.write_u8(exception_src)?;
             }
@@ -1100,7 +1099,7 @@ impl Packet {
                 writer.write_u8(0xca)?;
                 writer.write_u8(destination)?;
                 writer.write_bool(last)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::SubkernelMessage {
@@ -1114,9 +1113,9 @@ impl Packet {
                 writer.write_u8(0xcb)?;
                 writer.write_u8(source)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(id)?;
+                writer.write_u32::<NativeEndian>(id)?;
                 writer.write_u8(status as u8)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::SubkernelMessageAck { destination } => {
@@ -1150,7 +1149,7 @@ impl Packet {
             } => {
                 writer.write_u8(0xd4)?;
                 writer.write_u8(destination)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&key[0..length as usize])?;
             }
             Packet::CoreMgmtConfigReadContinue { destination } => {
@@ -1166,7 +1165,7 @@ impl Packet {
                 writer.write_u8(0xd6)?;
                 writer.write_u8(destination)?;
                 writer.write_bool(last)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::CoreMgmtConfigRemoveRequest {
@@ -1176,7 +1175,7 @@ impl Packet {
             } => {
                 writer.write_u8(0xd7)?;
                 writer.write_u8(destination)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&key[0..length as usize])?;
             }
             Packet::CoreMgmtConfigEraseRequest { destination } => {
@@ -1197,7 +1196,7 @@ impl Packet {
             } => {
                 writer.write_u8(0xdb)?;
                 writer.write_u8(destination)?;
-                writer.write_u32(payload_length)?;
+                writer.write_u32::<NativeEndian>(payload_length)?;
             }
             Packet::CoreMgmtFlashAddDataRequest {
                 destination,
@@ -1208,7 +1207,7 @@ impl Packet {
                 writer.write_u8(0xdc)?;
                 writer.write_u8(destination)?;
                 writer.write_bool(last)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[..length as usize])?;
             }
             Packet::CoreMgmtDropLinkAck { destination } => {
@@ -1219,13 +1218,13 @@ impl Packet {
             Packet::CoreMgmtGetLogReply { last, length, data } => {
                 writer.write_u8(0xdf)?;
                 writer.write_bool(last)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::CoreMgmtConfigReadReply { last, length, value } => {
                 writer.write_u8(0xe0)?;
                 writer.write_bool(last)?;
-                writer.write_u16(length)?;
+                writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&value[0..length as usize])?;
             }
             Packet::CoreMgmtReply { succeeded } => {

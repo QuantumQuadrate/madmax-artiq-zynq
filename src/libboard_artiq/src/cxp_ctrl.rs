@@ -3,7 +3,7 @@ use core::fmt;
 use byteorder::{ByteOrder, NetworkEndian};
 use core_io::{Error as IoError, Read, Write};
 use crc::crc32::checksum_ieee;
-use io::Cursor;
+use io::{Cursor, ProtoRead, ProtoWrite};
 
 pub const CTRL_PACKET_MAXSIZE: usize = 128; // for compatibility with version1.x compliant Devices - Section 12.1.6 (CXP-001-2021)
 pub const DATA_MAXSIZE: usize =
@@ -65,56 +65,14 @@ fn get_cxp_crc(bytes: &[u8]) -> u32 {
     (!checksum_ieee(bytes)).swap_bytes()
 }
 
-trait CxpRead {
-    fn read_u8(&mut self) -> Result<u8, Error>;
-
-    fn read_u16(&mut self) -> Result<u16, Error>;
-
-    fn read_u32(&mut self) -> Result<u32, Error>;
-
-    fn read_u64(&mut self) -> Result<u64, Error>;
-
-    fn read_exact_4x(&mut self, buf: &mut [u8]) -> Result<(), Error>;
-
-    fn read_4x_u8(&mut self) -> Result<u8, Error>;
-
-    fn read_4x_u16(&mut self) -> Result<u16, Error>;
-
-    fn read_4x_u32(&mut self) -> Result<u32, Error>;
-}
-impl<Cursor: Read> CxpRead for Cursor {
-    fn read_u8(&mut self) -> Result<u8, Error> {
-        let mut bytes = [0; 1];
-        self.read_exact(&mut bytes)?;
-        Ok(bytes[0])
-    }
-
-    fn read_u16(&mut self) -> Result<u16, Error> {
-        let mut bytes = [0; 2];
-        self.read_exact(&mut bytes)?;
-        Ok(NetworkEndian::read_u16(&bytes))
-    }
-
-    fn read_u32(&mut self) -> Result<u32, Error> {
-        let mut bytes = [0; 4];
-        self.read_exact(&mut bytes)?;
-        Ok(NetworkEndian::read_u32(&bytes))
-    }
-
-    fn read_u64(&mut self) -> Result<u64, Error> {
-        let mut bytes = [0; 8];
-        self.read_exact(&mut bytes)?;
-        Ok(NetworkEndian::read_u64(&bytes))
-    }
-
+trait CxpRead: Read {
     fn read_exact_4x(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+        let mut temp = [0u8; 4];
         for byte in buf {
             // Section 9.2.2.1 (CXP-001-2021)
             // decoder should immune to single bit errors when handling 4x duplicated characters
-            let a = self.read_u8()?;
-            let b = self.read_u8()?;
-            let c = self.read_u8()?;
-            let d = self.read_u8()?;
+            self.read_exact(&mut temp)?;
+            let [a, b, c, d] = temp;
             // vote and return majority
             *byte = a & b & c | a & b & d | a & c & d | b & c & d;
         }
@@ -140,6 +98,9 @@ impl<Cursor: Read> CxpRead for Cursor {
     }
 }
 
+impl<T: Read> CxpRead for T {}
+impl<T: Write> CxpWrite for T {}
+
 #[derive(Debug)]
 pub enum RXCTRLPacket {
     CtrlReply {
@@ -157,7 +118,7 @@ pub enum RXCTRLPacket {
 }
 
 impl RXCTRLPacket {
-    pub fn read_from(reader: &mut Cursor<&mut [u8]>) -> Result<Self, Error> {
+    pub fn read_from(reader: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         match reader.read_4x_u8()? {
             0x03 => RXCTRLPacket::get_ctrl_packet(reader, false),
             0x06 => RXCTRLPacket::get_ctrl_packet(reader, true),
@@ -165,7 +126,7 @@ impl RXCTRLPacket {
         }
     }
 
-    fn get_ctrl_packet(reader: &mut Cursor<&mut [u8]>, with_tag: bool) -> Result<Self, Error> {
+    fn get_ctrl_packet(reader: &mut Cursor<&[u8]>, with_tag: bool) -> Result<Self, Error> {
         let mut tag: Option<u8> = None;
         if with_tag {
             tag = Some(reader.read_4x_u8()?);
@@ -175,7 +136,7 @@ impl RXCTRLPacket {
 
         match ackcode {
             0x00 | 0x04 => {
-                let length = reader.read_u32()?;
+                let length = reader.read_u32::<NetworkEndian>()?;
                 let mut data: [u8; DATA_MAXSIZE] = [0; DATA_MAXSIZE];
                 reader.read(&mut data[0..length as usize])?;
 
@@ -188,7 +149,7 @@ impl RXCTRLPacket {
                 // Section 9.6.3 (CXP-001-2021)
                 // only bytes after the first 4 are used in calculating the checksum
                 let checksum = get_cxp_crc(&reader.get_ref()[4..reader.position()]);
-                if reader.read_u32()? != checksum {
+                if reader.read_u32::<NetworkEndian>()? != checksum {
                     return Err(Error::CorruptedPacket);
                 }
 
@@ -207,32 +168,7 @@ impl RXCTRLPacket {
     }
 }
 
-trait CxpWrite {
-    fn write_u8(&mut self, value: u8) -> Result<(), Error>;
-
-    fn write_u32(&mut self, value: u32) -> Result<(), Error>;
-
-    fn write_all_4x(&mut self, buf: &[u8]) -> Result<(), Error>;
-
-    fn write_4x_u8(&mut self, value: u8) -> Result<(), Error>;
-
-    fn write_4x_u16(&mut self, value: u16) -> Result<(), Error>;
-
-    fn write_4x_u32(&mut self, value: u32) -> Result<(), Error>;
-}
-impl<Cursor: Write> CxpWrite for Cursor {
-    fn write_u8(&mut self, value: u8) -> Result<(), Error> {
-        self.write_all(&[value])?;
-        Ok(())
-    }
-
-    fn write_u32(&mut self, value: u32) -> Result<(), Error> {
-        let mut bytes = [0; 4];
-        NetworkEndian::write_u32(&mut bytes, value);
-        self.write_all(&bytes)?;
-        Ok(())
-    }
-
+trait CxpWrite: Write {
     fn write_all_4x(&mut self, buf: &[u8]) -> Result<(), Error> {
         for byte in buf {
             self.write_all(&[*byte; 4])?;
@@ -290,12 +226,12 @@ impl TXCTRLPacket {
                 NetworkEndian::write_u24(&mut bytes, length);
                 writer.write_all(&[0x00, bytes[0], bytes[1], bytes[2]])?;
 
-                writer.write_u32(addr)?;
+                writer.write_u32::<NetworkEndian>(addr)?;
 
                 // Section 9.6.2 (CXP-001-2021)
                 // only bytes after the first 4 are used in calculating the checksum
                 let checksum = get_cxp_crc(&writer.get_ref()[4..writer.position()]);
-                writer.write_u32(checksum)?;
+                writer.write_u32::<NetworkEndian>(checksum)?;
             }
             TXCTRLPacket::CtrlWrite {
                 tag,
@@ -317,7 +253,7 @@ impl TXCTRLPacket {
                 NetworkEndian::write_u24(&mut bytes, length);
                 writer.write_all(&[0x01, bytes[0], bytes[1], bytes[2]])?;
 
-                writer.write_u32(addr)?;
+                writer.write_u32::<NetworkEndian>(addr)?;
                 writer.write_all(&data[0..length as usize])?;
 
                 // Section 9.6.2 (CXP-001-2021)
@@ -330,7 +266,7 @@ impl TXCTRLPacket {
                 // Section 9.6.2 (CXP-001-2021)
                 // only bytes after the first 4 are used in calculating the checksum
                 let checksum = get_cxp_crc(&writer.get_ref()[4..writer.position()]);
-                writer.write_u32(checksum)?;
+                writer.write_u32::<NetworkEndian>(checksum)?;
             }
         }
         Ok(())

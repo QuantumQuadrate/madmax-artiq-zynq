@@ -4,7 +4,8 @@ use alloc::{collections::BTreeMap,
             vec::Vec};
 use core::{slice, str};
 
-use core_io::{Error as IoError, Write};
+use byteorder::NativeEndian;
+use core_io::Error as IoError;
 use cslice::AsCSlice;
 use dma::{Error as DmaError, Manager as DmaManager};
 use io::{Cursor, ProtoWrite};
@@ -980,27 +981,24 @@ impl<'a> Manager<'_> {
     }
 }
 
-fn write_exception<W>(
+fn write_exception<W: ProtoWrite>(
     writer: &mut W,
     exceptions: &[Option<eh_artiq::Exception>],
     stack_pointers: &[eh_artiq::StackPointerBacktrace],
     backtrace: &[(usize, usize)],
     async_errors: u8,
-) -> Result<(), Error>
-where
-    W: Write + ?Sized,
-{
+) -> Result<(), Error> {
     /* header */
-    writer.write_bytes(&[0x5a, 0x5a, 0x5a, 0x5a, /*Reply::KernelException*/ 9])?;
-    writer.write_u32(exceptions.len() as u32)?;
+    writer.write_bytes::<NativeEndian>(&[0x5a, 0x5a, 0x5a, 0x5a, /*Reply::KernelException*/ 9])?;
+    writer.write_u32::<NativeEndian>(exceptions.len() as u32)?;
     for exception in exceptions.iter() {
         let exception = exception.as_ref().unwrap();
-        writer.write_u32(exception.id)?;
+        writer.write_u32::<NativeEndian>(exception.id)?;
 
         if exception.message.len() == usize::MAX {
             // exception with host string
-            writer.write_u32(u32::MAX)?;
-            writer.write_u32(exception.message.as_ptr() as u32)?;
+            writer.write_u32::<NativeEndian>(u32::MAX)?;
+            writer.write_u32::<NativeEndian>(exception.message.as_ptr() as u32)?;
         } else {
             let msg =
                 str::from_utf8(unsafe { slice::from_raw_parts(exception.message.as_ptr(), exception.message.len()) })
@@ -1013,26 +1011,26 @@ where
                             ksupport::resolve_channel_name(exception.param[0] as u32)
                         ),
                     );
-            writer.write_string(&msg)?;
+            writer.write_string::<NativeEndian>(&msg)?;
         }
-        writer.write_u64(exception.param[0] as u64)?;
-        writer.write_u64(exception.param[1] as u64)?;
-        writer.write_u64(exception.param[2] as u64)?;
-        writer.write_bytes(exception.file.as_ref())?;
-        writer.write_u32(exception.line)?;
-        writer.write_u32(exception.column)?;
-        writer.write_bytes(exception.function.as_ref())?;
+        writer.write_u64::<NativeEndian>(exception.param[0] as u64)?;
+        writer.write_u64::<NativeEndian>(exception.param[1] as u64)?;
+        writer.write_u64::<NativeEndian>(exception.param[2] as u64)?;
+        writer.write_bytes::<NativeEndian>(exception.file.as_ref())?;
+        writer.write_u32::<NativeEndian>(exception.line)?;
+        writer.write_u32::<NativeEndian>(exception.column)?;
+        writer.write_bytes::<NativeEndian>(exception.function.as_ref())?;
     }
 
     for sp in stack_pointers.iter() {
-        writer.write_u32(sp.stack_pointer as u32)?;
-        writer.write_u32(sp.initial_backtrace_size as u32)?;
-        writer.write_u32(sp.current_backtrace_size as u32)?;
+        writer.write_u32::<NativeEndian>(sp.stack_pointer as u32)?;
+        writer.write_u32::<NativeEndian>(sp.initial_backtrace_size as u32)?;
+        writer.write_u32::<NativeEndian>(sp.current_backtrace_size as u32)?;
     }
-    writer.write_u32(backtrace.len() as u32)?;
+    writer.write_u32::<NativeEndian>(backtrace.len() as u32)?;
     for &(addr, sp) in backtrace {
-        writer.write_u32(addr as u32)?;
-        writer.write_u32(sp as u32)?;
+        writer.write_u32::<NativeEndian>(addr as u32)?;
+        writer.write_u32::<NativeEndian>(sp as u32)?;
     }
     writer.write_u8(async_errors as u8)?;
     Ok(())

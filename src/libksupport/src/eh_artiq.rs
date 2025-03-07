@@ -14,6 +14,7 @@
 
 use core::mem;
 
+use byteorder::NativeEndian;
 use core_io::Error as ReadError;
 use cslice::{AsCSlice, CSlice};
 use dwarf::eh::{self, EHAction, EHContext};
@@ -302,9 +303,9 @@ pub unsafe extern "C" fn raise(exception: *const Exception) -> ! {
 }
 
 fn read_exception_string<'a>(reader: &mut Cursor<&[u8]>) -> Result<CSlice<'a, u8>, ReadError> {
-    let len = reader.read_u32()? as usize;
+    let len = reader.read_u32::<NativeEndian>()? as usize;
     if len == usize::MAX {
-        let data = reader.read_u32()?;
+        let data = reader.read_u32::<NativeEndian>()?;
         Ok(unsafe { CSlice::new(data as *const u8, len) })
     } else {
         let pos = reader.position();
@@ -329,19 +330,19 @@ fn read_exception(raw_exception: &[u8]) -> Result<Exception, ReadError> {
     while byte != 0x09 {
         byte = reader.read_u8()?;
     }
-    let _len = reader.read_u32()?;
+    let _len = reader.read_u32::<NativeEndian>()?;
     // ignore the remaining exceptions, stack traces etc. - unwinding from another device would be unwise anyway
     Ok(Exception {
-        id: reader.read_u32()?,
+        id: reader.read_u32::<NativeEndian>()?,
         message: read_exception_string(&mut reader)?,
         param: [
-            reader.read_u64()? as i64,
-            reader.read_u64()? as i64,
-            reader.read_u64()? as i64,
+            reader.read_u64::<NativeEndian>()? as i64,
+            reader.read_u64::<NativeEndian>()? as i64,
+            reader.read_u64::<NativeEndian>()? as i64,
         ],
         file: read_exception_string(&mut reader)?,
-        line: reader.read_u32()?,
-        column: reader.read_u32()?,
+        line: reader.read_u32::<NativeEndian>()?,
+        column: reader.read_u32::<NativeEndian>()?,
         function: read_exception_string(&mut reader)?,
     })
 }

@@ -38,7 +38,7 @@ fn receive_ctrl_packet() -> Result<Option<RXCTRLPacket>, Error> {
             let read_buffer_ptr = csr::cxp_grabber::core_rx_read_ptr_read() as usize;
             let ptr = (mem::CXP_MEM_BASE + mem::CXP_MEM_SIZE / 2 + read_buffer_ptr * CTRL_PACKET_MAXSIZE) as *mut u32;
 
-            let mut reader = Cursor::new(slice::from_raw_parts_mut(ptr as *mut u8, CTRL_PACKET_MAXSIZE));
+            let mut reader = Cursor::new(slice::from_raw_parts(ptr as *const u8, CTRL_PACKET_MAXSIZE));
             let packet = RXCTRLPacket::read_from(&mut reader);
 
             csr::cxp_grabber::core_rx_pending_packet_write(1);

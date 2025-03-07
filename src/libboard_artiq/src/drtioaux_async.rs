@@ -1,5 +1,6 @@
 use core::slice;
 
+use byteorder::NativeEndian;
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use crc;
 use io::{proto::{ProtoRead, ProtoWrite},
@@ -68,7 +69,7 @@ pub async fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
         let checksum_at = reader.position() + padding;
         let checksum = crc::crc32::checksum_ieee(&reader.get_ref()[0..checksum_at]);
         reader.set_position(checksum_at);
-        if reader.read_u32()? != checksum {
+        if reader.read_u32::<NativeEndian>()? != checksum {
             return Err(Error::CorruptedPacket);
         }
         Ok(packet)
@@ -124,7 +125,7 @@ pub async fn send(linkno: u8, packet: &Packet) -> Result<(), Error> {
         }
 
         let checksum = crc::crc32::checksum_ieee(&writer.get_ref()[0..writer.position()]);
-        writer.write_u32(checksum)?;
+        writer.write_u32::<NativeEndian>(checksum)?;
 
         Ok(writer.position())
     })

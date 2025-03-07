@@ -9,6 +9,7 @@ extern crate alloc;
 
 use alloc::{collections::BTreeMap, string::String};
 
+use byteorder::NativeEndian;
 use io::{Cursor, ProtoRead};
 use libasync::block_async;
 use libconfig::Config;
@@ -123,10 +124,10 @@ fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
         .read("device_map")
         .and_then(|raw_bytes| {
             let mut bytes_cr = Cursor::new(raw_bytes);
-            let size = bytes_cr.read_u32().unwrap();
+            let size = bytes_cr.read_u32::<NativeEndian>().unwrap();
             for _ in 0..size {
-                let channel = bytes_cr.read_u32().unwrap();
-                let device_name = bytes_cr.read_string().unwrap();
+                let channel = bytes_cr.read_u32::<NativeEndian>().unwrap();
+                let device_name = bytes_cr.read_string::<NativeEndian>().unwrap();
                 if let Some(old_entry) = device_map.insert(channel, device_name.clone()) {
                     warn!(
                         "conflicting device map entries for RTIO channel {}: '{}' and '{}'",

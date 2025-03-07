@@ -1,8 +1,9 @@
 use alloc::vec::Vec;
 
 use byteorder::{ByteOrder, NativeEndian};
+use core_io::Write;
 use crc::crc32;
-use io::{ProtoRead, ProtoWrite};
+use io::ProtoRead;
 use libboard_artiq::{drtioaux_proto::SAT_PAYLOAD_MAX_SIZE,
                      logger::{BufferLogger, LogBufferRef}};
 use libconfig::Config;
@@ -97,9 +98,11 @@ impl<'a> Manager<'_> {
 
     pub fn write_config(&mut self) -> Result<()> {
         let mut payload = &self.config_payload[..];
-        let key = payload.read_string().map_err(|_err| error!("error on reading key"))?;
+        let key = payload
+            .read_string::<NativeEndian>()
+            .map_err(|_err| error!("error on reading key"))?;
         debug!("write key: {}", key);
-        let value = payload.read_bytes().unwrap();
+        let value = payload.read_bytes::<NativeEndian>().unwrap();
 
         self.cfg
             .write(&key, value)

@@ -1,7 +1,7 @@
 use core::str;
 
 use byteorder::{ByteOrder, NativeEndian};
-use core_io::{Error, Read, Write};
+use core_io::Error;
 use cslice::{CMutSlice, CSlice};
 use io::{ProtoRead, ProtoWrite};
 use log::trace;
@@ -37,7 +37,7 @@ pub unsafe fn align_ptr_mut<T>(ptr: *mut ()) -> *mut T {
 
 // versions for reader rather than TcpStream
 // they will be made into sync for satellite subkernels later
-unsafe fn recv_elements<F, R>(
+unsafe fn recv_elements<F, R: ProtoRead>(
     reader: &mut R,
     elt_tag: Tag,
     length: usize,
@@ -46,7 +46,6 @@ unsafe fn recv_elements<F, R>(
 ) -> Result<(), Error>
 where
     F: FnMut(usize) -> *mut (),
-    R: Read + ?Sized,
 {
     match elt_tag {
         Tag::Bool => {
@@ -82,7 +81,7 @@ where
 unsafe fn recv_value<F, R>(reader: &mut R, tag: Tag, data: &mut *mut (), alloc: &mut F) -> Result<(), Error>
 where
     F: FnMut(usize) -> *mut (),
-    R: Read + ?Sized,
+    R: ProtoRead,
 {
     macro_rules! consume_value {
         ($ty:ty, | $ptr:ident | $map:expr) => {{
@@ -99,16 +98,16 @@ where
             Ok(())
         }),
         Tag::Int32 => consume_value!(i32, |ptr| {
-            *ptr = reader.read_u32()? as i32;
+            *ptr = reader.read_u32::<NativeEndian>()? as i32;
             Ok(())
         }),
         Tag::Int64 | Tag::Float64 => consume_value!(i64, |ptr| {
-            *ptr = reader.read_u64()? as i64;
+            *ptr = reader.read_u64::<NativeEndian>()? as i64;
             Ok(())
         }),
         Tag::String | Tag::Bytes | Tag::ByteArray => {
             consume_value!(CMutSlice<u8>, |ptr| {
-                let length = reader.read_u32()? as usize;
+                let length = reader.read_u32::<NativeEndian>()? as usize;
                 *ptr = CMutSlice::new(alloc(length) as *mut u8, length);
                 reader.read_exact((*ptr).as_mut())?;
                 Ok(())
@@ -133,7 +132,7 @@ where
             }
             consume_value!(*mut List, |ptr_to_list| {
                 let tag = it.clone().next().expect("truncated tag");
-                let length = reader.read_u32()? as usize;
+                let length = reader.read_u32::<NativeEndian>()? as usize;
 
                 let list_size = 4 + 4;
                 let storage_offset = round_up(list_size, tag.alignment());
@@ -152,7 +151,7 @@ where
             consume_value!(*mut (), |buffer| {
                 let mut total_len: usize = 1;
                 for _ in 0..num_dims {
-                    let len = reader.read_u32()? as usize;
+                    let len = reader.read_u32::<NativeEndian>()? as usize;
                     total_len *= len;
                     consume_value!(usize, |ptr| *ptr = len)
                 }
@@ -183,7 +182,7 @@ pub fn recv_return<'a, F, R>(
 ) -> Result<&'a [u8], Error>
 where
     F: FnMut(usize) -> *mut (),
-    R: Read + ?Sized,
+    R: ProtoRead,
 {
     let mut it = TagIterator::new(tag_bytes);
     trace!("recv ...->{}", it);
@@ -195,16 +194,13 @@ where
     Ok(it.data)
 }
 
-unsafe fn send_elements<W>(
+unsafe fn send_elements<W: ProtoWrite>(
     writer: &mut W,
     elt_tag: Tag,
     length: usize,
     data: *const (),
     write_tags: bool,
-) -> Result<(), Error>
-where
-    W: Write + ?Sized,
-{
+) -> Result<(), Error> {
     if write_tags {
         writer.write_u8(elt_tag.as_u8())?;
     }
@@ -233,8 +229,12 @@ where
     Ok(())
 }
 
-unsafe fn send_value<W>(writer: &mut W, tag: Tag, data: &mut *const (), write_tags: bool) -> Result<(), Error>
-where W: Write + ?Sized {
+unsafe fn send_value<W: ProtoWrite>(
+    writer: &mut W,
+    tag: Tag,
+    data: &mut *const (),
+    write_tags: bool,
+) -> Result<(), Error> {
     macro_rules! consume_value {
         ($ty:ty, | $ptr:ident | $map:expr) => {{
             let $ptr = align_ptr::<$ty>(*data);
@@ -249,12 +249,14 @@ where W: Write + ?Sized {
     match tag {
         Tag::None => Ok(()),
         Tag::Bool => consume_value!(u8, |ptr| writer.write_u8(*ptr)),
-        Tag::Int32 => consume_value!(u32, |ptr| writer.write_u32(*ptr)),
-        Tag::Int64 | Tag::Float64 => consume_value!(u64, |ptr| writer.write_u64(*ptr)),
+        Tag::Int32 => consume_value!(u32, |ptr| writer.write_u32::<NativeEndian>(*ptr)),
+        Tag::Int64 | Tag::Float64 => consume_value!(u64, |ptr| writer.write_u64::<NativeEndian>(*ptr)),
         Tag::String => consume_value!(CSlice<u8>, |ptr| {
-            writer.write_string(str::from_utf8((*ptr).as_ref()).unwrap())
+            writer.write_string::<NativeEndian>(str::from_utf8((*ptr).as_ref()).unwrap())
         }),
-        Tag::Bytes | Tag::ByteArray => consume_value!(CSlice<u8>, |ptr| writer.write_bytes((*ptr).as_ref())),
+        Tag::Bytes | Tag::ByteArray => {
+            consume_value!(CSlice<u8>, |ptr| writer.write_bytes::<NativeEndian>((*ptr).as_ref()))
+        }
         Tag::Tuple(it, arity) => {
             let mut it = it.clone();
             if write_tags {
@@ -277,7 +279,7 @@ where W: Write + ?Sized {
             }
             consume_value!(&List, |ptr| {
                 let length = (**ptr).length as usize;
-                writer.write_u32((*ptr).length)?;
+                writer.write_u32::<NativeEndian>((*ptr).length)?;
                 let tag = it.clone().next().expect("truncated tag");
                 send_elements(writer, tag, length, (**ptr).elements, write_tags)
             })
@@ -292,7 +294,7 @@ where W: Write + ?Sized {
                 let mut total_len = 1;
                 for _ in 0..num_dims {
                     consume_value!(u32, |len| {
-                        writer.write_u32(*len)?;
+                        writer.write_u32::<NativeEndian>(*len)?;
                         total_len *= *len;
                     })
                 }
@@ -313,7 +315,7 @@ where W: Write + ?Sized {
                 name: CSlice<'a, u8>,
             }
             consume_value!(Keyword, |ptr| {
-                writer.write_string(str::from_utf8((*ptr).name.as_ref()).unwrap())?;
+                writer.write_string::<NativeEndian>(str::from_utf8((*ptr).name.as_ref()).unwrap())?;
                 let tag = it.clone().next().expect("truncated tag");
                 let mut data = ptr.offset(1) as *const ();
                 send_value(writer, tag, &mut data, write_tags)
@@ -326,28 +328,25 @@ where W: Write + ?Sized {
             struct Object {
                 id: u32,
             }
-            consume_value!(*const Object, |ptr| writer.write_u32((**ptr).id))
+            consume_value!(*const Object, |ptr| writer.write_u32::<NativeEndian>((**ptr).id))
         }
     }
 }
 
-pub fn send_args<W>(
+pub fn send_args<W: ProtoWrite>(
     writer: &mut W,
     service: u32,
     tag_bytes: &[u8],
     data: *const *const (),
     write_tags: bool,
-) -> Result<(), Error>
-where
-    W: Write + ?Sized,
-{
+) -> Result<(), Error> {
     let (arg_tags_bytes, return_tag_bytes) = split_tag(tag_bytes);
 
     let mut args_it = TagIterator::new(arg_tags_bytes);
     let return_it = TagIterator::new(return_tag_bytes);
     trace!("send<{}>({})->{}", service, args_it, return_it);
 
-    writer.write_u32(service)?;
+    writer.write_u32::<NativeEndian>(service)?;
     for index in 0.. {
         if let Some(arg_tag) = args_it.next() {
             let mut data = unsafe { *data.offset(index) };
@@ -357,7 +356,7 @@ where
         }
     }
     writer.write_u8(0)?;
-    writer.write_bytes(return_tag_bytes)?;
+    writer.write_bytes::<NativeEndian>(return_tag_bytes)?;
 
     Ok(())
 }
