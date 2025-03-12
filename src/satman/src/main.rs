@@ -1612,9 +1612,7 @@ pub extern "C" fn main_core0() -> i32 {
     #[cfg(has_drtio_eem)]
     {
         drtio_eem::init(&mut timer, &cfg);
-        unsafe {
-            csr::eem_transceiver::rx_ready_write(1)
-        }
+        unsafe { csr::eem_transceiver::rx_ready_write(1) }
     }
 
     #[cfg(has_drtio_routing)]
