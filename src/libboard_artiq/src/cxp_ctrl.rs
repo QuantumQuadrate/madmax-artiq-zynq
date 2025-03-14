@@ -84,18 +84,6 @@ trait CxpRead: Read {
         self.read_exact_4x(&mut bytes)?;
         Ok(bytes[0])
     }
-
-    fn read_4x_u16(&mut self) -> Result<u16, Error> {
-        let mut bytes = [0; 2];
-        self.read_exact_4x(&mut bytes)?;
-        Ok(NetworkEndian::read_u16(&bytes))
-    }
-
-    fn read_4x_u32(&mut self) -> Result<u32, Error> {
-        let mut bytes = [0; 4];
-        self.read_exact_4x(&mut bytes)?;
-        Ok(NetworkEndian::read_u32(&bytes))
-    }
 }
 
 impl<T: Read> CxpRead for T {}
@@ -178,18 +166,6 @@ trait CxpWrite: Write {
 
     fn write_4x_u8(&mut self, value: u8) -> Result<(), Error> {
         self.write_all_4x(&[value])
-    }
-
-    fn write_4x_u16(&mut self, value: u16) -> Result<(), Error> {
-        let mut bytes = [0; 2];
-        NetworkEndian::write_u16(&mut bytes, value);
-        self.write_all_4x(&bytes)
-    }
-
-    fn write_4x_u32(&mut self, value: u32) -> Result<(), Error> {
-        let mut bytes = [0; 4];
-        NetworkEndian::write_u32(&mut bytes, value);
-        self.write_all_4x(&bytes)
     }
 }
 

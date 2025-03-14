@@ -901,6 +901,7 @@ macro_rules! process {
     }}
 }
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>, pub GlobalTimer);
 
