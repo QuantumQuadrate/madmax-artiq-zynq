@@ -44,7 +44,10 @@ use libboard_artiq::{drtio_routing, drtioaux,
                      pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
-use libboard_zynq::{i2c::I2c, print, println, slcr, time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::{i2c::{Error as I2cError, I2c},
+                    print, println, slcr,
+                    time::Milliseconds,
+                    timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
@@ -435,11 +438,18 @@ fn process_aux_packet(
                 timer
             );
             match i2c.write(data) {
-                Ok(ack) => drtioaux::send(
+                Ok(()) => drtioaux::send(
                     0,
                     &drtioaux::Packet::I2cWriteReply {
                         succeeded: true,
-                        ack: ack,
+                        ack: true,
+                    },
+                ),
+                Err(I2cError::Nack) => drtioaux::send(
+                    0,
+                    &drtioaux::Packet::I2cWriteReply {
+                        succeeded: true,
+                        ack: false,
                     },
                 ),
                 Err(_) => drtioaux::send(

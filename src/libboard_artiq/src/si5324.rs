@@ -1,7 +1,9 @@
 use core::result;
 
 use embedded_hal::blocking::delay::DelayUs;
-use libboard_zynq::{i2c::I2c, time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::{i2c::{Error as I2cError, I2c},
+                    time::Milliseconds,
+                    timer::GlobalTimer};
 use log::info;
 
 #[cfg(not(si5324_soft_reset))]
@@ -97,15 +99,18 @@ fn map_frequency_settings(settings: &FrequencySettings) -> Result<FrequencySetti
 
 fn write(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
     i2c.start().unwrap();
-    if !i2c.write(ADDRESS << 1).unwrap() {
-        return Err("Si5324 failed to ack write address");
-    }
-    if !i2c.write(reg).unwrap() {
-        return Err("Si5324 failed to ack register");
-    }
-    if !i2c.write(val).unwrap() {
-        return Err("Si5324 failed to ack value");
-    }
+    i2c.write(ADDRESS << 1).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack write address",
+        err => err.into(),
+    })?;
+    i2c.write(reg).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack register",
+        err => err.into(),
+    })?;
+    i2c.write(val).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack value",
+        err => err.into(),
+    })?;
     i2c.stop().unwrap();
     Ok(())
 }
@@ -113,29 +118,37 @@ fn write(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
 #[allow(dead_code)]
 fn write_no_ack_value(i2c: &mut I2c, reg: u8, val: u8) -> Result<()> {
     i2c.start().unwrap();
-    if !i2c.write(ADDRESS << 1).unwrap() {
-        return Err("Si5324 failed to ack write address");
+    i2c.write(ADDRESS << 1).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack write address",
+        err => err.into(),
+    })?;
+    i2c.write(reg).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack register",
+        err => err.into(),
+    })?;
+    match i2c.write(val) {
+        Ok(()) | Err(I2cError::Nack) => (),
+        Err(e) => return Err(e.into()),
     }
-    if !i2c.write(reg).unwrap() {
-        return Err("Si5324 failed to ack register");
-    }
-    i2c.write(val).unwrap();
     i2c.stop().unwrap();
     Ok(())
 }
 
 fn read(i2c: &mut I2c, reg: u8) -> Result<u8> {
     i2c.start().unwrap();
-    if !i2c.write(ADDRESS << 1).unwrap() {
-        return Err("Si5324 failed to ack write address");
-    }
-    if !i2c.write(reg).unwrap() {
-        return Err("Si5324 failed to ack register");
-    }
+    i2c.write(ADDRESS << 1).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack write address",
+        err => err.into(),
+    })?;
+    i2c.write(reg).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack register",
+        err => err.into(),
+    })?;
     i2c.restart().unwrap();
-    if !i2c.write((ADDRESS << 1) | 1).unwrap() {
-        return Err("Si5324 failed to ack read address");
-    }
+    i2c.write((ADDRESS << 1) | 1).map_err(|err| match err {
+        I2cError::Nack => "Si5324 failed to ack read address",
+        err => err.into(),
+    })?;
     let val = i2c.read(false).unwrap();
     i2c.stop().unwrap();
     Ok(val)

@@ -122,7 +122,11 @@ impl IoExpander {
         // Check for ack from io expander
         self.select(i2c)?;
         i2c.start()?;
-        let ack = i2c.write(self.address)?;
+        let ack = match i2c.write(self.address) {
+            Ok(()) => true,
+            Err(i2c::Error::Nack) => false,
+            Err(e) => return Err(e.into()),
+        };
         i2c.stop()?;
         Ok(ack)
     }

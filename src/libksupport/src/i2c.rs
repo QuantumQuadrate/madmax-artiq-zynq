@@ -1,6 +1,6 @@
 use core::mem::MaybeUninit;
 
-use libboard_zynq::i2c::I2c;
+use libboard_zynq::i2c::{Error, I2c};
 
 use crate::artiq_raise;
 
@@ -38,7 +38,8 @@ pub extern "C" fn write(busno: i32, data: i32) -> bool {
         artiq_raise!("I2CError", "I2C bus could not be accessed");
     }
     match get_bus().write(data as u8) {
-        Ok(r) => r,
+        Ok(()) => true,
+        Err(Error::Nack) => false,
         Err(_) => artiq_raise!("I2CError", "I2C write failed"),
     }
 }
