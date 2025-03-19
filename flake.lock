@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1741925484,
-        "narHash": "sha256-sovpN0Ii+GOVY4Qku8eal5hWATScCc1VbYnfdwc88dQ=",
+        "lastModified": 1742274039,
+        "narHash": "sha256-K0Np2ZvtB37Gq1ZbKf1mfSWfMbtPjZVdKtOHAS/Pauk=",
         "ref": "refs/heads/master",
-        "rev": "cdacbf71c569b0968c81fb358838e9b69946af26",
-        "revCount": 9192,
+        "rev": "9e655332e35bac5c365e80c0c595767f5953bcb3",
+        "revCount": 9198,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -229,11 +229,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1741773807,
-        "narHash": "sha256-pywveAL5C0Jl+qo8XmgAL11RfrnSW/Afu3Yg1K/lAcU=",
+        "lastModified": 1742368409,
+        "narHash": "sha256-da8QiftpLR/UsNFc0vGczg+EGAHgxuQCvy2QWhRfYVk=",
         "ref": "refs/heads/master",
-        "rev": "905b97431de37ccc61f8babd7def99627578a843",
-        "revCount": 694,
+        "rev": "671cfc894c0c285008a8830b3c32cd62cce881a0",
+        "revCount": 695,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
