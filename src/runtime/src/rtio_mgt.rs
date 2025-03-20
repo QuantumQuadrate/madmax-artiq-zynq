@@ -15,8 +15,8 @@ pub mod drtio {
     use embedded_hal::blocking::delay::DelayMs;
     #[cfg(has_drtio_eem)]
     use embedded_hal::blocking::delay::DelayUs;
-    use ksupport::{resolve_channel_name, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR,
-                   SEEN_ASYNC_ERRORS};
+    use ksupport::{kernel::Message as KernelMessage, resolve_channel_name, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION,
+                   ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
     use libasync::{delay, task};
     #[cfg(has_drtio_eem)]
     use libboard_artiq::drtio_eem;
@@ -928,6 +928,91 @@ pub mod drtio {
             },
         )
         .await
+    }
+
+    pub async fn i2c_send_basic(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &RoutingTable,
+        timer: GlobalTimer,
+        request: &KernelMessage,
+        busno: u32,
+    ) -> Result<bool, Error> {
+        let destination = (busno >> 16) as u8;
+        let busno = busno as u8;
+        let packet = match request {
+            KernelMessage::I2cStartRequest(_) => Packet::I2cStartRequest { destination, busno },
+            KernelMessage::I2cRestartRequest(_) => Packet::I2cRestartRequest { destination, busno },
+            KernelMessage::I2cStopRequest(_) => Packet::I2cStopRequest { destination, busno },
+            KernelMessage::I2cSwitchSelectRequest { address, mask, .. } => Packet::I2cSwitchSelectRequest {
+                destination,
+                busno,
+                address: *address,
+                mask: *mask,
+            },
+            _ => unreachable!(),
+        };
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        let reply = aux_transact(aux_mutex, linkno, routing_table, &packet, timer).await?;
+        match reply {
+            Packet::I2cBasicReply { succeeded } => Ok(succeeded),
+            _ => Err(Error::UnexpectedReply),
+        }
+    }
+
+    pub async fn i2c_send_write(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &RoutingTable,
+        timer: GlobalTimer,
+        busno: u32,
+        data: u8,
+    ) -> Result<(bool, bool), Error> {
+        let destination = (busno >> 16) as u8;
+        let busno = busno as u8;
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        let reply = aux_transact(
+            aux_mutex,
+            linkno,
+            routing_table,
+            &Packet::I2cWriteRequest {
+                destination,
+                busno,
+                data,
+            },
+            timer,
+        )
+        .await?;
+        match reply {
+            Packet::I2cWriteReply { succeeded, ack } => Ok((succeeded, ack)),
+            _ => Err(Error::UnexpectedReply),
+        }
+    }
+
+    pub async fn i2c_send_read(
+        aux_mutex: &Rc<Mutex<bool>>,
+        routing_table: &RoutingTable,
+        timer: GlobalTimer,
+        busno: u32,
+        ack: bool,
+    ) -> Result<(bool, u8), Error> {
+        let destination = (busno >> 16) as u8;
+        let busno = busno as u8;
+        let linkno = routing_table.0[destination as usize][0] - 1;
+        let reply = aux_transact(
+            aux_mutex,
+            linkno,
+            routing_table,
+            &Packet::I2cReadRequest {
+                destination,
+                busno,
+                ack,
+            },
+            timer,
+        )
+        .await?;
+        match reply {
+            Packet::I2cReadReply { succeeded, data } => Ok((succeeded, data)),
+            _ => Err(Error::UnexpectedReply),
+        }
     }
 }
 

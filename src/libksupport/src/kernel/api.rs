@@ -8,11 +8,11 @@ use log::{info, warn};
 use super::subkernel;
 use super::{cache,
             core1::rtio_get_destination_status,
-            dma, linalg,
+            dma, i2c, linalg,
             rpc::{rpc_recv, rpc_send, rpc_send_async}};
 #[cfg(has_cxp_grabber)]
 use crate::cxp;
-use crate::{eh_artiq, i2c, rtio};
+use crate::{eh_artiq, rtio};
 
 extern "C" {
     fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;

@@ -397,6 +397,42 @@ async fn handle_run_kernel(
                 control.borrow_mut().tx.async_send(reply).await;
             }
             #[cfg(has_drtio)]
+            kernel::Message::I2cStartRequest(busno)
+            | kernel::Message::I2cRestartRequest(busno)
+            | kernel::Message::I2cStopRequest(busno)
+            | kernel::Message::I2cSwitchSelectRequest { busno, .. } => {
+                let result = rtio_mgt::drtio::i2c_send_basic(aux_mutex, routing_table, timer, &reply, busno).await;
+                let reply = match result {
+                    Ok(succeeded) => kernel::Message::I2cBasicReply(succeeded),
+                    Err(_) => kernel::Message::I2cBasicReply(false),
+                };
+                control.borrow_mut().tx.async_send(reply).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::I2cWriteRequest { busno, data } => {
+                let result = rtio_mgt::drtio::i2c_send_write(aux_mutex, routing_table, timer, busno, data).await;
+                let reply = match result {
+                    Ok((succeeded, ack)) => kernel::Message::I2cWriteReply { succeeded, ack },
+                    Err(_) => kernel::Message::I2cWriteReply {
+                        succeeded: false,
+                        ack: false,
+                    },
+                };
+                control.borrow_mut().tx.async_send(reply).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::I2cReadRequest { busno, ack } => {
+                let result = rtio_mgt::drtio::i2c_send_read(aux_mutex, routing_table, timer, busno, ack).await;
+                let reply = match result {
+                    Ok((succeeded, data)) => kernel::Message::I2cReadReply { succeeded, data },
+                    Err(_) => kernel::Message::I2cReadReply {
+                        succeeded: false,
+                        data: 0xFF,
+                    },
+                };
+                control.borrow_mut().tx.async_send(reply).await;
+            }
+            #[cfg(has_drtio)]
             kernel::Message::SubkernelLoadRunRequest {
                 id,
                 destination: _,

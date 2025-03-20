@@ -1,7 +1,7 @@
 #[cfg(not(feature = "target_ebaz4205"))]
 use embedded_hal::blocking::delay::DelayMs;
 #[cfg(has_si5324)]
-use ksupport::i2c;
+use ksupport::kernel::i2c;
 #[cfg(not(feature = "target_ebaz4205"))]
 use libboard_artiq::pl;
 #[cfg(has_si5324)]

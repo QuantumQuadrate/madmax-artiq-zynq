@@ -22,7 +22,6 @@ pub use pl::csr::rtio_core;
 use void::Void;
 
 pub mod eh_artiq;
-pub mod i2c;
 pub mod irq;
 pub mod kernel;
 pub mod rpc;

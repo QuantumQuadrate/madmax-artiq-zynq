@@ -1538,8 +1538,8 @@ pub extern "C" fn main_core0() -> i32 {
 
     ram::init_alloc_core0();
 
-    ksupport::i2c::init();
-    let i2c = ksupport::i2c::get_bus();
+    ksupport::kernel::i2c::init();
+    let i2c = ksupport::kernel::i2c::get_bus();
 
     #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
