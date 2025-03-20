@@ -46,7 +46,9 @@ impl fmt::Display for Error {
             &Error::ROISizeTooBig(width, height) => {
                 write!(
                     f,
-                    "ROISizeTooBig - The maximum ROIViewer size is {} pixels but the ROI is set to {} ({}x{}) pixels",
+                    "ROISizeTooBig - The maximum ROIViewer height and total size are {} and {} pixels respectively \
+                     but the ROI is set to {} ({}x{}) pixels",
+                    ROI_MAX_SIZE / 4,
                     ROI_MAX_SIZE,
                     width * height,
                     width,
@@ -172,7 +174,7 @@ pub extern "C" fn write32(addr: i32, val: i32) {
 
 pub extern "C" fn start_roi_viewer(x0: i32, x1: i32, y0: i32, y1: i32) {
     let (width, height) = ((x1 - x0) as usize, (y1 - y0) as usize);
-    if width * height > ROI_MAX_SIZE {
+    if width * height > ROI_MAX_SIZE || height > ROI_MAX_SIZE / 4 {
         artiq_raise!("CXPError", format!("{}", Error::ROISizeTooBig(width, height)));
     } else {
         unsafe {
