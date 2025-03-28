@@ -111,11 +111,11 @@ impl IoExpander {
 
     fn write(&self, i2c: &mut i2c::I2c, addr: u8, value: u8) -> Result<(), &'static str> {
         i2c.start()?;
-        i2c.write(self.address)?;
-        i2c.write(addr)?;
-        i2c.write(value)?;
-        i2c.stop()?;
-        Ok(())
+        let write_res = i2c.write(self.address)
+            .and_then(i2c.write(addr))
+            .and_then(i2c.write(value));
+        let stop_res = i2c.stop()?;
+        write_res.and(stop_res)
     }
 
     fn check_ack(&self, i2c: &mut i2c::I2c) -> Result<bool, &'static str> {
