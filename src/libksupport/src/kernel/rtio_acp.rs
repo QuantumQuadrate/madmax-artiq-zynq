@@ -4,6 +4,8 @@ use cslice::CSlice;
 use libcortex_a9::asm;
 use vcell::VolatileCell;
 
+#[cfg(has_drtio)]
+use super::{Message, KERNEL_CHANNEL_1TO0};
 use crate::{artiq_raise, pl::csr, resolve_channel_name, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
@@ -55,6 +57,10 @@ pub extern "C" fn init() {
         rtio_core::reset_write(1);
         csr::rtio::engine_addr_base_write(&TRANSACTION_BUFFER as *const Transaction as u32);
         csr::rtio::enable_write(1);
+    }
+    #[cfg(has_drtio)]
+    unsafe {
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::RtioInitRequest);
     }
 }
 

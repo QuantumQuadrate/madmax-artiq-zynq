@@ -9,10 +9,11 @@ use super::subkernel;
 use super::{cache,
             core1::rtio_get_destination_status,
             dma, i2c, linalg,
-            rpc::{rpc_recv, rpc_send, rpc_send_async}};
+            rpc::{rpc_recv, rpc_send, rpc_send_async},
+            rtio};
 #[cfg(has_cxp_grabber)]
 use crate::cxp;
-use crate::{eh_artiq, rtio};
+use crate::eh_artiq;
 
 extern "C" {
     fn vsnprintf_(buffer: *mut c_char, count: size_t, format: *const c_char, va: VaList) -> c_int;

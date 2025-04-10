@@ -9,7 +9,7 @@ use core_io::Error as IoError;
 use cslice::AsCSlice;
 use dma::{Error as DmaError, Manager as DmaManager};
 use io::{Cursor, ProtoWrite};
-use ksupport::{eh_artiq, kernel, rpc, rtio};
+use ksupport::{eh_artiq, kernel, kernel::rtio, rpc};
 use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux,
                      drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE},
@@ -846,6 +846,8 @@ impl<'a> Manager<'_> {
                     destination == (self_destination as i32),
                 ));
             }
+            /* core.reset() on satellites only affects the satellite, ignore the request */
+            kernel::Message::RtioInitRequest => {}
             _ => {
                 unexpected!("unexpected message from core1 while kernel was running: {:?}", reply);
             }

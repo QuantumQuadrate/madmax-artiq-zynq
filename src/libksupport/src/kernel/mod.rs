@@ -12,6 +12,12 @@ pub mod core1;
 mod dma;
 pub mod i2c;
 mod rpc;
+#[cfg(ki_impl = "csr")]
+#[path = "rtio_csr.rs"]
+pub mod rtio;
+#[cfg(ki_impl = "acp")]
+#[path = "rtio_acp.rs"]
+pub mod rtio;
 pub use dma::DmaRecorder;
 mod cache;
 mod linalg;
@@ -42,6 +48,10 @@ pub enum Message {
         &'static [(usize, usize)],
         u8,
     ),
+
+    #[cfg(has_drtio)]
+    RtioInitRequest,
+
     RpcSend {
         is_async: bool,
         data: Vec<u8>,

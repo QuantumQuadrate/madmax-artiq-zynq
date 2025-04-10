@@ -2,6 +2,8 @@ use core::ptr::{read_volatile, write_volatile};
 
 use cslice::CSlice;
 
+#[cfg(has_drtio)]
+use super::{Message, KERNEL_CHANNEL_1TO0};
 use crate::{artiq_raise, pl::csr, resolve_channel_name, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: u8 = 1;
@@ -21,6 +23,10 @@ pub struct TimestampedData {
 pub extern "C" fn init() {
     unsafe {
         rtio_core::reset_write(1);
+    }
+    #[cfg(has_drtio)]
+    unsafe {
+        KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::RtioInitRequest);
     }
 }
 

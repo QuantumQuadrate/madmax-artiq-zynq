@@ -25,12 +25,6 @@ pub mod eh_artiq;
 pub mod irq;
 pub mod kernel;
 pub mod rpc;
-#[cfg(ki_impl = "csr")]
-#[path = "rtio_csr.rs"]
-pub mod rtio;
-#[cfg(ki_impl = "acp")]
-#[path = "rtio_acp.rs"]
-pub mod rtio;
 #[rustfmt::skip]
 #[path = "../../../build/pl.rs"]
 pub mod pl;

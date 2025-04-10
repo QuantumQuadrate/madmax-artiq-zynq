@@ -3,8 +3,8 @@ use core::{mem, ptr};
 
 use cslice::CSlice;
 
-use super::{Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE};
-use crate::{artiq_raise, pl::csr, rtio};
+use super::{rtio, Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE};
+use crate::{artiq_raise, pl::csr};
 
 #[repr(C)]
 pub struct DmaTrace {

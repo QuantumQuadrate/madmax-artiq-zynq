@@ -547,8 +547,7 @@ pub mod drtio {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn reset(aux_mutex: Rc<Mutex<bool>>, routing_table: &RoutingTable, mut timer: GlobalTimer) {
+    pub async fn reset(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, mut timer: GlobalTimer) {
         for linkno in 0..csr::DRTIO.len() {
             unsafe {
                 (csr::DRTIO[linkno].reset_write)(1);
@@ -563,14 +562,8 @@ pub mod drtio {
 
         for linkno in 0..csr::DRTIO.len() {
             let linkno = linkno as u8;
-            if task::block_on(link_rx_up(linkno, &mut timer)) {
-                let reply = task::block_on(aux_transact(
-                    &aux_mutex,
-                    linkno,
-                    routing_table,
-                    &Packet::ResetRequest,
-                    timer,
-                ));
+            if link_rx_up(linkno, &mut timer).await {
+                let reply = aux_transact(&aux_mutex, linkno, routing_table, &Packet::ResetRequest, timer).await;
                 match reply {
                     Ok(Packet::ResetAck) => (),
                     Ok(_) => error!("[LINK#{}] reset failed, received unexpected aux packet", linkno),
@@ -1066,12 +1059,4 @@ pub fn startup(
     unsafe {
         csr::rtio_core::reset_phy_write(1);
     }
-}
-
-#[allow(dead_code)]
-pub fn reset(aux_mutex: Rc<Mutex<bool>>, routing_table: &RoutingTable, timer: GlobalTimer) {
-    unsafe {
-        csr::rtio_core::reset_write(1);
-    }
-    drtio::reset(aux_mutex, routing_table, timer)
 }
