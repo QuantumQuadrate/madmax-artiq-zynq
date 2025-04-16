@@ -93,10 +93,10 @@ pub mod rx {
 
     fn change_gtx_divider(speed: CXPSpeed) {
         let div_reg = match speed {
-            CXPSpeed::CXP1 => 0x33,                    // RXOUT_DIV = 8
-            CXPSpeed::CXP2 | CXPSpeed::CXP3 => 0x22,   // RXOUT_DIV = 4
-            CXPSpeed::CXP5 | CXPSpeed::CXP6 => 0x11,   // RXOUT_DIV = 2
-            CXPSpeed::CXP10 | CXPSpeed::CXP12 => 0x00, // RXOUT_DIV = 1
+            CXPSpeed::CXP1 => 0x03,                    // TXOUT_DIV = 1, RXOUT_DIV = 8
+            CXPSpeed::CXP2 | CXPSpeed::CXP3 => 0x02,   // TXOUT_DIV = 1, RXOUT_DIV = 4
+            CXPSpeed::CXP5 | CXPSpeed::CXP6 => 0x01,   // TXOUT_DIV = 1, RXOUT_DIV = 2
+            CXPSpeed::CXP10 | CXPSpeed::CXP12 => 0x00, // TXOUT_DIV = 1, RXOUT_DIV = 1
         };
 
         gtx_write(0x88, div_reg);
