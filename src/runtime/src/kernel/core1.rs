@@ -14,7 +14,7 @@ use libcortex_a9::{
 use libboard_zynq::{mpcore, gic};
 use libsupport_zynq::ram;
 use dyld::{self, Library, elf::EXIDX_Entry};
-use crate::{eh_artiq, get_async_errors, rtio};
+use crate::{eh_artiq, get_async_errors};
 use super::{
     api::resolve,
     rpc::rpc_send_async,
@@ -149,8 +149,6 @@ pub extern "C" fn main_core1() {
         if !KERNEL_IMAGE.is_null() {
             // indicates forceful termination of previous kernel
             KERNEL_IMAGE = core::ptr::null();
-            debug!("rtio init");
-            rtio::init();
         }
         dma::init_dma_recorder();
     }
