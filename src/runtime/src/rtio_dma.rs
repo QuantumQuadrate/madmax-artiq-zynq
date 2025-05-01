@@ -317,13 +317,11 @@ pub async fn put_record(
     }
     // trailing zero to indicate end of buffer
     recorder.buffer.push(0);
-    recorder.buffer.reserve(ALIGNMENT - 1);
     let original_length = recorder.buffer.len();
+    recorder.buffer.extend_from_slice(&[0; ALIGNMENT - 1]);
+    recorder.buffer.shrink_to_fit();
     let padding = ALIGNMENT - recorder.buffer.as_ptr() as usize % ALIGNMENT;
     let padding = if padding == ALIGNMENT { 0 } else { padding };
-    for _ in 0..padding {
-        recorder.buffer.push(0);
-    }
     recorder.buffer.copy_within(0..original_length, padding);
     dcci_slice(&recorder.buffer);
 
