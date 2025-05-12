@@ -13,6 +13,5 @@ doc = false
 [dependencies]
 libc = { path = "../libc" }
 unwind = { path = "../libunwind" }
-compiler_builtins = "0.1.0"
 cfg-if = "0.1.8"
 cslice = "0.3"

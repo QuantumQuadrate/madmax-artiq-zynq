@@ -13,7 +13,7 @@
     zynqRev = self.sourceInfo.rev or "unknown";
 
     rust = zynq-rs.rust;
-    rustPlatform = zynq-rs.rustPlatform;
+    naerskLib = zynq-rs.naerskLib;
 
     fastnumbers = pkgs.python3Packages.buildPythonPackage rec {
       pname = "fastnumbers";
@@ -118,46 +118,38 @@
       fsbl = zynqpkgs."${target}-fsbl";
       fwtype = if builtins.elem variant sat_variants then "satman" else "runtime";
 
-      firmware = rustPlatform.buildRustPackage rec {
+      firmware = naerskLib.buildPackage rec {
         name = "firmware";
         src = ./src;
-        cargoLock = { 
-          lockFile = src/Cargo.lock;
-          outputHashes = {
-              "tar-no-std-0.1.8" = "sha256-xm17108v4smXOqxdLvHl9CxTCJslmeogjm4Y87IXFuM=";
-              "nalgebra-0.32.6" = "sha256-ZbQQZbM3A5cJ4QbujtUxkrI0/qGlI4UzfahtyQnvMZA=";
-              "core_io-0.1.0" = "sha256-0HINFWRiJx8pjMgUOL/CS336ih7SENSRh3Kah9LPRrw=";
-              "fatfs-0.3.6" = "sha256-Nz9hCq/1YgSXF8ltJ5ZawV0Hc8WV44KNK0tJdVnNb4U=";
-            };
-        };
+        additionalCargoLock = "${rust}/lib/rustlib/src/rust/Cargo.lock";
+        singleStep = true;
 
         nativeBuildInputs = [
           pkgs.gnumake
           (pkgs.python3.withPackages(ps: [ ps.jsonschema artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq ]))
-          pkgs.cargo-xbuild
           pkgs.llvmPackages_18.llvm
           pkgs.llvmPackages_18.clang-unwrapped
         ];
-        buildPhase = ''
-          export ZYNQ_REV=${zynqRev}
-          export XARGO_RUST_SRC="${rust}/lib/rustlib/src/rust/library"
-          export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_18.clang-unwrapped.lib}/lib/clang/18/include"
-          export CARGO_HOME=$(mktemp -d cargo-home.XXX)
-          export ZYNQ_RS=${zynq-rs}
-          make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
-        '';
 
-        installPhase = ''
-          mkdir -p $out $out/nix-support
-          cp ../build/${fwtype}.bin $out/${fwtype}.bin
-          cp ../build/firmware/armv7-none-eabihf/release/${fwtype} $out/${fwtype}.elf
-          echo file binary-dist $out/${fwtype}.bin >> $out/nix-support/hydra-build-products
-          echo file binary-dist $out/${fwtype}.elf >> $out/nix-support/hydra-build-products
-        '';
+        overrideMain = _: {
+          buildPhase = ''
+            export ZYNQ_REV=${zynqRev}
+            export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_18.clang-unwrapped.lib}/lib/clang/18/include"
+            export ZYNQ_RS=${zynq-rs}
+            make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
+          '';
 
-        doCheck = false;
-        dontFixup = true;
-        auditable = false;
+          installPhase = ''
+            mkdir -p $out $out/nix-support
+            cp ../build/${fwtype}.bin $out/${fwtype}.bin
+            cp ../build/firmware/armv7-none-eabihf/release/${fwtype} $out/${fwtype}.elf
+            echo file binary-dist $out/${fwtype}.bin >> $out/nix-support/hydra-build-products
+            echo file binary-dist $out/${fwtype}.elf >> $out/nix-support/hydra-build-products
+          '';
+
+          doCheck = false;
+          dontFixup = true;
+        };
       };
       gateware = pkgs.runCommand "${target}-${variant}-gateware"
         {
@@ -381,7 +373,6 @@
         llvmPackages_18.clang-unwrapped
         gnumake
         cacert
-        pkgs.cargo-xbuild
         zynqpkgs.mkbootimage
         openocd  
         openssh rsync
@@ -392,7 +383,6 @@
         pre-commit
       ];
       ZYNQ_REV="${zynqRev}";
-      XARGO_RUST_SRC = "${rust}/lib/rustlib/src/rust/library";
       CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_18.clang-unwrapped.lib}/lib/clang/18/include";
       ZYNQ_RS = "${zynq-rs}";
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";

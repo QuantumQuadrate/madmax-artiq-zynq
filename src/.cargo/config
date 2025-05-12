@@ -6,3 +6,6 @@ rustflags = [
 
 [build]
 target = "armv7-none-eabihf.json"
+
+[unstable]
+build-std = ["core", "alloc", "compiler_builtins"]

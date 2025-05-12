@@ -81,12 +81,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "compiler_builtins"
-version = "0.1.108"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68bc55329711cd719c2687bb147bc06211b0521f97ef398280108ccb23227e9"
-
-[[package]]
 name = "core_io"
 version = "0.1.0"
 source = "git+https://git.m-labs.hk/M-Labs/rs-core_io.git?rev=e9d3edf027#e9d3edf0272502b0dd6c26e8a4869c2912657615"
@@ -111,7 +105,6 @@ name = "dwarf"
 version = "0.0.0"
 dependencies = [
  "cfg-if 0.1.10",
- "compiler_builtins",
  "cslice",
  "libc",
  "unwind",
@@ -352,7 +345,6 @@ name = "libsupport_zynq"
 version = "0.0.0"
 dependencies = [
  "cc",
- "compiler_builtins",
  "libboard_zynq",
  "libcortex_a9",
  "libregister",
@@ -627,7 +619,6 @@ version = "0.0.0"
 dependencies = [
  "cc",
  "cfg-if 0.1.10",
- "compiler_builtins",
  "libc",
 ]
 
