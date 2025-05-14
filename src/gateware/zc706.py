@@ -667,8 +667,8 @@ class _CXP_4R_FMC_RTIO():
 
         self.submodules.cxp_grabber = cxp_grabber.CXPGrabber(
             refclk=self.cdr_clk,
-            tx_pads=[platform.request("CXP_LS", 0)],
-            rx_pads=[platform.request("CXP_HS", 0)],
+            non_gt_tx_pads=[platform.request("CXP_LS", 0)],
+            gt_pads=[platform.request("CXP_HS", 0)],
             sys_clk_freq=clk_freq,
         )
         mem_size = self.cxp_grabber.core.get_mem_size()
