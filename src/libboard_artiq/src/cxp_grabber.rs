@@ -1,7 +1,9 @@
-use libboard_zynq::timer::GlobalTimer;
+use libboard_zynq::{i2c, timer::GlobalTimer};
 use libcortex_a9::mutex::Mutex;
 use log::{error, info};
 
+#[cfg(has_cxp_led)]
+use crate::cxp_led::{update_led, LEDState};
 use crate::{cxp_camera_setup::{camera_setup, discover_camera, master_channel_ready},
             pl::csr};
 
@@ -24,30 +26,40 @@ pub fn with_tag() -> bool {
     unsafe { *WITH_TAG.lock() }
 }
 
-pub fn tick(timer: GlobalTimer) {
+pub fn tick(timer: GlobalTimer, _i2c: &mut i2c::I2c) {
     let mut state_guard = unsafe { STATE.lock() };
     let mut with_tag_guard = unsafe { WITH_TAG.lock() };
     *state_guard = match *state_guard {
-        State::Disconnected => match discover_camera(timer) {
-            Ok(_) => {
-                info!("camera detected, setting up camera...");
-                State::Detected
+        State::Disconnected => {
+            #[cfg(has_cxp_led)]
+            update_led(_i2c, LEDState::RedFlash1Hz);
+            match discover_camera(timer) {
+                Ok(_) => {
+                    info!("camera detected, setting up camera...");
+                    State::Detected
+                }
+                Err(_) => State::Disconnected,
             }
-            Err(_) => State::Disconnected,
-        },
-        State::Detected => match camera_setup(timer) {
-            Ok(with_tag) => {
-                info!("camera setup complete");
-                *with_tag_guard = with_tag;
-                State::Connected
+        }
+        State::Detected => {
+            #[cfg(has_cxp_led)]
+            update_led(_i2c, LEDState::OrangeFlash12Hz5);
+            match camera_setup(timer) {
+                Ok(with_tag) => {
+                    info!("camera setup complete");
+                    *with_tag_guard = with_tag;
+                    State::Connected
+                }
+                Err(e) => {
+                    error!("camera setup failure: {}", e);
+                    *with_tag_guard = false;
+                    State::Disconnected
+                }
             }
-            Err(e) => {
-                error!("camera setup failure: {}", e);
-                *with_tag_guard = false;
-                State::Disconnected
-            }
-        },
+        }
         State::Connected => {
+            #[cfg(has_cxp_led)]
+            update_led(_i2c, LEDState::GreenSolid);
             if master_channel_ready() {
                 unsafe {
                     if csr::cxp_grabber::stream_decoder_crc_error_read() == 1 {
