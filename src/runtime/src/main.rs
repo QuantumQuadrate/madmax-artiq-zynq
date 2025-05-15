@@ -89,10 +89,10 @@ mod cxp {
 
     use crate::GlobalTimer;
 
-    pub async fn grabber_thread(timer: GlobalTimer) {
+    pub async fn grabber_thread(timer: GlobalTimer, i2c: &mut libboard_zynq::i2c::I2c) {
         let mut countdown = timer.countdown();
         loop {
-            cxp_grabber::tick(timer);
+            cxp_grabber::tick(timer, i2c);
             delay(&mut countdown, Milliseconds(200)).await;
         }
     }
@@ -173,7 +173,7 @@ pub fn main_core0() {
     #[cfg(has_cxp_grabber)]
     {
         cxp_phys::setup();
-        task::spawn(cxp::grabber_thread(timer));
+        task::spawn(cxp::grabber_thread(timer, ksupport::kernel::i2c::get_bus()));
     }
 
     comms::main(timer, cfg);
