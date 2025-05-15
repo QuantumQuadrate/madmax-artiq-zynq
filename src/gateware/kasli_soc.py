@@ -245,6 +245,7 @@ class GenericStandalone(SoCCore):
             sys_clk_freq=clk_freq,
             roi_engine_count=roi_engine_count
         )
+        self.config["HAS_CXP_LED"] = None
 
         mem_size = self.cxp_grabber.core.get_mem_size()
         # upper half is tx while lower half is rx
