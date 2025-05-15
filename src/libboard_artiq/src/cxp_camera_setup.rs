@@ -10,6 +10,7 @@ use crate::{cxp_ctrl::Error as CtrlErr,
             pl::csr};
 
 // Bootstrap registers address
+const STANDARD: u32 = 0x0000;
 const REVISION: u32 = 0x0004;
 const CONNECTION_RESET: u32 = 0x4000;
 const DEVICE_CONNECTION_ID: u32 = 0x4004;
@@ -109,7 +110,8 @@ pub fn discover_camera(mut timer: GlobalTimer) -> Result<(), Error> {
         timer.delay_ms(200);
         rx::change_linerate(*speed);
 
-        if monitor_channel_status_timeout(timer).is_ok() {
+        // Check the camera is responsive in case the RX phy picks up noise as an IDLE word
+        if monitor_channel_status_timeout(timer).is_ok_and(|_| matches!(read_u32(STANDARD, false), Ok(0xC0A79AE5))) {
             debug!("camera detected at linerate {:}", speed);
             return Ok(());
         }
