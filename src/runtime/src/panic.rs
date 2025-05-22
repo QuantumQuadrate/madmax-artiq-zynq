@@ -22,11 +22,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     } else {
         print!("unknown location");
     }
-    if let Some(message) = info.message() {
-        println!(": {}", message);
-    } else {
-        println!("");
-    }
+    println!(": {}", info.message());
     unsafe {
         // soft panics only allowed for core 0
         if PANICKED[id] && (SOFT_PANICKED || id == 1) {
@@ -61,9 +57,7 @@ fn soft_panic(info: &core::panic::PanicInfo) -> ! {
     } else {
         error!("panic at unknown location");
     }
-    if let Some(message) = info.message() {
-        error!("panic message: {}", message);
-    }
+    error!("panic message: {}", info.message());
     let timer = GlobalTimer::start();
     let cfg = match Config::new() {
         Ok(cfg) => cfg,
