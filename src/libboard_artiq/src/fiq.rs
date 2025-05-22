@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 
 use libboard_zynq::{println, stdio};
 use libcortex_a9::{interrupt_handler, regs::MPIDR};

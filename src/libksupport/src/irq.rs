@@ -1,4 +1,4 @@
-use core::{arch::asm,
+use core::{arch::{asm, naked_asm},
            sync::atomic::{AtomicBool, Ordering}};
 
 use libboard_zynq::{gic, mpcore, println, stdio};
