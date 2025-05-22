@@ -1,6 +1,7 @@
 #![no_std]
 #![feature(never_type)]
 #![feature(naked_functions)]
+#![allow(unexpected_cfgs)]
 
 extern crate core_io;
 extern crate crc;

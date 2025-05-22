@@ -4,6 +4,7 @@
 #![feature(inline_const)]
 #![feature(naked_functions)]
 #![feature(raw_ref_op)]
+#![allow(unexpected_cfgs)]
 
 #[macro_use]
 extern crate alloc;

@@ -5,6 +5,7 @@
 #![feature(lang_items)]
 #![feature(raw_ref_op)]
 #![feature(strict_provenance)]
+#![allow(unexpected_cfgs)]
 
 #[macro_use]
 extern crate log;
