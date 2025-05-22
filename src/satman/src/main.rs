@@ -1799,7 +1799,6 @@ pub extern "C" fn exception(_vect: u32, _regs: *const u32, pc: u32, ea: u32) {
     panic!("exception at PC 0x{:x}, EA 0x{:x}", pc, ea)
 }
 
-#[no_mangle] // https://github.com/rust-lang/rust/issues/{38281,51647}
 #[panic_handler]
 pub fn panic_fmt(info: &core::panic::PanicInfo) -> ! {
     let id = MPIDR.read().cpu_id() as usize;
