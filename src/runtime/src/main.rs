@@ -3,11 +3,8 @@
 #![recursion_limit = "1024"] // for futures_util::select!
 #![feature(alloc_error_handler)]
 #![feature(const_btree_len)]
-#![feature(panic_info_message)]
 #![allow(internal_features)]
 #![feature(lang_items)]
-#![feature(raw_ref_op)]
-#![feature(strict_provenance)]
 #![allow(unexpected_cfgs)]
 
 #[macro_use]

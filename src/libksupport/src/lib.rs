@@ -1,9 +1,7 @@
 #![no_std]
 #![feature(c_variadic)]
 #![feature(const_btree_len)]
-#![feature(inline_const)]
 #![feature(naked_functions)]
-#![feature(raw_ref_op)]
 #![allow(unexpected_cfgs)]
 
 #[macro_use]

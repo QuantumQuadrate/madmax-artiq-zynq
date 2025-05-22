@@ -1,10 +1,8 @@
 #![no_std]
 #![no_main]
 #![allow(internal_features)]
-#![feature(alloc_error_handler, never_type, panic_info_message)]
+#![feature(alloc_error_handler, never_type)]
 #![feature(lang_items)]
-#![feature(raw_ref_op)]
-#![feature(strict_provenance)]
 #![allow(unexpected_cfgs)]
 
 #[macro_use]
