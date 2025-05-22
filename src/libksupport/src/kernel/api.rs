@@ -42,7 +42,7 @@ unsafe extern "C" fn rtio_log(fmt: *const c_char, mut args: ...) {
 
 macro_rules! api {
     ($i:ident) => ({
-        extern { static $i: u8; }
+        extern "C" { static $i: u8; }
         unsafe { api!($i = &$i as *const _) }
     });
     ($i:ident, $d:item) => ({
