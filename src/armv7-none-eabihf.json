@@ -5,10 +5,10 @@
   "env": "",
   "executables": true,
   "features": "+v7,+vfp3,-d32,+thumb2,+neon,+a9,+armv7-a",
-  "is-builtin": false,
   "linker": "rust-lld",
   "linker-flavor": "ld.lld",
   "llvm-target": "armv7-unknown-none-eabihf",
+  "llvm-floatabi": "hard",
   "max-atomic-width": 32,
   "os": "none",
   "panic-strategy": "abort",
@@ -16,6 +16,5 @@
   "relocation-model": "static",
   "target-c-int-width": "32",
   "target-endian": "little",
-  "target-pointer-width": "32",
-  "vendor": ""
+  "target-pointer-width": "32"
 }
