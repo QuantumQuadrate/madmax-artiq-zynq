@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(internal_features)]
 #![feature(link_cfg)]
 #![cfg_attr(not(target_env = "msvc"), feature(libc))]
 
