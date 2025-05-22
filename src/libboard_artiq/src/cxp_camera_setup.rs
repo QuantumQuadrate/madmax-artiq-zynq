@@ -281,8 +281,8 @@ fn test_channel_stability(with_tag: bool, mut timer: GlobalTimer) -> Result<(), 
 
     // camera -> grabber connection test
     // enabling the TESTMODE on master channel will send test packets on all channels
-    // and ctrl packet write overhead is used as a delay
     write_u32(TESTMODE, 1, with_tag)?;
+    timer.delay_ms(2000);
     write_u32(TESTMODE, 0, with_tag)?;
 
     verify_test_result(with_tag)?;
