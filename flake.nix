@@ -127,14 +127,14 @@
         nativeBuildInputs = [
           pkgs.gnumake
           (pkgs.python3.withPackages(ps: [ ps.jsonschema artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq ]))
-          pkgs.llvmPackages_18.llvm
-          pkgs.llvmPackages_18.clang-unwrapped
+          pkgs.llvmPackages_20.llvm
+          pkgs.llvmPackages_20.clang-unwrapped
         ];
 
         overrideMain = _: {
           buildPhase = ''
             export ZYNQ_REV=${zynqRev}
-            export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_18.clang-unwrapped.lib}/lib/clang/18/include"
+            export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include"
             export ZYNQ_RS=${zynq-rs}
             make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
           '';
@@ -369,8 +369,8 @@
       name = "artiq-zynq-dev-shell";
       buildInputs = with pkgs; [
         rust
-        llvmPackages_18.llvm
-        llvmPackages_18.clang-unwrapped
+        llvmPackages_20.llvm
+        llvmPackages_20.clang-unwrapped
         gnumake
         cacert
         zynqpkgs.mkbootimage
@@ -383,7 +383,7 @@
         pre-commit
       ];
       ZYNQ_REV="${zynqRev}";
-      CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_18.clang-unwrapped.lib}/lib/clang/18/include";
+      CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include";
       ZYNQ_RS = "${zynq-rs}";
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";
       SZL = "${zynqpkgs.szl}";
