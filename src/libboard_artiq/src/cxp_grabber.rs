@@ -26,14 +26,14 @@ pub fn with_tag() -> bool {
     unsafe { *WITH_TAG.lock() }
 }
 
-pub fn tick(timer: GlobalTimer, _i2c: &mut i2c::I2c) {
+pub async fn tick(timer: GlobalTimer, _i2c: &mut i2c::I2c) {
     let mut state_guard = unsafe { STATE.lock() };
     let mut with_tag_guard = unsafe { WITH_TAG.lock() };
     *state_guard = match *state_guard {
         State::Disconnected => {
             #[cfg(has_cxp_led)]
             update_led(_i2c, LEDState::RedFlash1Hz);
-            match discover_camera(timer) {
+            match discover_camera(timer).await {
                 Ok(_) => {
                     info!("camera detected, setting up camera...");
                     State::Detected
@@ -44,7 +44,7 @@ pub fn tick(timer: GlobalTimer, _i2c: &mut i2c::I2c) {
         State::Detected => {
             #[cfg(has_cxp_led)]
             update_led(_i2c, LEDState::OrangeFlash12Hz5);
-            match camera_setup(timer) {
+            match camera_setup(timer).await {
                 Ok(with_tag) => {
                     info!("camera setup complete");
                     *with_tag_guard = with_tag;

@@ -1,6 +1,6 @@
 use core::fmt;
 
-use embedded_hal::blocking::delay::DelayMs;
+use libasync::{delay, task};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use log::debug;
 
@@ -88,9 +88,10 @@ pub fn master_channel_ready() -> bool {
     unsafe { csr::cxp_grabber::core_rx_ready_read() == 1 }
 }
 
-fn monitor_channel_status_timeout(timer: GlobalTimer) -> Result<(), Error> {
+async fn monitor_channel_status_timeout(timer: GlobalTimer) -> Result<(), Error> {
     let limit = timer.get_time() + Milliseconds(MONITOR_TIMEOUT_MS);
     while timer.get_time() < limit {
+        task::r#yield().await;
         if master_channel_ready() {
             return Ok(());
         }
@@ -98,7 +99,7 @@ fn monitor_channel_status_timeout(timer: GlobalTimer) -> Result<(), Error> {
     Err(Error::ConnectionLost)
 }
 
-pub fn discover_camera(mut timer: GlobalTimer) -> Result<(), Error> {
+pub async fn discover_camera(timer: GlobalTimer) -> Result<(), Error> {
     // Section 7.6 (CXP-001-2021)
     // 1.25Gbps (CXP_1) and 3.125Gbps (CXP_3) are the discovery rate
     // both linerate need to be checked as camera only support ONE of discovery rates
@@ -107,11 +108,14 @@ pub fn discover_camera(mut timer: GlobalTimer) -> Result<(), Error> {
         // set tx linerate -> send ConnectionReset -> wait 200ms -> set rx linerate -> monitor connection status with a timeout
         tx::change_linerate(*speed);
         write_bytes_no_ack(CONNECTION_RESET, &1_u32.to_be_bytes(), false)?;
-        timer.delay_ms(200);
+        delay(&mut timer.countdown(), Milliseconds(200)).await;
         rx::change_linerate(*speed);
 
         // Check the camera is responsive in case the RX phy picks up noise as an IDLE word
-        if monitor_channel_status_timeout(timer).is_ok_and(|_| matches!(read_u32(STANDARD, false), Ok(0xC0A79AE5))) {
+        if monitor_channel_status_timeout(timer)
+            .await
+            .is_ok_and(|_| matches!(read_u32(STANDARD, false), Ok(0xC0A79AE5)))
+        {
             debug!("camera detected at linerate {:}", speed);
             return Ok(());
         }
@@ -127,7 +131,7 @@ fn check_master_channel() -> Result<(), Error> {
     }
 }
 
-fn disable_excess_channels(timer: GlobalTimer) -> Result<(), Error> {
+async fn disable_excess_channels(timer: GlobalTimer) -> Result<(), Error> {
     let current_cfg = read_u32(CONNECTION_CFG, false)?;
     let active_camera_chs = current_cfg >> 16;
     // After camera receive ConnectionReset, only the master connection should be active while
@@ -143,7 +147,7 @@ fn disable_excess_channels(timer: GlobalTimer) -> Result<(), Error> {
         write_u32(CONNECTION_CFG, current_cfg & 0xFFFF | (CHANNEL_LEN as u32) << 16, false)?;
 
         // check if the master channel is down after the cfg change
-        monitor_channel_status_timeout(timer)
+        monitor_channel_status_timeout(timer).await
     } else {
         Ok(())
     }
@@ -210,7 +214,7 @@ fn decode_cxp_speed(linerate_code: u32) -> Option<CXPSpeed> {
     }
 }
 
-fn set_operation_linerate(with_tag: bool, timer: GlobalTimer) -> Result<(), Error> {
+async fn set_operation_linerate(with_tag: bool, timer: GlobalTimer) -> Result<(), Error> {
     let recommended_linerate_code = read_u32(CONNECTION_CFG_DEFAULT, with_tag)? & 0xFFFF;
 
     if let Some(speed) = decode_cxp_speed(recommended_linerate_code) {
@@ -226,7 +230,7 @@ fn set_operation_linerate(with_tag: bool, timer: GlobalTimer) -> Result<(), Erro
 
         tx::change_linerate(speed);
         rx::change_linerate(speed);
-        monitor_channel_status_timeout(timer)
+        monitor_channel_status_timeout(timer).await
     } else {
         Err(Error::UnsupportedSpeed(recommended_linerate_code))
     }
@@ -268,7 +272,7 @@ fn verify_test_result(with_tag: bool) -> Result<(), Error> {
     Ok(())
 }
 
-fn test_channel_stability(with_tag: bool, mut timer: GlobalTimer) -> Result<(), Error> {
+async fn test_channel_stability(with_tag: bool, timer: GlobalTimer) -> Result<(), Error> {
     test_counter_reset(with_tag)?;
 
     // cxp grabber -> camera connection test
@@ -276,13 +280,13 @@ fn test_channel_stability(with_tag: bool, mut timer: GlobalTimer) -> Result<(), 
         send_test_packet()?;
         // sending the whole test sequence @ 20.833Mbps will take a minimum of 1.972ms
         // and leave some room to send IDLE word
-        timer.delay_ms(2);
+        delay(&mut timer.countdown(), Milliseconds(2)).await;
     }
 
     // camera -> grabber connection test
     // enabling the TESTMODE on master channel will send test packets on all channels
     write_u32(TESTMODE, 1, with_tag)?;
-    timer.delay_ms(2000);
+    delay(&mut timer.countdown(), Milliseconds(2000)).await;
     write_u32(TESTMODE, 0, with_tag)?;
 
     verify_test_result(with_tag)?;
@@ -290,18 +294,18 @@ fn test_channel_stability(with_tag: bool, mut timer: GlobalTimer) -> Result<(), 
     Ok(())
 }
 
-pub fn camera_setup(timer: GlobalTimer) -> Result<bool, Error> {
+pub async fn camera_setup(timer: GlobalTimer) -> Result<bool, Error> {
     reset_tag();
     check_master_channel()?;
 
-    disable_excess_channels(timer)?;
+    disable_excess_channels(timer).await?;
     set_host_connection_id()?;
     let with_tag = negotiate_cxp_version()?;
 
     negotiate_pak_max_size(with_tag)?;
-    set_operation_linerate(with_tag, timer)?;
+    set_operation_linerate(with_tag, timer).await?;
 
-    test_channel_stability(with_tag, timer)?;
+    test_channel_stability(with_tag, timer).await?;
 
     Ok(with_tag)
 }

@@ -92,7 +92,7 @@ mod cxp {
     pub async fn grabber_thread(timer: GlobalTimer, i2c: &mut libboard_zynq::i2c::I2c) {
         let mut countdown = timer.countdown();
         loop {
-            cxp_grabber::tick(timer, i2c);
+            cxp_grabber::tick(timer, i2c).await;
             delay(&mut countdown, Milliseconds(200)).await;
         }
     }
