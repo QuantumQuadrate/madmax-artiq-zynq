@@ -15,20 +15,20 @@ enum State {
 }
 
 // Mutex as they are needed by core1 cxp api calls
-static mut STATE: Mutex<State> = Mutex::new(State::Disconnected);
-static mut WITH_TAG: Mutex<bool> = Mutex::new(false);
+static STATE: Mutex<State> = Mutex::new(State::Disconnected);
+static WITH_TAG: Mutex<bool> = Mutex::new(false);
 
 pub fn camera_connected() -> bool {
-    unsafe { *STATE.lock() == State::Connected }
+    *STATE.lock() == State::Connected
 }
 
 pub fn with_tag() -> bool {
-    unsafe { *WITH_TAG.lock() }
+    *WITH_TAG.lock()
 }
 
 pub async fn tick(timer: GlobalTimer, _i2c: &mut i2c::I2c) {
-    let mut state_guard = unsafe { STATE.lock() };
-    let mut with_tag_guard = unsafe { WITH_TAG.lock() };
+    let mut state_guard = STATE.lock();
+    let mut with_tag_guard = WITH_TAG.lock();
     *state_guard = match *state_guard {
         State::Disconnected => {
             #[cfg(has_cxp_led)]
