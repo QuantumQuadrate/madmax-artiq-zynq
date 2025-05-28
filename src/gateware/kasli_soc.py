@@ -105,6 +105,49 @@ class GTPBootstrapClock(Module):
             raise ValueError("Bootstrap frequency must be 100 or 125MHz")
 
 
+def add_coaxpress_sfp(cls, clk_freq, roi_engine_count, refclk=None):
+    if refclk is None:
+        refclk = Signal()
+        gt_refclk_pad = cls.platform.request("clk_gtp")
+        cls.platform.add_period_constraint(gt_refclk_pad.p, 8.0)
+        cls.specials += Instance("IBUFDS_GTE2",
+            i_CEB=0,
+            i_I=gt_refclk_pad.p,
+            i_IB=gt_refclk_pad.n,
+            o_O=refclk,
+            p_CLKCM_CFG="TRUE",
+            p_CLKRCV_TRST="TRUE",
+            p_CLKSWING_CFG=3
+        )
+
+    sfp_slot = 0
+    cls.submodules.cxp_grabber = cxp_grabber.CXPGrabber(
+        refclk=refclk,
+        gt_pads=[cls.platform.request("sfp", sfp_slot)],
+        sys_clk_freq=clk_freq,
+        roi_engine_count=roi_engine_count
+    )
+    cls.config["HAS_CXP_LED"] = None
+
+    mem_size = cls.cxp_grabber.core.get_mem_size()
+    # upper half is tx while lower half is rx
+    memory_address = cls.axi2csr.register_port(cls.cxp_grabber.core.get_tx_port(), mem_size)
+    cls.axi2csr.register_port(cls.cxp_grabber.core.get_rx_port(), mem_size)
+    cls.add_memory_region("cxp_mem", cls.mem_map["csr"] + memory_address, mem_size * 2)
+    cls.csr_devices.append("cxp_grabber")
+
+    print("CoaXPress-SFP (SFP{}) at RTIO channel 0x{:06x}".format(sfp_slot, len(cls.rtio_channels)))
+    cls.rtio_channels += [
+        rtio.Channel(cls.cxp_grabber.trigger),
+        rtio.Channel(cls.cxp_grabber.config),
+        rtio.Channel(cls.cxp_grabber.gate_data),
+    ]
+    # max freq of cxp_gt_rx = linerate/internal_datawidth = 12.5Gbps/40 = 312.5MHz
+    rx = cls.cxp_grabber.phy.phys[0]
+    cls.platform.add_period_constraint(rx.gtx.cd_cxp_gt_rx.clk, 3.2)
+    # constraint the clk path 
+    cls.platform.add_false_path_constraints(cls.sys_crg.cd_sys.clk, rx.gtx.cd_cxp_gt_rx.clk)
+
 class GenericStandalone(SoCCore):
     def __init__(self, description, acpki=False):
         self.acpki = acpki
@@ -167,7 +210,7 @@ class GenericStandalone(SoCCore):
         eem_peripherals = []
         for peripheral in description["peripherals"]:
             if peripheral["type"] == "coaxpress_sfp":
-                self.add_coaxpress_sfp(clk_freq, peripheral["roi_engine_count"])
+                add_coaxpress_sfp(self, clk_freq, peripheral["roi_engine_count"])
             elif peripheral["type"] == "grabber":
                 has_grabber = True
                 self.grabber_csr_group = []
@@ -224,47 +267,6 @@ class GenericStandalone(SoCCore):
                 self.platform.add_false_path_constraints(
                     self.sys_crg.cd_sys.clk, getattr(self, grabber).deserializer.cd_cl.clk)
 
-    def add_coaxpress_sfp(self, clk_freq, roi_engine_count):
-        refclk = Signal()
-        gt_refclk_pad = self.platform.request("clk_gtp")
-        self.platform.add_period_constraint(gt_refclk_pad.p, 8.0)
-        self.specials += Instance("IBUFDS_GTE2",
-            i_CEB=0,
-            i_I=gt_refclk_pad.p,
-            i_IB=gt_refclk_pad.n,
-            o_O=refclk,
-            p_CLKCM_CFG="TRUE",
-            p_CLKRCV_TRST="TRUE",
-            p_CLKSWING_CFG=3
-        )
-
-        sfp_slot = 0
-        self.submodules.cxp_grabber = cxp_grabber.CXPGrabber(
-            refclk=refclk,
-            gt_pads=[self.platform.request("sfp", sfp_slot)],
-            sys_clk_freq=clk_freq,
-            roi_engine_count=roi_engine_count
-        )
-        self.config["HAS_CXP_LED"] = None
-
-        mem_size = self.cxp_grabber.core.get_mem_size()
-        # upper half is tx while lower half is rx
-        memory_address = self.axi2csr.register_port(self.cxp_grabber.core.get_tx_port(), mem_size)
-        self.axi2csr.register_port(self.cxp_grabber.core.get_rx_port(), mem_size)
-        self.add_memory_region("cxp_mem", self.mem_map["csr"] + memory_address, mem_size * 2)
-        self.csr_devices.append("cxp_grabber")
-
-        print("CoaXPress-SFP (SFP{}) at RTIO channel 0x{:06x}".format(sfp_slot, len(self.rtio_channels)))
-        self.rtio_channels += [
-            rtio.Channel(self.cxp_grabber.trigger),
-            rtio.Channel(self.cxp_grabber.config),
-            rtio.Channel(self.cxp_grabber.gate_data),
-        ]
-        # max freq of cxp_gt_rx = linerate/internal_datawidth = 12.5Gbps/40 = 312.5MHz
-        rx = self.cxp_grabber.phy.phys[0]
-        self.platform.add_period_constraint(rx.gtx.cd_cxp_gt_rx.clk, 3.2)
-        # constraint the clk path 
-        self.platform.add_false_path_constraints(self.sys_crg.cd_sys.clk, rx.gtx.cd_cxp_gt_rx.clk)
 
 class GenericMaster(SoCCore):
     def __init__(self, description, acpki=False):
@@ -285,11 +287,24 @@ class GenericMaster(SoCCore):
 
         self.config["HW_REV"] = description["hw_rev"]
 
-        data_pads = [platform.request("sfp", i) for i in range(4)]
+        eem_peripherals = []
+        drtio_sfp_slots = list(range(4))
+        has_coaxpress_sfp, has_grabber = False, False
+        for peripheral in description["peripherals"]:
+            if peripheral["type"] == "coaxpress_sfp":
+                has_coaxpress_sfp = True
+                cxp_roi_counts = peripheral["roi_engine_count"]
+                # use sfp slot 0 for coaxpress_sfp
+                drtio_sfp_slots = list(range(1, 4))
+            elif peripheral["type"] == "grabber":
+                has_grabber = True
+                eem_peripherals.append(peripheral)
+            else:
+                eem_peripherals.append(peripheral)
 
         self.submodules.gt_drtio = gtx_7series.GTX(
             clock_pads=platform.request("clk_gtp"),
-            pads=data_pads,
+            pads=[self.platform.request("sfp", i) for i in drtio_sfp_slots],
             clk_freq=clk_freq)
         self.csr_devices.append("gt_drtio")
         self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
@@ -340,12 +355,13 @@ class GenericMaster(SoCCore):
             self.config["SI5324_SOFT_RESET"] = None
 
         self.rtio_channels = []
-        has_grabber = any(peripheral["type"] == "grabber" for peripheral in description["peripherals"])
         if has_drtio_over_eem:
             self.eem_drtio_channels = []
         if has_grabber:
             self.grabber_csr_group = []
-        eem_7series.add_peripherals(self, description["peripherals"], iostandard=eem_iostandard)
+        if has_coaxpress_sfp:
+            add_coaxpress_sfp(self, clk_freq, cxp_roi_counts, self.gt_drtio.refclk)
+        eem_7series.add_peripherals(self, eem_peripherals, iostandard=eem_iostandard)
         for i in (0, 1):
             print("USER LED at RTIO channel 0x{:06x}".format(len(self.rtio_channels)))
             user_led = self.platform.request("user_led", i)
@@ -436,7 +452,7 @@ class GenericMaster(SoCCore):
         self.csr_devices.append("virtual_leds")
 
         self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
-                for i, channel in enumerate(self.gt_drtio.channels)]
+                for i, channel in zip(drtio_sfp_slots, self.gt_drtio.channels)]
 
     def add_eem_drtio(self, eem_drtio_channels):
         # Must be called before invoking add_rtio() to construct the CRI
@@ -740,8 +756,8 @@ def main():
     description = jsondesc.load(args.description)
 
     has_coaxpress_sfp = any(peripheral["type"] == "coaxpress_sfp" for peripheral in description["peripherals"])
-    if has_coaxpress_sfp and description["drtio_role"] != "standalone":
-        raise ValueError("CoaXPress-SFP requires free SFP ports, please switch role to standalone")
+    if has_coaxpress_sfp and description["drtio_role"] == "satellite":
+        raise ValueError("CoaXPress-SFP is only supported on standalone and master variant")
     if description["target"] != "kasli_soc":
         raise ValueError("Description is for a different target")
 
