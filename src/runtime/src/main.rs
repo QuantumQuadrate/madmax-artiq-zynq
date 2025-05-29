@@ -6,6 +6,8 @@
 #![feature(panic_info_message)]
 #![allow(internal_features)]
 #![feature(lang_items)]
+#![feature(raw_ref_op)]
+#![feature(strict_provenance)]
 
 #[macro_use]
 extern crate alloc;

@@ -18,13 +18,13 @@ struct Buffer {
     data: [u8; BUFFER_SIZE],
 }
 
-static mut BUFFER: Buffer = Buffer { data: [0; BUFFER_SIZE] };
+static BUFFER: Buffer = Buffer { data: [0; BUFFER_SIZE] };
 
 fn arm() {
     debug!("arming RTIO analyzer");
     unsafe {
-        let base_addr = &mut BUFFER.data[0] as *mut _ as usize;
-        let last_addr = &mut BUFFER.data[BUFFER_SIZE - 1] as *mut _ as usize;
+        let base_addr = (&raw const BUFFER.data[0]).addr();
+        let last_addr = (&raw const BUFFER.data[BUFFER_SIZE - 1]).addr();
         pl::csr::rtio_analyzer::message_encoder_overflow_reset_write(1);
         pl::csr::rtio_analyzer::dma_base_address_write(base_addr as u32);
         pl::csr::rtio_analyzer::dma_last_address_write(last_addr as u32);
@@ -115,7 +115,7 @@ async fn handle_connection(
 ) -> Result<(), Error> {
     info!("received connection");
 
-    let data = unsafe { &BUFFER.data[..] };
+    let data = &BUFFER.data[..];
     let overflow_occurred = unsafe { pl::csr::rtio_analyzer::message_encoder_overflow_read() != 0 };
     let bus_error_occurred = unsafe { pl::csr::rtio_analyzer::dma_bus_error_read() != 0 };
     let total_byte_count = unsafe { pl::csr::rtio_analyzer::dma_byte_count_read() as u64 };

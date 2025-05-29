@@ -10,12 +10,12 @@ struct Buffer {
     data: [u8; BUFFER_SIZE],
 }
 
-static mut BUFFER: Buffer = Buffer { data: [0; BUFFER_SIZE] };
+static BUFFER: Buffer = Buffer { data: [0; BUFFER_SIZE] };
 
 fn arm() {
     unsafe {
-        let base_addr = &mut BUFFER.data[0] as *mut _ as usize;
-        let last_addr = &mut BUFFER.data[BUFFER_SIZE - 1] as *mut _ as usize;
+        let base_addr = (&raw const BUFFER.data[0]).addr();
+        let last_addr = (&raw const BUFFER.data[BUFFER_SIZE - 1]).addr();
         csr::rtio_analyzer::dma_base_address_write(base_addr as u32);
         csr::rtio_analyzer::message_encoder_overflow_reset_write(1);
         csr::rtio_analyzer::dma_last_address_write(last_addr as u32);
@@ -101,7 +101,7 @@ impl Analyzer {
     }
 
     pub fn get_data(&mut self, data_slice: &mut [u8; SAT_PAYLOAD_MAX_SIZE]) -> AnalyzerSliceMeta {
-        let data = unsafe { &BUFFER.data[..] };
+        let data = &BUFFER.data[..];
         let i = (self.data_pointer + self.sent_bytes) % BUFFER_SIZE;
         let len = min(SAT_PAYLOAD_MAX_SIZE, self.data_len - self.sent_bytes);
         let last = self.sent_bytes + len == self.data_len;
