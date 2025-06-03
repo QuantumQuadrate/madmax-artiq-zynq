@@ -5,6 +5,9 @@
     "base": "satellite",
     "peripherals": [
         {
+            "type": "coaxpress_sfp"
+        },
+        {
             "type": "grabber",
             "ports": [0]
         },
