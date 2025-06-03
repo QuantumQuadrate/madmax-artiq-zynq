@@ -511,11 +511,24 @@ class GenericSatellite(SoCCore):
 
         self.config["HW_REV"] = description["hw_rev"]
 
-        data_pads = [platform.request("sfp", i) for i in range(4)]
+        eem_peripherals = []
+        drtio_sfp_slots = list(range(4))
+        has_coaxpress_sfp, has_grabber = False, False
+        for peripheral in description["peripherals"]:
+            if peripheral["type"] == "coaxpress_sfp":
+                has_coaxpress_sfp = True
+                cxp_roi_counts = peripheral["roi_engine_count"]
+                # use sfp slot 0 for coaxpress_sfp
+                drtio_sfp_slots = list(range(1, 4))
+            elif peripheral["type"] == "grabber":
+                has_grabber = True
+                eem_peripherals.append(peripheral)
+            else:
+                eem_peripherals.append(peripheral)
         
         self.submodules.gt_drtio = gtx_7series.GTX(
             clock_pads=platform.request("clk_gtp"),  
-            pads=data_pads,
+            pads=[platform.request("sfp", i) for i in drtio_sfp_slots],
             clk_freq=clk_freq)
         self.csr_devices.append("gt_drtio")
 
@@ -550,7 +563,9 @@ class GenericSatellite(SoCCore):
             self.eem_drtio_channels = []
         if has_grabber:
             self.grabber_csr_group = []
-        eem_7series.add_peripherals(self, description["peripherals"], iostandard=eem_iostandard)
+        if has_coaxpress_sfp:
+            add_coaxpress_sfp(self, clk_freq, cxp_roi_counts, self.gt_drtio.refclk)
+        eem_7series.add_peripherals(self, eem_peripherals, iostandard=eem_iostandard)
         for i in (0, 1):
             print("USER LED at RTIO channel 0x{:06x}".format(len(self.rtio_channels)))
             user_led = self.platform.request("user_led", i)
@@ -691,7 +706,7 @@ class GenericSatellite(SoCCore):
         self.csr_devices.append("virtual_leds")
 
         self.comb += [self.virtual_leds.get(i).eq(channel.rx_ready)
-                for i, channel in enumerate(self.gt_drtio.channels)]
+                for i, channel in zip(drtio_sfp_slots, self.gt_drtio.channels)]
 
     def add_eem_drtio(self, eem_drtio_channels):
         # Must be called before constructing CRIInterconnectShared
@@ -755,9 +770,6 @@ def main():
     args = parser.parse_args()
     description = jsondesc.load(args.description)
 
-    has_coaxpress_sfp = any(peripheral["type"] == "coaxpress_sfp" for peripheral in description["peripherals"])
-    if has_coaxpress_sfp and description["drtio_role"] == "satellite":
-        raise ValueError("CoaXPress-SFP is only supported on standalone and master variant")
     if description["target"] != "kasli_soc":
         raise ValueError("Description is for a different target")
 
