@@ -23,6 +23,8 @@ mod cache;
 mod linalg;
 #[cfg(has_drtio)]
 mod subkernel;
+#[cfg(has_cxp_grabber)]
+mod cxp;
 
 #[cfg(has_drtio)]
 #[derive(Debug, Clone)]

@@ -12,7 +12,7 @@ use super::{cache,
             rpc::{rpc_recv, rpc_send, rpc_send_async},
             rtio};
 #[cfg(has_cxp_grabber)]
-use crate::cxp;
+use super::cxp;
 use crate::eh_artiq;
 
 extern "C" {

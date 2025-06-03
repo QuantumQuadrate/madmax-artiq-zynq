@@ -29,9 +29,6 @@ pub mod rpc;
 #[path = "../../../build/pl.rs"]
 pub mod pl;
 
-#[cfg(has_cxp_grabber)]
-pub mod cxp;
-
 #[derive(Debug, Clone)]
 pub struct RPCException {
     pub id: u32,
