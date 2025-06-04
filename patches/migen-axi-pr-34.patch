@@ -1,0 +1,25 @@
+From 0fcecf94a30e0b4bbe055912f5ba3954a628cb35 Mon Sep 17 00:00:00 2001
+From: morgan <mc@m-labs.hk>
+Date: Fri, 30 May 2025 15:40:40 +0800
+Subject: [PATCH] axi2csr: fix decoder to work with diff mem size
+
+---
+ src/migen_axi/interconnect/axi2csr.py | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/migen_axi/interconnect/axi2csr.py b/src/migen_axi/interconnect/axi2csr.py
+index 146b3c8..389abc3 100644
+--- a/src/migen_axi/interconnect/axi2csr.py
++++ b/src/migen_axi/interconnect/axi2csr.py
+@@ -40,6 +40,11 @@ def register_port(self, port, size):
+ 
+         self.specials += port
+ 
++        # to assign a unique address decoding expression for memories with different size
++        # starting address must be aligned to the size of the memory
++        padding = (size - (self._relative_addr % size)) % size
++        self._relative_addr += padding
++
+         # check if the remaining part of the address bus
+         # corresponds to the possible address
+         cut_addr = self._relative_addr >> 2

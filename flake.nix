@@ -70,6 +70,8 @@
         sha256 = "sha256-3Y9W5ns+1wbVd14iePzgSBzE+LxnGMUDtUw3BccFt80=";
       };
 
+      patches = [ ./patches/migen-axi-pr-34.patch ];
+
       format = "pyproject";
 
       propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
