@@ -53,6 +53,7 @@ impl BufferLogger {
         }
     }
 
+    #[allow(static_mut_refs)]
     pub fn register(self) {
         unsafe {
             LOGGER.write(self);
@@ -60,6 +61,7 @@ impl BufferLogger {
         }
     }
 
+    #[allow(static_mut_refs)]
     pub fn get_logger() -> &'static mut BufferLogger {
         unsafe { LOGGER.assume_init_mut() }
     }

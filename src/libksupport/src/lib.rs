@@ -3,6 +3,7 @@
 #![feature(const_btree_len)]
 #![feature(naked_functions)]
 #![allow(unexpected_cfgs)]
+#![allow(static_mut_refs)]
 
 #[macro_use]
 extern crate alloc;

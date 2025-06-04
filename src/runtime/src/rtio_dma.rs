@@ -13,6 +13,7 @@ const ALIGNMENT: usize = 16 * 8;
 
 static DMA_RECORD_STORE: Mutex<BTreeMap<String, (u32, Vec<u8>, i64)>> = Mutex::new(BTreeMap::new());
 
+#[allow(static_mut_refs)]
 #[cfg(has_drtio)]
 pub mod remote_dma {
     use libboard_zynq::time::Milliseconds;
