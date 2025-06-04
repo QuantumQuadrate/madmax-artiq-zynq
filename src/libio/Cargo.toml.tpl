@@ -2,6 +2,7 @@
 authors = ["M-Labs"]
 name = "io"
 version = "0.0.0"
+edition = "2018"
 
 [lib]
 name = "io"
