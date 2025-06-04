@@ -6,8 +6,8 @@ use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux_proto::{Packet, PayloadStatus, MASTER_PAYLOAD_MAX_SIZE},
                      pl::csr};
 use libcortex_a9::cache::dcci_slice;
-use routing::{Router, Sliceable};
-use subkernel::Manager as KernelManager;
+use crate::routing::{Router, Sliceable};
+use crate::subkernel::Manager as KernelManager;
 
 const ALIGNMENT: usize = 64;
 

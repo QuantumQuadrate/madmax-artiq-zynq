@@ -6,7 +6,7 @@ use libboard_artiq::{drtio_routing, drtioaux};
 #[cfg(has_drtio_routing)]
 use libboard_zynq::time::Milliseconds;
 use libboard_zynq::timer::GlobalTimer;
-use routing::Router;
+use crate::routing::Router;
 
 #[cfg(has_drtio_routing)]
 fn rep_link_rx_up(repno: u8) -> bool {

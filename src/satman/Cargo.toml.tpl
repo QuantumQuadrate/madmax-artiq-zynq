@@ -3,6 +3,7 @@ authors = ["M-Labs"]
 name = "satman"
 version = "0.0.0"
 build = "build.rs"
+edition = "2018"
 
 [features]
 target_zc706 = ["libboard_zynq/target_zc706", "libsupport_zynq/target_zc706", "libconfig/target_zc706", "libboard_artiq/target_zc706"]
