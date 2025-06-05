@@ -66,11 +66,9 @@
       src = pkgs.fetchFromGitHub {
         owner = "peteut";
         repo = "migen-axi";
-        rev = "27eaa84a70a3abfe1930c86c36c4de2cd652da35";
-        sha256 = "sha256-3Y9W5ns+1wbVd14iePzgSBzE+LxnGMUDtUw3BccFt80=";
+        rev = "98649a92ed7d4e43f75231e6ef9753e1212fab41";
+        sha256 = "sha256-0kEHK+l6gZW750tq89fHRxIh3Gnj5EP2GZX/neWaWzU=";
       };
-
-      patches = [ ./patches/migen-axi-pr-34.patch ];
 
       format = "pyproject";
 
