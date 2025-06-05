@@ -301,6 +301,8 @@ pub mod siphaser {
     use crate::pl::csr;
 
     pub fn select_recovered_clock(i2c: &mut I2c, rc: bool) -> Result<()> {
+        i2c.pca954x_select(0x70, None)?;
+        i2c.pca954x_select(0x71, Some(3))?;
         let val = read(i2c, 3)?;
         write(i2c, 3, (val & 0xdf) | (1 << 5))?; // DHOLD=1
         unsafe {
