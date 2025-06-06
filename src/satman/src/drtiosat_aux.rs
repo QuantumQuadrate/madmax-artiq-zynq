@@ -603,7 +603,7 @@ async fn process_aux_packet<'a, 'b>(
                 _routing_table,
                 *rank,
                 *self_destination,
-            )
+            ).await
         }
         drtioaux::Packet::DmaAddTraceReply {
             source,
@@ -657,7 +657,7 @@ async fn process_aux_packet<'a, 'b>(
                 _routing_table,
                 *rank,
                 *self_destination,
-            )
+            ).await
         }
         drtioaux::Packet::DmaRemoveTraceReply {
             destination: _destination,
@@ -704,7 +704,7 @@ async fn process_aux_packet<'a, 'b>(
                 _routing_table,
                 *rank,
                 *self_destination,
-            )
+            ).await
         }
         drtioaux::Packet::DmaPlaybackReply {
             destination: _destination,
@@ -803,7 +803,7 @@ async fn process_aux_packet<'a, 'b>(
                 _routing_table,
                 *rank,
                 *self_destination,
-            )
+            ).await
         }
         drtioaux::Packet::SubkernelLoadRunReply {
             destination: _destination,
@@ -868,7 +868,7 @@ async fn process_aux_packet<'a, 'b>(
                 _routing_table,
                 *rank,
                 *self_destination,
-            )
+            ).await
         }
         drtioaux::Packet::SubkernelException {
             destination: _destination,
@@ -920,7 +920,7 @@ async fn process_aux_packet<'a, 'b>(
                 _routing_table,
                 *rank,
                 *self_destination,
-            )
+            ).await
         }
         drtioaux::Packet::SubkernelMessageAck {
             destination: _destination,

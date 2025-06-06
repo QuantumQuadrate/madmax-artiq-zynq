@@ -3,8 +3,8 @@ use core::cmp::min;
 
 #[cfg(has_drtio_routing)]
 use libboard_artiq::pl::csr;
-use libboard_artiq::{drtio_routing, drtioaux,
-                     drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus, SAT_PAYLOAD_MAX_SIZE}};
+use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
+                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE}};
 
 pub struct SliceMeta {
     pub destination: u8,
@@ -124,7 +124,7 @@ impl Router {
     }
 
     // Sends a packet to a required destination, routing if necessary
-    pub fn send(
+    pub async fn send(
         &mut self,
         packet: drtioaux::Packet,
         _routing_table: &drtio_routing::RoutingTable,
@@ -138,7 +138,7 @@ impl Router {
                 let hop = _routing_table.0[destination as usize][_rank as usize] as usize;
                 if destination == 0 {
                     // response is needed immediately if master required it
-                    drtioaux::send(0, &packet)?;
+                    drtioaux_async::send(0, &packet).await?;
                 } else if !(hop > 0 && hop < csr::DRTIOREP.len()) {
                     // higher rank can wait
                     self.upstream_queue.push_back(packet);
@@ -150,12 +150,12 @@ impl Router {
                 Ok(())
             } else {
                 // packet not supported in routing, fallback - sent directly
-                drtioaux::send(0, &packet)
+                drtioaux_async::send(0, &packet).await
             }
         }
         #[cfg(not(has_drtio_routing))]
         {
-            drtioaux::send(0, &packet)
+            drtioaux_async::send(0, &packet).await
         }
     }
 
