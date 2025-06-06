@@ -350,7 +350,7 @@ pub fn main_core0() {
             while !drtiosat_link_rx_up() {
                 #[allow(unused_mut)]
                 for mut rep in repeaters.iter_mut() {
-                    rep.service(&routing_table, rank, destination, &mut router, &mut timer);
+                    rep.service(&routing_table, rank, destination, &mut router, &mut timer).await;
                 }
                 #[cfg(feature = "target_kasli_soc")]
                 {
@@ -444,13 +444,13 @@ async fn linkup_service<'a, 'b>(
     ).await;
     #[allow(unused_mut)]
     for mut rep in repeaters.iter_mut() {
-        rep.service(&routing_table, *rank, *destination, router, &mut timer);
+        rep.service(&routing_table, *rank, *destination, router, &mut timer).await;
     }
 
     if drtiosat_tsc_loaded() {
         info!("TSC loaded from uplink");
         for rep in repeaters.iter() {
-            if let Err(e) = rep.sync_tsc(&mut timer) {
+            if let Err(e) = rep.sync_tsc(&mut timer).await {
                 error!("failed to sync TSC ({:?})", e);
             }
         }
@@ -482,7 +482,7 @@ async fn linkup_service<'a, 'b>(
 
     #[cfg(has_drtio_routing)]
     if let Some((repno, packet)) = router.get_downstream_packet() {
-        if let Err(e) = repeaters[repno].aux_send(&packet) {
+        if let Err(e) = repeaters[repno].aux_send(&packet).await {
             warn!("[REP#{}] Error when sending packet to satellite ({:?})", repno, e)
         }
     }

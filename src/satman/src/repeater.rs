@@ -1,10 +1,10 @@
 #[cfg(has_drtio_routing)]
-use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
-#[cfg(has_drtio_routing)]
-use libboard_artiq::pl::csr;
+use libasync::{delay, task};
 use libboard_artiq::{drtio_routing, drtioaux};
 #[cfg(has_drtio_routing)]
-use libboard_zynq::time::Milliseconds;
+use libboard_artiq::{drtioaux_async, pl::csr};
+#[cfg(has_drtio_routing)]
+use libboard_zynq::time::{Microseconds, Milliseconds};
 use libboard_zynq::timer::GlobalTimer;
 
 use crate::routing::Router;
@@ -55,7 +55,7 @@ impl Repeater {
         self.state == RepeaterState::Up
     }
 
-    pub fn service(
+    pub async fn service(
         &mut self,
         routing_table: &drtio_routing::RoutingTable,
         rank: u8,
@@ -74,7 +74,9 @@ impl Repeater {
             }
             RepeaterState::SendPing { ping_count } => {
                 if rep_link_rx_up(self.repno) {
-                    drtioaux::send(self.auxno, &drtioaux::Packet::EchoRequest).unwrap();
+                    drtioaux_async::send(self.auxno, &drtioaux::Packet::EchoRequest)
+                        .await
+                        .unwrap();
                     self.state = RepeaterState::WaitPingReply {
                         ping_count: ping_count + 1,
                         timeout: timer.get_time() + Milliseconds(100),
@@ -90,20 +92,21 @@ impl Repeater {
                         info!("[REP#{}] remote replied after {} packets", self.repno, ping_count);
                         let max_time = timer.get_time() + Milliseconds(200);
                         while timer.get_time() < max_time {
+                            task::r#yield().await;
                             let _ = drtioaux::recv(self.auxno);
                         }
                         self.state = RepeaterState::Up;
-                        if let Err(e) = self.sync_tsc(timer) {
+                        if let Err(e) = self.sync_tsc(timer).await {
                             error!("[REP#{}] failed to sync TSC ({:?})", self.repno, e);
                             self.state = RepeaterState::Failed;
                             return;
                         }
-                        if let Err(e) = self.load_routing_table(routing_table, timer) {
+                        if let Err(e) = self.load_routing_table(routing_table, timer).await {
                             error!("[REP#{}] failed to load routing table ({:?})", self.repno, e);
                             self.state = RepeaterState::Failed;
                             return;
                         }
-                        if let Err(e) = self.set_rank(rank + 1, timer) {
+                        if let Err(e) = self.set_rank(rank + 1, timer).await {
                             error!("[REP#{}] failed to set rank ({:?})", self.repno, e);
                             self.state = RepeaterState::Failed;
                             return;
@@ -124,7 +127,8 @@ impl Repeater {
                 }
             }
             RepeaterState::Up => {
-                self.process_unsolicited_aux(routing_table, rank, destination, router);
+                self.process_unsolicited_aux(routing_table, rank, destination, router)
+                    .await;
                 if !rep_link_rx_up(self.repno) {
                     info!("[REP#{}] link is down", self.repno);
                     self.state = RepeaterState::Down;
@@ -139,7 +143,7 @@ impl Repeater {
         }
     }
 
-    fn process_unsolicited_aux(
+    async fn process_unsolicited_aux(
         &self,
         routing_table: &drtio_routing::RoutingTable,
         rank: u8,
@@ -192,24 +196,14 @@ impl Repeater {
         }
     }
 
-    fn recv_aux_timeout(&self, timeout: u32, timer: &mut GlobalTimer) -> Result<drtioaux::Packet, drtioaux::Error> {
-        let max_time = timer.get_time() + Milliseconds(timeout.into());
-        loop {
-            if !rep_link_rx_up(self.repno) {
-                return Err(drtioaux::Error::LinkDown);
-            }
-            if timer.get_time() > max_time {
-                return Err(drtioaux::Error::TimedOut);
-            }
-            match drtioaux::recv(self.auxno) {
-                Ok(Some(packet)) => return Ok(packet),
-                Ok(None) => (),
-                Err(e) => return Err(e),
-            }
+    async fn recv_aux_timeout(&self, timeout: u64, timer: &mut GlobalTimer) -> Result<drtioaux::Packet, drtioaux::Error> {
+        if !rep_link_rx_up(self.repno) {
+            return Err(drtioaux::Error::LinkDown);
         }
+        drtioaux_async::recv_timeout(self.auxno, Some(timeout), *timer).await
     }
 
-    pub fn aux_forward(
+    pub async fn aux_forward(
         &self,
         request: &drtioaux::Packet,
         router: &mut Router,
@@ -218,9 +212,9 @@ impl Repeater {
         self_destination: u8,
         timer: &mut GlobalTimer,
     ) -> Result<(), drtioaux::Error> {
-        self.aux_send(request)?;
+        self.aux_send(request).await?;
         loop {
-            let reply = self.recv_aux_timeout(200, timer)?;
+            let reply = self.recv_aux_timeout(200, timer).await?;
             match reply {
                 // async/locally requested packets to be consumed or routed
                 // these may come while a packet would be forwarded
@@ -235,7 +229,7 @@ impl Repeater {
                     router.route(reply, routing_table, rank, self_destination);
                 }
                 _ => {
-                    drtioaux::send(0, &reply).unwrap();
+                    drtioaux_async::send(0, &reply).await.unwrap();
                     break;
                 }
             }
@@ -243,14 +237,14 @@ impl Repeater {
         Ok(())
     }
 
-    pub fn aux_send(&self, request: &drtioaux::Packet) -> Result<(), drtioaux::Error> {
+    pub async fn aux_send(&self, request: &drtioaux::Packet) -> Result<(), drtioaux::Error> {
         if self.state != RepeaterState::Up {
             return Err(drtioaux::Error::LinkDown);
         }
-        drtioaux::send(self.auxno, request)
+        drtioaux_async::send(self.auxno, request).await
     }
 
-    pub fn sync_tsc(&self, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
+    pub async fn sync_tsc(&self, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
         if self.state != RepeaterState::Up {
             return Ok(());
         }
@@ -263,7 +257,7 @@ impl Repeater {
 
         // TSCAck is the only aux packet that is sent spontaneously
         // by the satellite, in response to a TSC set on the RT link.
-        let reply = self.recv_aux_timeout(10000, timer)?;
+        let reply = self.recv_aux_timeout(10000, timer).await?;
         if reply == drtioaux::Packet::TSCAck {
             return Ok(());
         } else {
@@ -271,7 +265,7 @@ impl Repeater {
         }
     }
 
-    pub fn set_path(
+    pub async fn set_path(
         &self,
         destination: u8,
         hops: &[u8; drtio_routing::MAX_HOPS],
@@ -281,50 +275,53 @@ impl Repeater {
             return Ok(());
         }
 
-        drtioaux::send(
+        drtioaux_async::send(
             self.auxno,
             &drtioaux::Packet::RoutingSetPath {
                 destination: destination,
                 hops: *hops,
             },
         )
+        .await
         .unwrap();
-        let reply = self.recv_aux_timeout(200, timer)?;
+        let reply = self.recv_aux_timeout(200, timer).await?;
         if reply != drtioaux::Packet::RoutingAck {
             return Err(drtioaux::Error::UnexpectedReply);
         }
         Ok(())
     }
 
-    pub fn load_routing_table(
+    pub async fn load_routing_table(
         &self,
         routing_table: &drtio_routing::RoutingTable,
         timer: &mut GlobalTimer,
     ) -> Result<(), drtioaux::Error> {
         for i in 0..drtio_routing::DEST_COUNT {
-            self.set_path(i as u8, &routing_table.0[i], timer)?;
+            self.set_path(i as u8, &routing_table.0[i], timer).await?;
         }
         Ok(())
     }
 
-    pub fn set_rank(&self, rank: u8, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
+    pub async fn set_rank(&self, rank: u8, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
         if self.state != RepeaterState::Up {
             return Ok(());
         }
-        drtioaux::send(self.auxno, &drtioaux::Packet::RoutingSetRank { rank: rank }).unwrap();
-        let reply = self.recv_aux_timeout(200, timer)?;
+        drtioaux_async::send(self.auxno, &drtioaux::Packet::RoutingSetRank { rank: rank })
+            .await
+            .unwrap();
+        let reply = self.recv_aux_timeout(200, timer).await?;
         if reply != drtioaux::Packet::RoutingAck {
             return Err(drtioaux::Error::UnexpectedReply);
         }
         Ok(())
     }
 
-    pub fn rtio_reset(&self, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
+    pub async fn rtio_reset(&self, timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
         let repno = self.repno as usize;
         unsafe {
             (csr::DRTIOREP[repno].reset_write)(1);
         }
-        timer.delay_us(100);
+        delay(&mut timer.countdown(), Microseconds(100)).await;
         unsafe {
             (csr::DRTIOREP[repno].reset_write)(0);
         }
@@ -333,8 +330,10 @@ impl Repeater {
             return Ok(());
         }
 
-        drtioaux::send(self.auxno, &drtioaux::Packet::ResetRequest).unwrap();
-        let reply = self.recv_aux_timeout(200, timer)?;
+        drtioaux_async::send(self.auxno, &drtioaux::Packet::ResetRequest)
+            .await
+            .unwrap();
+        let reply = self.recv_aux_timeout(200, timer).await?;
         if reply != drtioaux::Packet::ResetAck {
             return Err(drtioaux::Error::UnexpectedReply);
         }
@@ -352,7 +351,7 @@ impl Repeater {
         Repeater::default()
     }
 
-    pub fn service(
+    pub async fn service(
         &self,
         _routing_table: &drtio_routing::RoutingTable,
         _rank: u8,
@@ -362,11 +361,11 @@ impl Repeater {
     ) {
     }
 
-    pub fn sync_tsc(&self, _timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
+    pub async fn sync_tsc(&self, _timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
         Ok(())
     }
 
-    pub fn rtio_reset(&self, _timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
+    pub async fn rtio_reset(&self, _timer: &mut GlobalTimer) -> Result<(), drtioaux::Error> {
         Ok(())
     }
 }

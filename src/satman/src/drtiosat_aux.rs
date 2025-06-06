@@ -34,9 +34,9 @@ macro_rules! forward {
                         $rank,
                         $self_destination,
                         $timer,
-                    );
+                    ).await;
                 } else {
-                    return $repeaters[repno].aux_send($packet);
+                    return $repeaters[repno].aux_send($packet).await;
                 }
             } else {
                 return Err(drtioaux::Error::RoutingError);
@@ -83,7 +83,7 @@ async fn process_aux_packet<'a, 'b>(
             timer.delay_us(100);
             drtiosat_reset(false);
             for rep in _repeaters.iter() {
-                if let Err(e) = rep.rtio_reset(timer) {
+                if let Err(e) = rep.rtio_reset(timer).await {
                     error!("failed to issue RTIO reset ({:?})", e);
                 }
             }
@@ -143,7 +143,7 @@ async fn process_aux_packet<'a, 'b>(
                             *rank,
                             *self_destination,
                             timer,
-                        ) {
+                        ).await {
                             Ok(()) => (),
                             Err(drtioaux::Error::LinkDown) => {
                                 drtioaux_async::send(0, &drtioaux::Packet::DestinationDownReply).await?
@@ -166,7 +166,7 @@ async fn process_aux_packet<'a, 'b>(
         drtioaux::Packet::RoutingSetPath { destination, hops } => {
             _routing_table.0[destination as usize] = hops;
             for rep in _repeaters.iter() {
-                if let Err(e) = rep.set_path(destination, &hops, timer) {
+                if let Err(e) = rep.set_path(destination, &hops, timer).await {
                     error!("failed to set path ({:?})", e);
                 }
             }
@@ -179,7 +179,7 @@ async fn process_aux_packet<'a, 'b>(
 
             let rep_rank = new_rank + 1;
             for rep in _repeaters.iter() {
-                if let Err(e) = rep.set_rank(rep_rank, timer) {
+                if let Err(e) = rep.set_rank(rep_rank, timer).await {
                     error!("failed to set rank ({:?})", e);
                 }
             }
