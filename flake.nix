@@ -121,7 +121,7 @@
       firmware = naerskLib.buildPackage rec {
         name = "firmware";
         src = ./src;
-        additionalCargoLock = "${rust}/lib/rustlib/src/rust/Cargo.lock";
+        additionalCargoLock = "${rust}/lib/rustlib/src/rust/library/Cargo.lock";
         singleStep = true;
 
         nativeBuildInputs = [
