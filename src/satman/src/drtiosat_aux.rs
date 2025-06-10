@@ -1,5 +1,5 @@
 use embedded_hal::blocking::delay::DelayUs;
-use libboard_artiq::{drtio_routing, drtioaux,
+use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      logger,
                      pl::csr};
@@ -59,7 +59,7 @@ macro_rules! forward {
     ) => {};
 }
 
-fn process_aux_packet(
+async fn process_aux_packet<'a, 'b>(
     _repeaters: &mut [repeater::Repeater],
     _routing_table: &mut drtio_routing::RoutingTable,
     rank: &mut u8,
@@ -69,14 +69,14 @@ fn process_aux_packet(
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
-    kernel_manager: &mut KernelManager,
-    core_manager: &mut CoreManager,
+    kernel_manager: &mut KernelManager<'a>,
+    core_manager: &mut CoreManager<'b>,
     router: &mut Router,
 ) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
     // and u16 otherwise; hence the `as _` conversion.
     match packet {
-        drtioaux::Packet::EchoRequest => drtioaux::send(0, &drtioaux::Packet::EchoReply),
+        drtioaux::Packet::EchoRequest => drtioaux_async::send(0, &drtioaux::Packet::EchoReply).await,
         drtioaux::Packet::ResetRequest => {
             info!("resetting RTIO");
             drtiosat_reset(true);
@@ -87,7 +87,7 @@ fn process_aux_packet(
                     error!("failed to issue RTIO reset ({:?})", e);
                 }
             }
-            drtioaux::send(0, &drtioaux::Packet::ResetAck)
+            drtioaux_async::send(0, &drtioaux::Packet::ResetAck).await
         }
 
         drtioaux::Packet::DestinationStatusRequest { destination } => {
@@ -108,23 +108,23 @@ fn process_aux_packet(
                         channel = csr::drtiosat::sequence_error_channel_read();
                         csr::drtiosat::rtio_error_write(1);
                     }
-                    drtioaux::send(0, &drtioaux::Packet::DestinationSequenceErrorReply { channel })?;
+                    drtioaux_async::send(0, &drtioaux::Packet::DestinationSequenceErrorReply { channel }).await?;
                 } else if errors & 2 != 0 {
                     let channel;
                     unsafe {
                         channel = csr::drtiosat::collision_channel_read();
                         csr::drtiosat::rtio_error_write(2);
                     }
-                    drtioaux::send(0, &drtioaux::Packet::DestinationCollisionReply { channel })?;
+                    drtioaux_async::send(0, &drtioaux::Packet::DestinationCollisionReply { channel }).await?;
                 } else if errors & 4 != 0 {
                     let channel;
                     unsafe {
                         channel = csr::drtiosat::busy_channel_read();
                         csr::drtiosat::rtio_error_write(4);
                     }
-                    drtioaux::send(0, &drtioaux::Packet::DestinationBusyReply { channel })?;
+                    drtioaux_async::send(0, &drtioaux::Packet::DestinationBusyReply { channel }).await?;
                 } else {
-                    drtioaux::send(0, &drtioaux::Packet::DestinationOkReply)?;
+                    drtioaux_async::send(0, &drtioaux::Packet::DestinationOkReply).await?;
                 }
             }
 
@@ -146,15 +146,15 @@ fn process_aux_packet(
                         ) {
                             Ok(()) => (),
                             Err(drtioaux::Error::LinkDown) => {
-                                drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?
+                                drtioaux_async::send(0, &drtioaux::Packet::DestinationDownReply).await?
                             }
                             Err(e) => {
-                                drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?;
+                                drtioaux_async::send(0, &drtioaux::Packet::DestinationDownReply).await?;
                                 error!("aux error when handling destination status request: {:?}", e);
                             }
                         }
                     } else {
-                        drtioaux::send(0, &drtioaux::Packet::DestinationDownReply)?;
+                        drtioaux_async::send(0, &drtioaux::Packet::DestinationDownReply).await?;
                     }
                 }
             }
@@ -170,7 +170,7 @@ fn process_aux_packet(
                     error!("failed to set path ({:?})", e);
                 }
             }
-            drtioaux::send(0, &drtioaux::Packet::RoutingAck)
+            drtioaux_async::send(0, &drtioaux::Packet::RoutingAck).await
         }
         #[cfg(has_drtio_routing)]
         drtioaux::Packet::RoutingSetRank { rank: new_rank } => {
@@ -187,16 +187,16 @@ fn process_aux_packet(
             info!("rank: {}", rank);
             info!("routing table: {}", _routing_table);
 
-            drtioaux::send(0, &drtioaux::Packet::RoutingAck)
+            drtioaux_async::send(0, &drtioaux::Packet::RoutingAck).await
         }
 
         #[cfg(not(has_drtio_routing))]
         drtioaux::Packet::RoutingSetPath {
             destination: _,
             hops: _,
-        } => drtioaux::send(0, &drtioaux::Packet::RoutingAck),
+        } => drtioaux_async::send(0, &drtioaux::Packet::RoutingAck).await,
         #[cfg(not(has_drtio_routing))]
-        drtioaux::Packet::RoutingSetRank { rank: _ } => drtioaux::send(0, &drtioaux::Packet::RoutingAck),
+        drtioaux::Packet::RoutingSetRank { rank: _ } => drtioaux_async::send(0, &drtioaux::Packet::RoutingAck).await,
 
         drtioaux::Packet::MonitorRequest {
             destination: _destination,
@@ -226,7 +226,7 @@ fn process_aux_packet(
                 value = 0;
             }
             let reply = drtioaux::Packet::MonitorReply { value: value };
-            drtioaux::send(0, &reply)
+            drtioaux_async::send(0, &reply).await
         }
         drtioaux::Packet::InjectionRequest {
             destination: _destination,
@@ -278,7 +278,7 @@ fn process_aux_packet(
             {
                 value = 0;
             }
-            drtioaux::send(0, &drtioaux::Packet::InjectionStatusReply { value: value })
+            drtioaux_async::send(0, &drtioaux::Packet::InjectionStatusReply { value: value }).await
         }
 
         drtioaux::Packet::I2cStartRequest {
@@ -296,7 +296,7 @@ fn process_aux_packet(
                 timer
             );
             let succeeded = i2c.start().is_ok();
-            drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
+            drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
         }
         drtioaux::Packet::I2cRestartRequest {
             destination: _destination,
@@ -313,7 +313,7 @@ fn process_aux_packet(
                 timer
             );
             let succeeded = i2c.restart().is_ok();
-            drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
+            drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
         }
         drtioaux::Packet::I2cStopRequest {
             destination: _destination,
@@ -330,7 +330,7 @@ fn process_aux_packet(
                 timer
             );
             let succeeded = i2c.stop().is_ok();
-            drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
+            drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
         }
         drtioaux::Packet::I2cWriteRequest {
             destination: _destination,
@@ -348,27 +348,36 @@ fn process_aux_packet(
                 timer
             );
             match i2c.write(data) {
-                Ok(()) => drtioaux::send(
-                    0,
-                    &drtioaux::Packet::I2cWriteReply {
-                        succeeded: true,
-                        ack: true,
-                    },
-                ),
-                Err(I2cError::Nack) => drtioaux::send(
-                    0,
-                    &drtioaux::Packet::I2cWriteReply {
-                        succeeded: true,
-                        ack: false,
-                    },
-                ),
-                Err(_) => drtioaux::send(
-                    0,
-                    &drtioaux::Packet::I2cWriteReply {
-                        succeeded: false,
-                        ack: false,
-                    },
-                ),
+                Ok(()) => {
+                    drtioaux_async::send(
+                        0,
+                        &drtioaux::Packet::I2cWriteReply {
+                            succeeded: true,
+                            ack: true,
+                        },
+                    )
+                    .await
+                }
+                Err(I2cError::Nack) => {
+                    drtioaux_async::send(
+                        0,
+                        &drtioaux::Packet::I2cWriteReply {
+                            succeeded: true,
+                            ack: false,
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    drtioaux_async::send(
+                        0,
+                        &drtioaux::Packet::I2cWriteReply {
+                            succeeded: false,
+                            ack: false,
+                        },
+                    )
+                    .await
+                }
             }
         }
         drtioaux::Packet::I2cReadRequest {
@@ -387,20 +396,26 @@ fn process_aux_packet(
                 timer
             );
             match i2c.read(ack) {
-                Ok(data) => drtioaux::send(
-                    0,
-                    &drtioaux::Packet::I2cReadReply {
-                        succeeded: true,
-                        data: data,
-                    },
-                ),
-                Err(_) => drtioaux::send(
-                    0,
-                    &drtioaux::Packet::I2cReadReply {
-                        succeeded: false,
-                        data: 0xff,
-                    },
-                ),
+                Ok(data) => {
+                    drtioaux_async::send(
+                        0,
+                        &drtioaux::Packet::I2cReadReply {
+                            succeeded: true,
+                            data: data,
+                        },
+                    )
+                    .await
+                }
+                Err(_) => {
+                    drtioaux_async::send(
+                        0,
+                        &drtioaux::Packet::I2cReadReply {
+                            succeeded: false,
+                            data: 0xff,
+                        },
+                    )
+                    .await
+                }
             }
         }
         drtioaux::Packet::I2cSwitchSelectRequest {
@@ -430,10 +445,10 @@ fn process_aux_packet(
                 0x20 => Some(5),
                 0x40 => Some(6),
                 0x80 => Some(7),
-                _ => return drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: false }),
+                _ => return drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: false }).await,
             };
             let succeeded = i2c.pca954x_select(address, ch).is_ok();
-            drtioaux::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded })
+            drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
         }
 
         drtioaux::Packet::SpiSetConfigRequest {
@@ -456,7 +471,7 @@ fn process_aux_packet(
             );
             // todo: reimplement when/if SPI is available
             //let succeeded = spi::set_config(busno, flags, length, div, cs).is_ok();
-            drtioaux::send(0, &drtioaux::Packet::SpiBasicReply { succeeded: false })
+            drtioaux_async::send(0, &drtioaux::Packet::SpiBasicReply { succeeded: false }).await
         }
         drtioaux::Packet::SpiWriteRequest {
             destination: _destination,
@@ -475,7 +490,7 @@ fn process_aux_packet(
             );
             // todo: reimplement when/if SPI is available
             //let succeeded = spi::write(busno, data).is_ok();
-            drtioaux::send(0, &drtioaux::Packet::SpiBasicReply { succeeded: false })
+            drtioaux_async::send(0, &drtioaux::Packet::SpiBasicReply { succeeded: false }).await
         }
         drtioaux::Packet::SpiReadRequest {
             destination: _destination,
@@ -493,18 +508,19 @@ fn process_aux_packet(
             );
             // todo: reimplement when/if SPI is available
             // match spi::read(busno) {
-            //     Ok(data) => drtioaux::send(0,
-            //         &drtioaux::Packet::SpiReadReply { succeeded: true, data: data }),
-            //     Err(_) => drtioaux::send(0,
-            //         &drtioaux::Packet::SpiReadReply { succeeded: false, data: 0 })
+            //     Ok(data) => drtioaux_async::send(0,
+            //         &drtioaux::Packet::SpiReadReply { succeeded: true, data: data }).await,
+            //     Err(_) => drtioaux_async::send(0,
+            //         &drtioaux::Packet::SpiReadReply { succeeded: false, data: 0 }).await
             // }
-            drtioaux::send(
+            drtioaux_async::send(
                 0,
                 &drtioaux::Packet::SpiReadReply {
                     succeeded: false,
                     data: 0,
                 },
             )
+            .await
         }
 
         drtioaux::Packet::AnalyzerHeaderRequest {
@@ -521,7 +537,7 @@ fn process_aux_packet(
                 timer
             );
             let header = analyzer.get_header();
-            drtioaux::send(
+            drtioaux_async::send(
                 0,
                 &drtioaux::Packet::AnalyzerHeader {
                     total_byte_count: header.total_byte_count,
@@ -529,6 +545,7 @@ fn process_aux_packet(
                     overflow_occurred: header.error,
                 },
             )
+            .await
         }
         drtioaux::Packet::AnalyzerDataRequest {
             destination: _destination,
@@ -545,7 +562,7 @@ fn process_aux_packet(
             );
             let mut data_slice: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
             let meta = analyzer.get_data(&mut data_slice);
-            drtioaux::send(
+            drtioaux_async::send(
                 0,
                 &drtioaux::Packet::AnalyzerData {
                     last: meta.last,
@@ -553,6 +570,7 @@ fn process_aux_packet(
                     data: data_slice,
                 },
             )
+            .await
         }
 
         drtioaux::Packet::DmaAddTraceRequest {
@@ -748,7 +766,7 @@ fn process_aux_packet(
             );
             *self_destination = destination;
             let succeeded = kernel_manager.add(id, status, &data, length as usize).is_ok();
-            drtioaux::send(0, &drtioaux::Packet::SubkernelAddDataReply { succeeded: succeeded })
+            drtioaux_async::send(0, &drtioaux::Packet::SubkernelAddDataReply { succeeded: succeeded }).await
         }
         drtioaux::Packet::SubkernelLoadRunRequest {
             source,
@@ -956,7 +974,7 @@ fn process_aux_packet(
             );
             let mut data_slice = [0; SAT_PAYLOAD_MAX_SIZE];
             let meta = core_manager.log_get_slice(&mut data_slice, clear);
-            drtioaux::send(
+            drtioaux_async::send(
                 0,
                 &drtioaux::Packet::CoreMgmtGetLogReply {
                     last: meta.status.is_last(),
@@ -964,6 +982,7 @@ fn process_aux_packet(
                     data: data_slice,
                 },
             )
+            .await
         }
         drtioaux::Packet::CoreMgmtClearLogRequest {
             destination: _destination,
@@ -979,7 +998,7 @@ fn process_aux_packet(
                 timer
             );
             mgmt::clear_log();
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+            drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
         }
         drtioaux::Packet::CoreMgmtSetLogLevelRequest {
             destination: _destination,
@@ -999,9 +1018,9 @@ fn process_aux_packet(
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
                 info!("Changing log level to {}", level_filter);
                 log::set_max_level(level_filter);
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
             } else {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
             }
         }
         drtioaux::Packet::CoreMgmtSetUartLogLevelRequest {
@@ -1022,9 +1041,9 @@ fn process_aux_packet(
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
                 info!("Changing UART log level to {}", level_filter);
                 logger::BufferLogger::get_logger().set_uart_log_level(level_filter);
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
             } else {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
             }
         }
         drtioaux::Packet::CoreMgmtConfigReadRequest {
@@ -1048,12 +1067,12 @@ fn process_aux_packet(
             let key_slice = &key[..length as usize];
             if !key_slice.is_ascii() {
                 error!("invalid key");
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
             } else {
                 let key = core::str::from_utf8(key_slice).unwrap();
                 if core_manager.fetch_config_value(key).is_ok() {
                     let meta = core_manager.get_config_value_slice(&mut value_slice);
-                    drtioaux::send(
+                    drtioaux_async::send(
                         0,
                         &drtioaux::Packet::CoreMgmtConfigReadReply {
                             last: meta.status.is_last(),
@@ -1061,8 +1080,9 @@ fn process_aux_packet(
                             value: value_slice,
                         },
                     )
+                    .await
                 } else {
-                    drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+                    drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
                 }
             }
         }
@@ -1082,7 +1102,7 @@ fn process_aux_packet(
 
             let mut value_slice = [0; SAT_PAYLOAD_MAX_SIZE];
             let meta = core_manager.get_config_value_slice(&mut value_slice);
-            drtioaux::send(
+            drtioaux_async::send(
                 0,
                 &drtioaux::Packet::CoreMgmtConfigReadReply {
                     last: meta.status.is_last(),
@@ -1090,6 +1110,7 @@ fn process_aux_packet(
                     value: value_slice,
                 },
             )
+            .await
         }
         drtioaux::Packet::CoreMgmtConfigWriteRequest {
             destination: _destination,
@@ -1116,7 +1137,7 @@ fn process_aux_packet(
                 core_manager.clear_config_data();
             }
 
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded })
+            drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded }).await
         }
         drtioaux::Packet::CoreMgmtConfigRemoveRequest {
             destination: _destination,
@@ -1137,11 +1158,11 @@ fn process_aux_packet(
             let key_slice = &key[..length as usize];
             if !key_slice.is_ascii() {
                 error!("invalid key");
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
             } else {
                 let key = core::str::from_utf8(key_slice).unwrap();
                 let succeeded = core_manager.remove_config(key).is_ok();
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded }).await
             }
         }
         drtioaux::Packet::CoreMgmtConfigEraseRequest {
@@ -1159,7 +1180,7 @@ fn process_aux_packet(
             );
 
             error!("config erase not supported on zynq device");
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+            drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
         }
         drtioaux::Packet::CoreMgmtRebootRequest {
             destination: _destination,
@@ -1176,7 +1197,7 @@ fn process_aux_packet(
                 timer
             );
 
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })?;
+            drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await?;
             info!("reboot imminent");
             slcr::reboot();
 
@@ -1197,7 +1218,7 @@ fn process_aux_packet(
             );
 
             error!("debug allocator not supported on zynq device");
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false })
+            drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
         }
         drtioaux::Packet::CoreMgmtFlashRequest {
             destination: _destination,
@@ -1215,7 +1236,7 @@ fn process_aux_packet(
             );
 
             core_manager.allocate_image_buffer(payload_length as usize);
-            drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+            drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
         }
         drtioaux::Packet::CoreMgmtFlashAddDataRequest {
             destination: _destination,
@@ -1237,9 +1258,9 @@ fn process_aux_packet(
             core_manager.add_image_data(&data, length as usize);
 
             if last {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtDropLink)
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtDropLink).await
             } else {
-                drtioaux::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true })
+                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
             }
         }
         drtioaux::Packet::CoreMgmtDropLinkAck {
@@ -1278,7 +1299,7 @@ fn process_aux_packet(
     }
 }
 
-pub fn process_aux_packets(
+pub async fn process_aux_packets<'a, 'b>(
     repeaters: &mut [repeater::Repeater],
     routing_table: &mut drtio_routing::RoutingTable,
     rank: &mut u8,
@@ -1287,30 +1308,34 @@ pub fn process_aux_packets(
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
-    kernel_manager: &mut KernelManager,
-    core_manager: &mut CoreManager,
+    kernel_manager: &mut KernelManager<'a>,
+    core_manager: &mut CoreManager<'b>,
     router: &mut Router,
 ) {
-    let result = drtioaux::recv(0).and_then(|packet| {
-        if let Some(packet) = packet.or_else(|| router.get_local_packet()) {
-            process_aux_packet(
-                repeaters,
-                routing_table,
-                rank,
-                self_destination,
-                packet,
-                timer,
-                i2c,
-                dma_manager,
-                analyzer,
-                kernel_manager,
-                core_manager,
-                router,
-            )
-        } else {
-            Ok(())
+    let result = match drtioaux::recv(0) {
+        Ok(packet) => {
+            if let Some(packet) = packet.or_else(|| router.get_local_packet()) {
+                process_aux_packet(
+                    repeaters,
+                    routing_table,
+                    rank,
+                    self_destination,
+                    packet,
+                    timer,
+                    i2c,
+                    dma_manager,
+                    analyzer,
+                    kernel_manager,
+                    core_manager,
+                    router,
+                )
+                .await
+            } else {
+                Ok(())
+            }
         }
-    });
+        Err(e) => Err(e),
+    };
     if let Err(e) = result {
         warn!("aux packet error ({:?})", e);
     }

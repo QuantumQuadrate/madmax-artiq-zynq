@@ -441,7 +441,7 @@ async fn linkup_service<'a, 'b>(
         kernel_manager,
         core_manager,
         router,
-    );
+    ).await;
     #[allow(unused_mut)]
     for mut rep in repeaters.iter_mut() {
         rep.service(&routing_table, *rank, *destination, router, &mut timer);
