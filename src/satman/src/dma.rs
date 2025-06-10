@@ -211,11 +211,17 @@ impl RemoteTraces {
     }
 
     // on incoming Packet::DmaPlaybackDone
-    pub fn remote_finished(&mut self, kernel_manager: &mut KernelManager, error: u8, channel: u32, timestamp: u64) {
+    pub async fn remote_finished<'a>(
+        &mut self,
+        kernel_manager: &mut KernelManager<'a>,
+        error: u8,
+        channel: u32,
+        timestamp: u64,
+    ) {
         if let RemoteTraceState::Running(count) = self.state {
             if error != 0 || count - 1 == 0 {
                 // notify the kernel about a DDMA error or finish
-                kernel_manager.ddma_finished(error, channel, timestamp);
+                kernel_manager.ddma_finished(error, channel, timestamp).await;
                 self.state = RemoteTraceState::Ready;
                 // further messages will be ignored (if there was an error)
             } else {
@@ -354,16 +360,16 @@ impl Manager {
         }
     }
 
-    pub fn remote_finished(
+    pub async fn remote_finished<'a>(
         &mut self,
-        kernel_manager: &mut KernelManager,
+        kernel_manager: &mut KernelManager<'a>,
         id: u32,
         error: u8,
         channel: u32,
         timestamp: u64,
     ) {
         if let Some(entry) = self.remote_entries.get_mut(&id) {
-            entry.remote_finished(kernel_manager, error, channel, timestamp);
+            entry.remote_finished(kernel_manager, error, channel, timestamp).await;
         }
     }
 

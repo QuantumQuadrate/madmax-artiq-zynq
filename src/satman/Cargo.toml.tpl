@@ -21,6 +21,7 @@ core_io = { git = "https://git.m-labs.hk/M-Labs/rs-core_io.git", rev = "e9d3edf0
 crc = { version = "1.7", default-features = false }
 cslice = "0.3"
 embedded-hal = "0.2"
+async-recursion = "1.1"
 
 libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq", features = ["ipv6"]}
 libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core"] }

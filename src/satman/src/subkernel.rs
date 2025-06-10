@@ -1,14 +1,12 @@
-use alloc::{collections::BTreeMap,
-            format,
-            string::{String, ToString},
-            vec::Vec};
-use core::{slice, str};
+use alloc::{collections::BTreeMap, format, string::{String, ToString}, vec::Vec};
+use core::{cell::RefCell, slice, str};
 
 use byteorder::NativeEndian;
 use core_io::Error as IoError;
 use cslice::AsCSlice;
 use io::{Cursor, ProtoWrite};
-use ksupport::{eh_artiq, kernel, kernel::rtio, rpc};
+use ksupport::{eh_artiq, kernel, kernel::rtio};
+use libasync::task;
 use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus},
@@ -17,7 +15,7 @@ use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::sync_channel::Receiver;
 use log::warn;
 
-use crate::{dma::{Error as DmaError, Manager as DmaManager},
+use crate::{rpc_async, dma::{Error as DmaError, Manager as DmaManager},
             routing::{Router, SliceMeta, Sliceable}};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -160,7 +158,7 @@ struct KernelLibrary {
 pub struct Manager<'a> {
     kernels: BTreeMap<u32, KernelLibrary>,
     session: Session,
-    control: &'a mut kernel::Control,
+    control: &'a RefCell<kernel::Control> ,
     cache: BTreeMap<String, Vec<i32>>,
     last_finished: Option<SubkernelFinished>,
 }
@@ -289,8 +287,8 @@ impl MessageManager {
     }
 }
 
-impl<'a> Manager<'_> {
-    pub fn new(control: &mut kernel::Control) -> Manager {
+impl<'a> Manager<'a> {
+    pub fn new(control: &RefCell<kernel::Control>) -> Manager {
         Manager {
             kernels: BTreeMap::new(),
             session: Session::new(0),
@@ -346,9 +344,9 @@ impl<'a> Manager<'_> {
         }
     }
 
-    pub fn run(&mut self, source: u8, id: u32, timestamp: u64) -> Result<(), Error> {
+    pub async fn run(&mut self, source: u8, id: u32, timestamp: u64) -> Result<(), Error> {
         if self.session.kernel_state != KernelState::Loaded || self.session.id != id {
-            self.load(id)?;
+            self.load(id).await?;
         }
         self.session.kernel_state = KernelState::Running;
         self.session.source = source;
@@ -357,7 +355,7 @@ impl<'a> Manager<'_> {
         }
 
         rtio::at_mu(timestamp as i64);
-        self.control.tx.send(kernel::Message::StartRequest);
+        self.control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
         Ok(())
     }
 
@@ -389,7 +387,7 @@ impl<'a> Manager<'_> {
         self.session.messages.ack_slice()
     }
 
-    pub fn load(&mut self, id: u32) -> Result<(), Error> {
+    pub async fn load(&mut self, id: u32) -> Result<(), Error> {
         if self.session.id == id && self.session.kernel_state == KernelState::Loaded {
             return Ok(());
         }
@@ -397,16 +395,19 @@ impl<'a> Manager<'_> {
             return Err(Error::KernelNotFound);
         }
         self.session = Session::new(id);
-        self.control.restart();
+        self.control.borrow_mut().restart();
 
-        self.control.tx.send(kernel::Message::LoadRequest(
-            self.kernels
-                .get(&id)
-                .ok_or_else(|| Error::KernelNotFound)?
-                .library
-                .clone(),
-        ));
-        let reply = self.control.rx.recv();
+        self.control.borrow_mut()
+            .tx
+            .async_send(kernel::Message::LoadRequest(
+                self.kernels
+                    .get(&id)
+                    .ok_or_else(|| Error::KernelNotFound)?
+                    .library
+                    .clone(),
+            ))
+            .await;
+        let reply = self.control.borrow_mut().rx.recv();
         match reply {
             kernel::Message::LoadCompleted => Ok(()),
             kernel::Message::LoadFailed => Err(Error::Load("kernel load failed".to_string())),
@@ -463,27 +464,33 @@ impl<'a> Manager<'_> {
         self.kernel_stop();
     }
 
-    pub fn ddma_finished(&mut self, error: u8, channel: u32, timestamp: u64) {
+    pub async fn ddma_finished(&mut self, error: u8, channel: u32, timestamp: u64) {
         if let KernelState::DmaAwait { .. } = self.session.kernel_state {
-            self.control.tx.send(kernel::Message::DmaAwaitRemoteReply {
-                timeout: false,
-                error: error,
-                channel: channel,
-                timestamp: timestamp,
-            });
+            self.control.borrow_mut()
+                .tx
+                .async_send(kernel::Message::DmaAwaitRemoteReply {
+                    timeout: false,
+                    error: error,
+                    channel: channel,
+                    timestamp: timestamp,
+                })
+                .await;
             self.session.kernel_state = KernelState::Running;
         }
     }
 
-    pub fn ddma_nack(&mut self) {
+    pub async fn ddma_nack(&mut self) {
         // for simplicity treat it as a timeout...
         if let KernelState::DmaAwait { .. } = self.session.kernel_state {
-            self.control.tx.send(kernel::Message::DmaAwaitRemoteReply {
-                timeout: true,
-                error: 0,
-                channel: 0,
-                timestamp: 0,
-            });
+            self.control.borrow_mut()
+                .tx
+                .async_send(kernel::Message::DmaAwaitRemoteReply {
+                    timeout: true,
+                    error: 0,
+                    channel: 0,
+                    timestamp: 0,
+                })
+                .await;
             self.session.kernel_state = KernelState::Running;
         }
     }
@@ -516,7 +523,7 @@ impl<'a> Manager<'_> {
         res
     }
 
-    pub fn process_kern_requests(
+    pub async fn process_kern_requests(
         &mut self,
         router: &mut Router,
         routing_table: &RoutingTable,
@@ -547,7 +554,10 @@ impl<'a> Manager<'_> {
             return;
         }
 
-        match self.process_external_messages(router, routing_table, rank, destination, timer) {
+        match self
+            .process_external_messages(router, routing_table, rank, destination, timer)
+            .await
+        {
             Ok(()) => (),
             Err(Error::AwaitingMessage) => return, // kernel still waiting, do not process kernel messages
             Err(Error::KernelException(exception)) => {
@@ -571,7 +581,7 @@ impl<'a> Manager<'_> {
             }
         }
 
-        match self.process_kern_message(router, routing_table, rank, destination, dma_manager, timer) {
+        match self.process_kern_message(router, routing_table, rank, destination, dma_manager, timer).await {
             Ok(true) => {
                 self.last_finished = Some(SubkernelFinished {
                     id: self.session.id,
@@ -603,7 +613,7 @@ impl<'a> Manager<'_> {
         }
     }
 
-    fn check_finished_kernels(
+    async fn check_finished_kernels(
         &mut self,
         id: u32,
         router: &mut Router,
@@ -614,7 +624,10 @@ impl<'a> Manager<'_> {
         for (i, (status, exception_source)) in self.session.subkernels_finished.iter().enumerate() {
             if *status == id {
                 if exception_source.is_none() {
-                    self.control.tx.send(kernel::Message::SubkernelAwaitFinishReply);
+                    self.control.borrow_mut()
+                        .tx
+                        .async_send(kernel::Message::SubkernelAwaitFinishReply)
+                        .await;
                     self.session.kernel_state = KernelState::Running;
                     self.session.subkernels_finished.swap_remove(i);
                 } else {
@@ -640,7 +653,7 @@ impl<'a> Manager<'_> {
 
     pub fn subkernel_load_run_reply(&mut self, succeeded: bool) {
         if self.session.kernel_state == KernelState::SubkernelAwaitLoad {
-            self.control
+            self.control.borrow_mut()
                 .tx
                 .send(kernel::Message::SubkernelLoadRunReply { succeeded: succeeded });
             self.session.kernel_state = KernelState::Running;
@@ -670,7 +683,7 @@ impl<'a> Manager<'_> {
                 .unwrap()
                 .extend_from_slice(exception_data);
             if last {
-                self.control
+                self.control.borrow_mut()
                     .tx
                     .send(kernel::Message::SubkernelError(kernel::SubkernelStatus::Exception(
                         self.session.external_exception.take().unwrap(),
@@ -693,7 +706,7 @@ impl<'a> Manager<'_> {
         }
     }
 
-    fn process_kern_message(
+    async fn process_kern_message(
         &mut self,
         router: &mut Router,
         routing_table: &RoutingTable,
@@ -702,7 +715,7 @@ impl<'a> Manager<'_> {
         dma_manager: &mut DmaManager,
         timer: &GlobalTimer,
     ) -> Result<bool, Error> {
-        let reply = self.control.rx.try_recv()?;
+        let reply = self.control.borrow_mut().rx.try_recv()?;
         match reply {
             kernel::Message::KernelFinished(_async_errors) => {
                 self.kernel_stop();
@@ -731,7 +744,7 @@ impl<'a> Manager<'_> {
             kernel::Message::CacheGetRequest(key) => {
                 const DEFAULT: Vec<i32> = Vec::new();
                 let value = self.cache.get(&key).unwrap_or(&DEFAULT).clone();
-                self.control.tx.send(kernel::Message::CacheGetReply(value));
+                self.control.borrow_mut().tx.async_send(kernel::Message::CacheGetReply(value)).await;
             }
 
             kernel::Message::DmaPutRequest(recorder) => {
@@ -748,7 +761,7 @@ impl<'a> Manager<'_> {
             }
             kernel::Message::DmaGetRequest(name) => {
                 let dma_meta = dma_manager.retrieve(self_destination, &name);
-                self.control.tx.send(kernel::Message::DmaGetReply(dma_meta));
+                self.control.borrow_mut().tx.async_send(kernel::Message::DmaGetReply(dma_meta)).await;
             }
             kernel::Message::DmaStartRemoteRequest { id, timestamp } => {
                 if self.session.kernel_state != KernelState::DmaUploading {
@@ -843,9 +856,12 @@ impl<'a> Manager<'_> {
                 };
             }
             kernel::Message::UpDestinationsRequest(destination) => {
-                self.control.tx.send(kernel::Message::UpDestinationsReply(
-                    destination == (self_destination as i32),
-                ));
+                self.control.borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::UpDestinationsReply(
+                        destination == (self_destination as i32),
+                    ))
+                    .await;
             }
             /* core.reset() on satellites only affects the satellite, ignore the request */
             kernel::Message::RtioInitRequest => {}
@@ -856,7 +872,7 @@ impl<'a> Manager<'_> {
         Ok(false)
     }
 
-    fn process_external_messages(
+    async fn process_external_messages(
         &mut self,
         router: &mut Router,
         routing_table: &RoutingTable,
@@ -868,7 +884,7 @@ impl<'a> Manager<'_> {
             KernelState::MsgAwait { max_time, id, tags } => {
                 if let Some(max_time) = *max_time {
                     if timer.get_time() > max_time {
-                        self.control
+                        self.control.borrow_mut()
                             .tx
                             .send(kernel::Message::SubkernelError(kernel::SubkernelStatus::Timeout));
                         self.session.kernel_state = KernelState::Running;
@@ -876,22 +892,22 @@ impl<'a> Manager<'_> {
                     }
                 }
                 if let Some(message) = self.session.messages.get_incoming(*id) {
-                    self.control
+                    self.control.borrow_mut()
                         .tx
                         .send(kernel::Message::SubkernelMsgRecvReply { count: message.count });
                     let tags = tags.clone();
                     self.session.kernel_state = KernelState::Running;
-                    self.pass_message_to_kernel(&message, tags, timer)
+                    self.pass_message_to_kernel(&message, tags, timer).await
                 } else {
                     let id = *id;
-                    self.check_finished_kernels(id, router, routing_table, rank, self_destination);
+                    self.check_finished_kernels(id, router, routing_table, rank, self_destination).await;
                     Err(Error::AwaitingMessage)
                 }
             }
             KernelState::MsgSending => {
                 if self.session.messages.was_message_acknowledged() {
                     self.session.kernel_state = KernelState::Running;
-                    self.control.tx.send(kernel::Message::SubkernelMsgSent);
+                    self.control.borrow_mut().tx.async_send(kernel::Message::SubkernelMsgSent).await;
                     Ok(())
                 } else {
                     Err(Error::AwaitingMessage)
@@ -900,7 +916,7 @@ impl<'a> Manager<'_> {
             KernelState::SubkernelAwaitFinish { max_time, id } => {
                 if let Some(max_time) = *max_time {
                     if timer.get_time() > max_time {
-                        self.control
+                        self.control.borrow_mut()
                             .tx
                             .send(kernel::Message::SubkernelError(kernel::SubkernelStatus::Timeout));
                         self.session.kernel_state = KernelState::Running;
@@ -908,18 +924,21 @@ impl<'a> Manager<'_> {
                     }
                 }
                 let id = *id;
-                self.check_finished_kernels(id, router, routing_table, rank, self_destination);
+                self.check_finished_kernels(id, router, routing_table, rank, self_destination).await;
                 Ok(())
             }
             KernelState::SubkernelRetrievingException { .. } => Err(Error::AwaitingMessage),
             KernelState::DmaAwait { max_time } | KernelState::DmaPendingAwait { max_time, .. } => {
                 if timer.get_time() > *max_time {
-                    self.control.tx.send(kernel::Message::DmaAwaitRemoteReply {
-                        timeout: true,
-                        error: 0,
-                        channel: 0,
-                        timestamp: 0,
-                    });
+                    self.control.borrow_mut()
+                        .tx
+                        .async_send(kernel::Message::DmaAwaitRemoteReply {
+                            timeout: true,
+                            error: 0,
+                            channel: 0,
+                            timestamp: 0,
+                        })
+                        .await;
                     self.session.kernel_state = KernelState::Running;
                 }
                 Ok(())
@@ -928,23 +947,28 @@ impl<'a> Manager<'_> {
         }
     }
 
-    fn pass_message_to_kernel(&mut self, message: &Message, tags: Vec<u8>, timer: &GlobalTimer) -> Result<(), Error> {
+    async fn pass_message_to_kernel(
+        &mut self,
+        message: &Message,
+        tags: Vec<u8>,
+        timer: &GlobalTimer,
+    ) -> Result<(), Error> {
         let mut reader = Cursor::new(&message.data);
         let mut current_tags: &[u8] = &tags;
         let mut i = message.count;
         loop {
-            let slot = match recv_w_timeout(&mut self.control.rx, timer, 100)? {
+            let slot = match recv_w_timeout(&mut self.control.borrow_mut().rx, timer, 100).await? {
                 kernel::Message::RpcRecvRequest(slot) => slot,
                 other => unexpected!("expected root value slot from core1, not {:?}", other),
             };
             let mut exception: Option<Sliceable> = None;
             let mut unexpected: Option<String> = None;
-            let remaining_tags = rpc::recv_return(&mut reader, current_tags, slot, &mut |size| {
+            let remaining_tags = rpc_async::recv_return(&mut reader, current_tags, slot, &mut async |size| {
                 if size == 0 {
                     0 as *mut ()
                 } else {
-                    self.control.tx.send(kernel::Message::RpcRecvReply(Ok(size)));
-                    match recv_w_timeout(&mut self.control.rx, timer, 100) {
+                    self.control.borrow_mut().tx.async_send(kernel::Message::RpcRecvReply(Ok(size))).await;
+                    match recv_w_timeout(&mut self.control.borrow_mut().rx, timer, 100).await {
                         Ok(kernel::Message::RpcRecvRequest(slot)) => slot,
                         Ok(kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors)) => {
                             let buf: Vec<u8> = Vec::new();
@@ -965,7 +989,7 @@ impl<'a> Manager<'_> {
                         }
                     }
                 }
-            })?;
+            }).await?;
             if let Some(exception) = exception {
                 self.kernel_stop();
                 return Err(Error::KernelException(exception));
@@ -973,7 +997,7 @@ impl<'a> Manager<'_> {
                 self.kernel_stop();
                 unexpected!("{}", unexpected);
             }
-            self.control.tx.send(kernel::Message::RpcRecvReply(Ok(0)));
+            self.control.borrow_mut().tx.async_send(kernel::Message::RpcRecvReply(Ok(0))).await;
             i -= 1;
             if i == 0 {
                 break;
@@ -1040,7 +1064,7 @@ fn write_exception<W: ProtoWrite>(
     Ok(())
 }
 
-fn recv_w_timeout(
+async fn recv_w_timeout(
     rx: &mut Receiver<'_, kernel::Message>,
     timer: &GlobalTimer,
     timeout: u64,
@@ -1051,6 +1075,7 @@ fn recv_w_timeout(
             Err(_) => (),
             Ok(message) => return Ok(message),
         }
+        task::r#yield().await;
     }
     Err(Error::NoMessage)
 }

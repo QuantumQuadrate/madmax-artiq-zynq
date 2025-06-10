@@ -26,6 +26,8 @@ extern crate unwind;
 
 extern crate alloc;
 
+use core::cell::RefCell;
+
 use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use drtiosat_aux::process_aux_packets;
@@ -57,6 +59,7 @@ mod drtiosat_aux;
 mod mgmt;
 mod repeater;
 mod routing;
+mod rpc_async;
 mod subkernel;
 
 // linker symbols
@@ -342,7 +345,7 @@ pub fn main_core0() {
     let mut rank = 1;
     let mut destination = 1;
 
-    let mut control = ksupport::kernel::Control::start();
+    let control = RefCell::new(ksupport::kernel::Control::start());
     task::block_on(async {
         loop {
             let mut router = Router::new();
@@ -350,7 +353,8 @@ pub fn main_core0() {
             while !drtiosat_link_rx_up() {
                 #[allow(unused_mut)]
                 for mut rep in repeaters.iter_mut() {
-                    rep.service(&routing_table, rank, destination, &mut router, &mut timer).await;
+                    rep.service(&routing_table, rank, destination, &mut router, &mut timer)
+                        .await;
                 }
                 #[cfg(feature = "target_kasli_soc")]
                 {
@@ -375,7 +379,7 @@ pub fn main_core0() {
             // without a manual intervention.
             let mut dma_manager = DmaManager::new();
             let mut analyzer = Analyzer::new();
-            let mut kernel_manager = KernelManager::new(&mut control);
+            let mut kernel_manager = KernelManager::new(&control);
             let mut core_manager = CoreManager::new(&mut cfg);
 
             drtioaux::reset(0);
@@ -395,7 +399,8 @@ pub fn main_core0() {
                     &mut kernel_manager,
                     &mut core_manager,
                     &mut router,
-                ).await;
+                )
+                .await;
                 #[cfg(feature = "target_kasli_soc")]
                 {
                     io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
@@ -441,10 +446,12 @@ async fn linkup_service<'a, 'b>(
         kernel_manager,
         core_manager,
         router,
-    ).await;
+    )
+    .await;
     #[allow(unused_mut)]
     for mut rep in repeaters.iter_mut() {
-        rep.service(&routing_table, *rank, *destination, router, &mut timer).await;
+        rep.service(&routing_table, *rank, *destination, router, &mut timer)
+            .await;
     }
 
     if drtiosat_tsc_loaded() {
@@ -478,7 +485,9 @@ async fn linkup_service<'a, 'b>(
         );
     }
 
-    kernel_manager.process_kern_requests(router, routing_table, *rank, *destination, dma_manager, &timer);
+    kernel_manager
+        .process_kern_requests(router, routing_table, *rank, *destination, dma_manager, &timer)
+        .await;
 
     #[cfg(has_drtio_routing)]
     if let Some((repno, packet)) = router.get_downstream_packet() {

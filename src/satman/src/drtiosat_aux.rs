@@ -721,7 +721,7 @@ async fn process_aux_packet<'a, 'b>(
                 timer
             );
             if !succeeded {
-                kernel_manager.ddma_nack();
+                kernel_manager.ddma_nack().await;
             }
             Ok(())
         }
@@ -743,7 +743,7 @@ async fn process_aux_packet<'a, 'b>(
                 &packet,
                 timer
             );
-            dma_manager.remote_finished(kernel_manager, id, error, channel, timestamp);
+            dma_manager.remote_finished(kernel_manager, id, error, channel, timestamp).await;
             Ok(())
         }
 
@@ -785,14 +785,14 @@ async fn process_aux_packet<'a, 'b>(
                 &packet,
                 timer
             );
-            let mut succeeded = kernel_manager.load(id).is_ok();
+            let mut succeeded = kernel_manager.load(id).await.is_ok();
             // allow preloading a kernel with delayed run
             if run {
                 if dma_manager.running() {
                     // cannot run kernel while DDMA is running
                     succeeded = false;
                 } else {
-                    succeeded |= kernel_manager.run(source, id, timestamp).is_ok();
+                    succeeded |= kernel_manager.run(source, id, timestamp).await.is_ok();
                 }
             }
             router.send(
