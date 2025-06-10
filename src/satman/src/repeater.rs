@@ -6,6 +6,7 @@ use libboard_artiq::{drtio_routing, drtioaux};
 #[cfg(has_drtio_routing)]
 use libboard_zynq::time::Milliseconds;
 use libboard_zynq::timer::GlobalTimer;
+
 use crate::routing::Router;
 
 #[cfg(has_drtio_routing)]

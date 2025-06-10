@@ -7,7 +7,6 @@ use core::{slice, str};
 use byteorder::NativeEndian;
 use core_io::Error as IoError;
 use cslice::AsCSlice;
-use crate::dma::{Error as DmaError, Manager as DmaManager};
 use io::{Cursor, ProtoWrite};
 use ksupport::{eh_artiq, kernel, kernel::rtio, rpc};
 use libboard_artiq::{drtio_routing::RoutingTable,
@@ -17,7 +16,9 @@ use libboard_artiq::{drtio_routing::RoutingTable,
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::sync_channel::Receiver;
 use log::warn;
-use crate::routing::{Router, SliceMeta, Sliceable};
+
+use crate::{dma::{Error as DmaError, Manager as DmaManager},
+            routing::{Router, SliceMeta, Sliceable}};
 
 #[derive(Debug, Clone, PartialEq)]
 enum KernelState {
