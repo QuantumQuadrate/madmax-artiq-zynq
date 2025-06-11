@@ -16,8 +16,7 @@ async unsafe fn recv_elements<R: ProtoRead>(
     length: usize,
     storage: *mut (),
     alloc: &mut (impl AsyncFnMut(usize) -> *mut () + 'async_recursion),
-) -> Result<(), Error>
-{
+) -> Result<(), Error> {
     match elt_tag {
         Tag::Bool => {
             let dest = core::slice::from_raw_parts_mut(storage as *mut u8, length);
@@ -54,9 +53,8 @@ async unsafe fn recv_value<R: ProtoRead>(
     reader: &mut R,
     tag: Tag<'async_recursion>,
     data: &mut *mut (),
-    alloc: &mut (impl  AsyncFnMut(usize) -> *mut () + 'async_recursion),
-) -> Result<(), Error>
-{
+    alloc: &mut (impl AsyncFnMut(usize) -> *mut () + 'async_recursion),
+) -> Result<(), Error> {
     macro_rules! consume_value {
         ($ty:ty, | $ptr:ident | $map:expr) => {{
             let $ptr = align_ptr_mut::<$ty>(*data);

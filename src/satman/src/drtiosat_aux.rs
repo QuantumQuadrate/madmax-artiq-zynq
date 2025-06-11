@@ -27,14 +27,9 @@ macro_rules! forward {
             let repno = (hop - 1) as usize;
             if repno < $repeaters.len() {
                 if $packet.expects_response() {
-                    return $repeaters[repno].aux_forward(
-                        $packet,
-                        $router,
-                        $routing_table,
-                        $rank,
-                        $self_destination,
-                        $timer,
-                    ).await;
+                    return $repeaters[repno]
+                        .aux_forward($packet, $router, $routing_table, $rank, $self_destination, $timer)
+                        .await;
                 } else {
                     return $repeaters[repno].aux_send($packet).await;
                 }
@@ -134,16 +129,19 @@ async fn process_aux_packet<'a, 'b>(
                     let hop = hop as usize;
                     if hop <= csr::DRTIOREP.len() {
                         let repno = hop - 1;
-                        match _repeaters[repno].aux_forward(
-                            &drtioaux::Packet::DestinationStatusRequest {
-                                destination: destination,
-                            },
-                            router,
-                            _routing_table,
-                            *rank,
-                            *self_destination,
-                            timer,
-                        ).await {
+                        match _repeaters[repno]
+                            .aux_forward(
+                                &drtioaux::Packet::DestinationStatusRequest {
+                                    destination: destination,
+                                },
+                                router,
+                                _routing_table,
+                                *rank,
+                                *self_destination,
+                                timer,
+                            )
+                            .await
+                        {
                             Ok(()) => (),
                             Err(drtioaux::Error::LinkDown) => {
                                 drtioaux_async::send(0, &drtioaux::Packet::DestinationDownReply).await?
@@ -593,17 +591,19 @@ async fn process_aux_packet<'a, 'b>(
             );
             *self_destination = destination;
             let succeeded = dma_manager.add(source, id, status, &trace, length as usize).is_ok();
-            router.send(
-                drtioaux::Packet::DmaAddTraceReply {
-                    source: *self_destination,
-                    destination: source,
-                    id: id,
-                    succeeded: succeeded,
-                },
-                _routing_table,
-                *rank,
-                *self_destination,
-            ).await
+            router
+                .send(
+                    drtioaux::Packet::DmaAddTraceReply {
+                        source: *self_destination,
+                        destination: source,
+                        id: id,
+                        succeeded: succeeded,
+                    },
+                    _routing_table,
+                    *rank,
+                    *self_destination,
+                )
+                .await
         }
         drtioaux::Packet::DmaAddTraceReply {
             source,
@@ -649,15 +649,17 @@ async fn process_aux_packet<'a, 'b>(
                 timer
             );
             let succeeded = dma_manager.erase(source, id).is_ok();
-            router.send(
-                drtioaux::Packet::DmaRemoveTraceReply {
-                    destination: source,
-                    succeeded: succeeded,
-                },
-                _routing_table,
-                *rank,
-                *self_destination,
-            ).await
+            router
+                .send(
+                    drtioaux::Packet::DmaRemoveTraceReply {
+                        destination: source,
+                        succeeded: succeeded,
+                    },
+                    _routing_table,
+                    *rank,
+                    *self_destination,
+                )
+                .await
         }
         drtioaux::Packet::DmaRemoveTraceReply {
             destination: _destination,
@@ -696,15 +698,17 @@ async fn process_aux_packet<'a, 'b>(
             } else {
                 false
             };
-            router.send(
-                drtioaux::Packet::DmaPlaybackReply {
-                    destination: source,
-                    succeeded: succeeded,
-                },
-                _routing_table,
-                *rank,
-                *self_destination,
-            ).await
+            router
+                .send(
+                    drtioaux::Packet::DmaPlaybackReply {
+                        destination: source,
+                        succeeded: succeeded,
+                    },
+                    _routing_table,
+                    *rank,
+                    *self_destination,
+                )
+                .await
         }
         drtioaux::Packet::DmaPlaybackReply {
             destination: _destination,
@@ -743,7 +747,9 @@ async fn process_aux_packet<'a, 'b>(
                 &packet,
                 timer
             );
-            dma_manager.remote_finished(kernel_manager, id, error, channel, timestamp).await;
+            dma_manager
+                .remote_finished(kernel_manager, id, error, channel, timestamp)
+                .await;
             Ok(())
         }
 
@@ -795,15 +801,17 @@ async fn process_aux_packet<'a, 'b>(
                     succeeded |= kernel_manager.run(source, id, timestamp).await.is_ok();
                 }
             }
-            router.send(
-                drtioaux::Packet::SubkernelLoadRunReply {
-                    destination: source,
-                    succeeded: succeeded,
-                },
-                _routing_table,
-                *rank,
-                *self_destination,
-            ).await
+            router
+                .send(
+                    drtioaux::Packet::SubkernelLoadRunReply {
+                        destination: source,
+                        succeeded: succeeded,
+                    },
+                    _routing_table,
+                    *rank,
+                    *self_destination,
+                )
+                .await
         }
         drtioaux::Packet::SubkernelLoadRunReply {
             destination: _destination,
@@ -858,17 +866,19 @@ async fn process_aux_packet<'a, 'b>(
             );
             let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
             let meta = kernel_manager.exception_get_slice(&mut data_slice);
-            router.send(
-                drtioaux::Packet::SubkernelException {
-                    destination: source,
-                    last: meta.status.is_last(),
-                    length: meta.len,
-                    data: data_slice,
-                },
-                _routing_table,
-                *rank,
-                *self_destination,
-            ).await
+            router
+                .send(
+                    drtioaux::Packet::SubkernelException {
+                        destination: source,
+                        last: meta.status.is_last(),
+                        length: meta.len,
+                        data: data_slice,
+                    },
+                    _routing_table,
+                    *rank,
+                    *self_destination,
+                )
+                .await
         }
         drtioaux::Packet::SubkernelException {
             destination: _destination,
@@ -915,12 +925,14 @@ async fn process_aux_packet<'a, 'b>(
                 timer
             );
             kernel_manager.message_handle_incoming(status, id, length as usize, &data);
-            router.send(
-                drtioaux::Packet::SubkernelMessageAck { destination: source },
-                _routing_table,
-                *rank,
-                *self_destination,
-            ).await
+            router
+                .send(
+                    drtioaux::Packet::SubkernelMessageAck { destination: source },
+                    _routing_table,
+                    *rank,
+                    *self_destination,
+                )
+                .await
         }
         drtioaux::Packet::SubkernelMessageAck {
             destination: _destination,

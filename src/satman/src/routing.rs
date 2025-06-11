@@ -4,7 +4,7 @@ use core::cmp::min;
 #[cfg(has_drtio_routing)]
 use libboard_artiq::pl::csr;
 use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
-                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE}};
+                     drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus, SAT_PAYLOAD_MAX_SIZE}};
 
 pub struct SliceMeta {
     pub destination: u8,

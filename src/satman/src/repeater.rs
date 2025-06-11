@@ -196,7 +196,11 @@ impl Repeater {
         }
     }
 
-    async fn recv_aux_timeout(&self, timeout: u64, timer: &mut GlobalTimer) -> Result<drtioaux::Packet, drtioaux::Error> {
+    async fn recv_aux_timeout(
+        &self,
+        timeout: u64,
+        timer: &mut GlobalTimer,
+    ) -> Result<drtioaux::Packet, drtioaux::Error> {
         if !rep_link_rx_up(self.repno) {
             return Err(drtioaux::Error::LinkDown);
         }
