@@ -15,15 +15,15 @@ pub mod drtio {
     use embedded_hal::blocking::delay::DelayMs;
     #[cfg(has_drtio_eem)]
     use embedded_hal::blocking::delay::DelayUs;
-    use ksupport::{kernel::Message as KernelMessage, resolve_channel_name, ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION,
-                   ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS};
+    use ksupport::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS,
+                   kernel::Message as KernelMessage, resolve_channel_name};
     use libasync::{delay, task};
     #[cfg(has_drtio_eem)]
     use libboard_artiq::drtio_eem;
     use libboard_artiq::{drtioaux::Error as DrtioError,
                          drtioaux_async,
                          drtioaux_async::Packet,
-                         drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE}};
+                         drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus}};
     use libboard_zynq::time::Milliseconds;
     use log::{error, info, warn};
 

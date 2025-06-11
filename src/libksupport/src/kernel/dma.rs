@@ -3,7 +3,7 @@ use core::{mem, ptr};
 
 use cslice::CSlice;
 
-use super::{rtio, Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE, Message, rtio};
 use crate::{artiq_raise, pl::csr};
 
 #[repr(C)]

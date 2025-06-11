@@ -6,7 +6,7 @@ use log::debug;
 
 use crate::{cxp_ctrl::Error as CtrlErr,
             cxp_packet::{read_u32, read_u64, reset_tag, send_test_packet, write_bytes_no_ack, write_u32, write_u64},
-            cxp_phys::{rx, tx, CXPSpeed},
+            cxp_phys::{CXPSpeed, rx, tx},
             pl::csr};
 
 // Bootstrap registers address

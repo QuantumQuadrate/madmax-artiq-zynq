@@ -138,7 +138,7 @@ mod remote_coremgmt {
     use core_io::Read;
     use io::ProtoWrite;
     use libboard_artiq::{drtioaux_async,
-                         drtioaux_proto::{Packet, MASTER_PAYLOAD_MAX_SIZE}};
+                         drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, Packet}};
 
     use super::*;
 

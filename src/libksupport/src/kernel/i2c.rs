@@ -3,7 +3,7 @@ use core::mem::MaybeUninit;
 use libboard_zynq::i2c::{Error, I2c};
 
 #[cfg(has_drtio)]
-use super::{Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use crate::artiq_raise;
 
 static mut I2C_BUS: MaybeUninit<I2c> = MaybeUninit::uninit();

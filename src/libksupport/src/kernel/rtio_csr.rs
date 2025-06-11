@@ -3,7 +3,7 @@ use core::ptr::{read_volatile, write_volatile};
 use cslice::CSlice;
 
 #[cfg(has_drtio)]
-use super::{Message, KERNEL_CHANNEL_1TO0};
+use super::{KERNEL_CHANNEL_1TO0, Message};
 use crate::{artiq_raise, pl::csr, resolve_channel_name, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: u8 = 1;

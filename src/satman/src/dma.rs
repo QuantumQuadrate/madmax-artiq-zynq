@@ -3,7 +3,7 @@ use core::mem;
 
 use ksupport::kernel::DmaRecorder;
 use libboard_artiq::{drtio_routing::RoutingTable,
-                     drtioaux_proto::{Packet, PayloadStatus, MASTER_PAYLOAD_MAX_SIZE},
+                     drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, Packet, PayloadStatus},
                      pl::csr};
 use libcortex_a9::cache::dcci_slice;
 

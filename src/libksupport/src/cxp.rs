@@ -4,7 +4,7 @@ use core::fmt;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use cslice::CMutSlice;
-use libboard_artiq::{cxp_ctrl::{Error as CtrlErr, DATA_MAXSIZE},
+use libboard_artiq::{cxp_ctrl::{DATA_MAXSIZE, Error as CtrlErr},
                      cxp_grabber::{camera_connected, with_tag},
                      cxp_packet::{read_bytes, read_u32, write_u32}};
 use log::info;

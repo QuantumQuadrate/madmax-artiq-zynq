@@ -3,7 +3,7 @@ use core::mem::{forget, transmute};
 
 use cslice::{AsCSlice, CSlice};
 
-use super::{Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 
 pub extern "C" fn get(key: CSlice<u8>) -> &CSlice<'static, i32> {
     let key = String::from_utf8(key.as_ref().to_vec()).unwrap();

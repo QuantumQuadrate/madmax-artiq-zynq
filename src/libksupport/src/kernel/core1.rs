@@ -4,7 +4,7 @@ use alloc::borrow::ToOwned;
 use core::{cell::UnsafeCell, mem, ptr};
 
 use cslice::CSlice;
-use dyld::{elf::EXIDX_Entry, Library};
+use dyld::{Library, elf::EXIDX_Entry};
 use libboard_zynq::{gic, mpcore};
 use libcortex_a9::{asm::{dsb, isb},
                    cache::{bpiall, dcci_slice, iciallu},
@@ -12,8 +12,8 @@ use libcortex_a9::{asm::{dsb, isb},
 use libsupport_zynq::ram;
 use log::{debug, error, info};
 
-use super::{api::resolve, dma, rpc::rpc_send_async, Message, CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK,
-            KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE};
+use super::{CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
+            KERNEL_IMAGE, Message, api::resolve, dma, rpc::rpc_send_async};
 use crate::{eh_artiq, get_async_errors};
 
 // linker symbols

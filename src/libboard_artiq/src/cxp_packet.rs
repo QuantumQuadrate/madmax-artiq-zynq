@@ -4,7 +4,7 @@ use byteorder::{ByteOrder, NetworkEndian};
 use io::Cursor;
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 
-use crate::{cxp_ctrl::{Error, RXCTRLPacket, TXCTRLPacket, CTRL_PACKET_MAXSIZE, DATA_MAXSIZE},
+use crate::{cxp_ctrl::{CTRL_PACKET_MAXSIZE, DATA_MAXSIZE, Error, RXCTRLPacket, TXCTRLPacket},
             mem::mem,
             pl::csr};
 

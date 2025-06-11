@@ -2,7 +2,7 @@ use core::{mem,
            ops::{Deref, Range},
            ptr};
 
-use super::{elf::*, Arch};
+use super::{Arch, elf::*};
 
 fn read_unaligned<T: Copy>(data: &[u8], offset: usize) -> Option<T> {
     if data.len() < offset + mem::size_of::<T>() {

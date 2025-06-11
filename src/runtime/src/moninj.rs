@@ -1,7 +1,7 @@
 use alloc::{collections::BTreeMap, rc::Rc};
 use core::{cell::RefCell, fmt};
 
-use futures::{pin_mut, select_biased, FutureExt};
+use futures::{FutureExt, pin_mut, select_biased};
 use libasync::{block_async, nb, smoltcp::TcpStream, task};
 use libboard_artiq::drtio_routing;
 use libboard_zynq::{smoltcp, time::Milliseconds, timer::GlobalTimer};

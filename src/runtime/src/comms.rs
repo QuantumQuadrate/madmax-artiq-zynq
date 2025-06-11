@@ -21,7 +21,7 @@ use libboard_zynq::{self as zynq,
                               time::Instant,
                               wire::IpCidr},
                     timer::GlobalTimer};
-use libconfig::{net_settings, Config};
+use libconfig::{Config, net_settings};
 use libcortex_a9::{mutex::Mutex,
                    semaphore::Semaphore,
                    sync_channel::{Receiver, Sender}};

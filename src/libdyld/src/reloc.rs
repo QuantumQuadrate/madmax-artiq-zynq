@@ -4,7 +4,7 @@ use libcortex_a9::{asm::{dsb, isb},
                    cache::{bpiall, dcci_slice, iciallu}};
 use log::trace;
 
-use super::{elf::*, image::Image, Arch, Error, Library};
+use super::{Arch, Error, Library, elf::*, image::Image};
 
 pub trait Relocatable {
     fn offset(&self) -> usize;

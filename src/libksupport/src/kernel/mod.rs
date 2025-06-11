@@ -3,7 +3,7 @@ use core::ptr;
 
 use libcortex_a9::{mutex::Mutex, semaphore::Semaphore, sync_channel};
 
-use crate::{eh_artiq, RPCException};
+use crate::{RPCException, eh_artiq};
 
 mod control;
 pub use control::Control;

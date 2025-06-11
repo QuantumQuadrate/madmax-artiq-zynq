@@ -6,7 +6,7 @@ use cslice::{CMutSlice, CSlice};
 use io::{ProtoRead, ProtoWrite};
 use log::trace;
 
-use self::tag::{split_tag, Tag, TagIterator};
+use self::tag::{Tag, TagIterator, split_tag};
 
 #[inline]
 pub fn round_up(val: usize, power_of_two: usize) -> usize {

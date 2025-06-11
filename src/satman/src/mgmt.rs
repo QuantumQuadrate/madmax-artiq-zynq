@@ -7,7 +7,7 @@ use io::ProtoRead;
 use libboard_artiq::{drtioaux_proto::SAT_PAYLOAD_MAX_SIZE,
                      logger::{BufferLogger, LogBufferRef}};
 use libconfig::Config;
-use log::{debug, error, info, warn, LevelFilter};
+use log::{LevelFilter, debug, error, info, warn};
 
 use crate::routing::{SliceMeta, Sliceable};
 

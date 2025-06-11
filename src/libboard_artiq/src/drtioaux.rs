@@ -2,11 +2,11 @@ use core::{arch::asm, slice};
 
 use byteorder::NativeEndian;
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
-use io::{proto::{ProtoRead, ProtoWrite},
-         Cursor};
+use io::{Cursor,
+         proto::{ProtoRead, ProtoWrite}};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 
-pub use crate::drtioaux_proto::{Packet, MAX_PACKET};
+pub use crate::drtioaux_proto::{MAX_PACKET, Packet};
 use crate::{drtioaux_proto::Error as ProtocolError, mem::mem::DRTIOAUX_MEM, pl::csr::DRTIOAUX};
 
 #[derive(Debug)]

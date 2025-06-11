@@ -35,10 +35,10 @@ use libboard_artiq::drtio_eem;
 use libboard_artiq::grabber;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
-#[cfg(has_si5324)]
-use libboard_artiq::si5324;
 #[cfg(has_si549)]
 use libboard_artiq::si549;
+#[cfg(has_si5324)]
+use libboard_artiq::si5324;
 use libboard_artiq::{drtio_routing, drtioaux,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      identifier_read, logger,

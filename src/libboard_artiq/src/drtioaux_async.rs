@@ -2,14 +2,14 @@ use core::slice;
 
 use byteorder::NativeEndian;
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
-use io::{proto::{ProtoRead, ProtoWrite},
-         Cursor};
+use io::{Cursor,
+         proto::{ProtoRead, ProtoWrite}};
 use libasync::{block_async, task};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use void::Void;
 
-pub use crate::drtioaux_proto::{Packet, MAX_PACKET};
-use crate::{drtioaux::{copy_work_buffer, has_rx_error, Error},
+pub use crate::drtioaux_proto::{MAX_PACKET, Packet};
+use crate::{drtioaux::{Error, copy_work_buffer, has_rx_error},
             mem::mem::DRTIOAUX_MEM,
             pl::csr::DRTIOAUX};
 

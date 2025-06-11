@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use cslice::CSlice;
 
-use super::{rtio::now_mu, Message, SubkernelStatus, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message, SubkernelStatus, rtio::now_mu};
 use crate::{artiq_raise, eh_artiq, rpc::send_args};
 
 pub extern "C" fn load_run(id: u32, destination: u8, run: bool) {

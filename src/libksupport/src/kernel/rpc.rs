@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use cslice::CSlice;
 
-use super::{Message, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use crate::{eh_artiq, rpc::send_args};
 
 fn rpc_send_common(is_async: bool, service: u32, tag: &CSlice<u8>, data: *const *const ()) {

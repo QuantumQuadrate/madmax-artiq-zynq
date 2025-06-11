@@ -3,7 +3,7 @@ use libcortex_a9::mutex::Mutex;
 use log::{error, info};
 
 #[cfg(has_cxp_led)]
-use crate::cxp_led::{update_led, LEDState};
+use crate::cxp_led::{LEDState, update_led};
 use crate::{cxp_camera_setup::{camera_setup, discover_camera, master_channel_ready},
             pl::csr};
 

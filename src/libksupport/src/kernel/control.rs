@@ -3,7 +3,7 @@ use core::mem::{forget, replace};
 use libcortex_a9::sync_channel::{Receiver, Sender};
 use libsupport_zynq::boot::Core1;
 
-use super::{Message, CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK};
+use super::{CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK, Message};
 use crate::irq::restart_core1;
 
 pub struct Control {

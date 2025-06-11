@@ -11,7 +11,7 @@ use io::{Cursor, ProtoWrite};
 use ksupport::{eh_artiq, kernel, kernel::rtio, rpc};
 use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux,
-                     drtioaux_proto::{PayloadStatus, MASTER_PAYLOAD_MAX_SIZE},
+                     drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus},
                      pl::csr};
 use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
 use libcortex_a9::sync_channel::Receiver;

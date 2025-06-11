@@ -1,9 +1,9 @@
-use alloc::alloc::{alloc_zeroed, dealloc, Layout, LayoutError};
+use alloc::alloc::{Layout, LayoutError, alloc_zeroed, dealloc};
 use core::{mem,
            ops::{Deref, DerefMut, Range},
            slice};
 
-use super::{elf::*, Error};
+use super::{Error, elf::*};
 
 pub struct DynamicSection {
     pub strtab: Range<usize>,
