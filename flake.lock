@@ -12,11 +12,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1748850854,
-        "narHash": "sha256-UeyMzdr6Gr/agaIdwcae5H1HPcFlQvNrkcJhrp1wGVE=",
+        "lastModified": 1749448231,
+        "narHash": "sha256-7xb40E1YJVr5L5mu4XEzlTEl7hwQ1FYxbqrq/HTseog=",
         "ref": "refs/heads/master",
-        "rev": "1e1fb3a4070d51e977bbff6bf6b1642469eeab61",
-        "revCount": 9258,
+        "rev": "a268a70f3303bf91b7a33a4948cec6188f0f7c7c",
+        "revCount": 9260,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -163,16 +163,15 @@
         ]
       },
       "locked": {
-        "lastModified": 1719454714,
-        "narHash": "sha256-MojqG0lyUINkEk0b3kM2drsU5vyaF8DFZe/FAlZVOGs=",
+        "lastModified": 1747795013,
+        "narHash": "sha256-c7i0xJ+xFhgjO9SWHYu5dF/7lq63RPDvwKAdjc6VCE4=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "d1c527659cf076ecc4b96a91c702d080b213801e",
+        "rev": "6b1cf12374361859242a562e1933a7930649131a",
         "type": "github"
       },
       "original": {
         "owner": "oxalica",
-        "ref": "snapshot/2024-08-01",
         "repo": "rust-overlay",
         "type": "github"
       }
@@ -273,11 +272,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1747038306,
-        "narHash": "sha256-GU3EN2mSNaqRqMhfZSr6AJ7WrhItCF/8oQUpmS2YKfM=",
+        "lastModified": 1749540334,
+        "narHash": "sha256-fDcbXGPb9qhe6fV/E+SenIf5b1YRJC+79AUQcbUJjaA=",
         "ref": "refs/heads/master",
-        "rev": "9c6f2c034c82e7f2f1a91cad880d34108a9f2cb8",
-        "revCount": 698,
+        "rev": "f02ac3b8564450b3a6c7da2b196379ae96085350",
+        "revCount": 708,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
