@@ -30,20 +30,19 @@ use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use drtiosat_aux::process_aux_packets;
 use embedded_hal::blocking::delay::DelayUs;
+use libasync::task;
 #[cfg(has_drtio_eem)]
 use libboard_artiq::drtio_eem;
-#[cfg(has_grabber)]
-use libboard_artiq::grabber;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 #[cfg(has_si549)]
 use libboard_artiq::si549;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
-use libboard_artiq::{drtio_routing, drtioaux, identifier_read, logger, pl::csr};
+use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async, identifier_read, logger, pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
-use libboard_zynq::{print, println, time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::{i2c::I2c, print, println, timer::GlobalTimer};
 use libconfig::Config;
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
@@ -143,17 +142,6 @@ fn drtiosat_process_errors() {
     }
 }
 
-fn hardware_tick(ts: &mut u64, timer: &mut GlobalTimer) {
-    let now = timer.get_time();
-    let mut ts_ms = Milliseconds(*ts);
-    if now > ts_ms {
-        ts_ms = now + Milliseconds(200);
-        *ts = ts_ms.0;
-        #[cfg(has_grabber)]
-        grabber::tick();
-    }
-}
-
 #[cfg(all(has_si5324, rtio_frequency = "125.0"))]
 const SI5324_SETTINGS: si5324::FrequencySettings = si5324::FrequencySettings {
     n1_hs: 5,
@@ -208,10 +196,26 @@ const SI549_SETTINGS: si549::FrequencySetting = si549::FrequencySetting {
     },
 };
 
+#[cfg(has_grabber)]
+mod grabber {
+    use libasync::delay;
+    use libboard_artiq::grabber;
+    use libboard_zynq::time::Milliseconds;
+
+    use crate::GlobalTimer;
+    pub async fn grabber_thread(timer: GlobalTimer) {
+        let mut countdown = timer.countdown();
+        loop {
+            grabber::tick();
+            delay(&mut countdown, Milliseconds(200)).await;
+        }
+    }
+}
+
 static mut LOG_BUFFER: [u8; 1 << 17] = [0; 1 << 17];
 
 #[no_mangle]
-pub extern "C" fn main_core0() -> i32 {
+pub fn main_core0() {
     unsafe {
         exception_vectors::set_vector_table(&__exceptions_start as *const u32 as u32);
     }
@@ -316,6 +320,9 @@ pub extern "C" fn main_core0() -> i32 {
         unsafe { csr::eem_transceiver::rx_ready_write(1) }
     }
 
+    #[cfg(has_grabber)]
+    task::spawn(grabber::grabber_thread(timer));
+
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];
     #[cfg(not(has_drtio_routing))]
@@ -323,139 +330,165 @@ pub extern "C" fn main_core0() -> i32 {
     for i in 0..repeaters.len() {
         repeaters[i] = repeater::Repeater::new(i as u8);
     }
+
+    task::spawn(async {
+        loop {
+            drtiosat_process_errors();
+            task::r#yield().await;
+        }
+    });
+
     let mut routing_table = drtio_routing::RoutingTable::default_empty();
     let mut rank = 1;
     let mut destination = 1;
 
-    let mut hardware_tick_ts = 0;
-
     let mut control = ksupport::kernel::Control::start();
+    task::block_on(async {
+        loop {
+            let mut router = Router::new();
 
-    loop {
-        let mut router = Router::new();
-
-        while !drtiosat_link_rx_up() {
-            drtiosat_process_errors();
-            #[allow(unused_mut)]
-            for mut rep in repeaters.iter_mut() {
-                rep.service(&routing_table, rank, destination, &mut router, &mut timer);
+            while !drtiosat_link_rx_up() {
+                #[allow(unused_mut)]
+                for mut rep in repeaters.iter_mut() {
+                    rep.service(&routing_table, rank, destination, &mut router, &mut timer);
+                }
+                #[cfg(feature = "target_kasli_soc")]
+                {
+                    io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
+                    io_expander1.service(i2c).expect("I2C I/O expander #1 service failed");
+                }
+                task::r#yield().await;
             }
-            #[cfg(feature = "target_kasli_soc")]
+
+            info!("uplink is up, switching to recovered clock");
+            #[cfg(has_siphaser)]
             {
-                io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
-                io_expander1.service(i2c).expect("I2C I/O expander #1 service failed");
+                si5324::siphaser::select_recovered_clock(i2c, true, &mut timer).expect("failed to switch clocks");
+                si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
             }
 
-            hardware_tick(&mut hardware_tick_ts, &mut timer);
+            #[cfg(has_wrpll)]
+            si549::wrpll::select_recovered_clock(true, &mut timer);
+
+            // Various managers created here, so when link is dropped, all DMA traces
+            // are cleared out for a clean slate on subsequent connections,
+            // without a manual intervention.
+            let mut dma_manager = DmaManager::new();
+            let mut analyzer = Analyzer::new();
+            let mut kernel_manager = KernelManager::new(&mut control);
+            let mut core_manager = CoreManager::new(&mut cfg);
+
+            drtioaux::reset(0);
+            drtiosat_reset(false);
+            drtiosat_reset_phy(false);
+
+            while drtiosat_link_rx_up() {
+                linkup_service(
+                    &mut repeaters,
+                    &mut routing_table,
+                    &mut rank,
+                    &mut destination,
+                    timer,
+                    i2c,
+                    &mut dma_manager,
+                    &mut analyzer,
+                    &mut kernel_manager,
+                    &mut core_manager,
+                    &mut router,
+                ).await;
+                #[cfg(feature = "target_kasli_soc")]
+                {
+                    io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
+                    io_expander1.service(i2c).expect("I2C I/O expander #1 service failed");
+                }
+                task::r#yield().await;
+            }
+
+            drtiosat_reset_phy(true);
+            drtiosat_reset(true);
+            drtiosat_tsc_loaded();
+            info!("uplink is down, switching to local oscillator clock");
+            #[cfg(has_siphaser)]
+            si5324::siphaser::select_recovered_clock(i2c, false, &mut timer).expect("failed to switch clocks");
+            #[cfg(has_wrpll)]
+            si549::wrpll::select_recovered_clock(false, &mut timer);
         }
+    })
+}
 
-        info!("uplink is up, switching to recovered clock");
-        #[cfg(has_siphaser)]
-        {
-            si5324::siphaser::select_recovered_clock(i2c, true, &mut timer).expect("failed to switch clocks");
-            si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
-        }
+async fn linkup_service<'a, 'b>(
+    repeaters: &mut [repeater::Repeater],
+    routing_table: &mut drtio_routing::RoutingTable,
+    rank: &mut u8,
+    destination: &mut u8,
+    mut timer: GlobalTimer,
+    i2c: &mut I2c,
+    dma_manager: &mut DmaManager,
+    analyzer: &mut Analyzer,
+    kernel_manager: &mut KernelManager<'a>,
+    core_manager: &mut CoreManager<'b>,
+    router: &mut Router,
+) {
+    process_aux_packets(
+        repeaters,
+        routing_table,
+        rank,
+        destination,
+        &mut timer,
+        i2c,
+        dma_manager,
+        analyzer,
+        kernel_manager,
+        core_manager,
+        router,
+    );
+    #[allow(unused_mut)]
+    for mut rep in repeaters.iter_mut() {
+        rep.service(&routing_table, *rank, *destination, router, &mut timer);
+    }
 
-        #[cfg(has_wrpll)]
-        si549::wrpll::select_recovered_clock(true, &mut timer);
-
-        // Various managers created here, so when link is dropped, all DMA traces
-        // are cleared out for a clean slate on subsequent connections,
-        // without a manual intervention.
-        let mut dma_manager = DmaManager::new();
-        let mut analyzer = Analyzer::new();
-        let mut kernel_manager = KernelManager::new(&mut control);
-        let mut core_manager = CoreManager::new(&mut cfg);
-
-        drtioaux::reset(0);
-        drtiosat_reset(false);
-        drtiosat_reset_phy(false);
-
-        while drtiosat_link_rx_up() {
-            drtiosat_process_errors();
-            process_aux_packets(
-                &mut repeaters,
-                &mut routing_table,
-                &mut rank,
-                &mut destination,
-                &mut timer,
-                i2c,
-                &mut dma_manager,
-                &mut analyzer,
-                &mut kernel_manager,
-                &mut core_manager,
-                &mut router,
-            );
-            #[allow(unused_mut)]
-            for mut rep in repeaters.iter_mut() {
-                rep.service(&routing_table, rank, destination, &mut router, &mut timer);
-            }
-            #[cfg(feature = "target_kasli_soc")]
-            {
-                io_expander0.service(i2c).expect("I2C I/O expander #0 service failed");
-                io_expander1.service(i2c).expect("I2C I/O expander #1 service failed");
-            }
-            hardware_tick(&mut hardware_tick_ts, &mut timer);
-            if drtiosat_tsc_loaded() {
-                info!("TSC loaded from uplink");
-                for rep in repeaters.iter() {
-                    if let Err(e) = rep.sync_tsc(&mut timer) {
-                        error!("failed to sync TSC ({:?})", e);
-                    }
-                }
-                if let Err(e) = drtioaux::send(0, &drtioaux::Packet::TSCAck) {
-                    error!("aux packet error: {:?}", e);
-                }
-            }
-            if let Some(status) = dma_manager.check_state() {
-                info!(
-                    "playback done, error: {}, channel: {}, timestamp: {}",
-                    status.error, status.channel, status.timestamp
-                );
-                router.route(
-                    drtioaux::Packet::DmaPlaybackStatus {
-                        source: destination,
-                        destination: status.source,
-                        id: status.id,
-                        error: status.error,
-                        channel: status.channel,
-                        timestamp: status.timestamp,
-                    },
-                    &routing_table,
-                    rank,
-                    destination,
-                );
-            }
-
-            kernel_manager.process_kern_requests(
-                &mut router,
-                &routing_table,
-                rank,
-                destination,
-                &mut dma_manager,
-                &timer,
-            );
-
-            #[cfg(has_drtio_routing)]
-            if let Some((repno, packet)) = router.get_downstream_packet() {
-                if let Err(e) = repeaters[repno].aux_send(&packet) {
-                    warn!("[REP#{}] Error when sending packet to satellite ({:?})", repno, e)
-                }
-            }
-
-            if let Some(packet) = router.get_upstream_packet() {
-                drtioaux::send(0, &packet).unwrap();
+    if drtiosat_tsc_loaded() {
+        info!("TSC loaded from uplink");
+        for rep in repeaters.iter() {
+            if let Err(e) = rep.sync_tsc(&mut timer) {
+                error!("failed to sync TSC ({:?})", e);
             }
         }
+        if let Err(e) = drtioaux_async::send(0, &drtioaux_async::Packet::TSCAck).await {
+            error!("aux packet error: {:?}", e);
+        }
+    }
+    if let Some(status) = dma_manager.check_state() {
+        info!(
+            "playback done, error: {}, channel: {}, timestamp: {}",
+            status.error, status.channel, status.timestamp
+        );
+        router.route(
+            drtioaux::Packet::DmaPlaybackStatus {
+                source: *destination,
+                destination: status.source,
+                id: status.id,
+                error: status.error,
+                channel: status.channel,
+                timestamp: status.timestamp,
+            },
+            &routing_table,
+            *rank,
+            *destination,
+        );
+    }
 
-        drtiosat_reset_phy(true);
-        drtiosat_reset(true);
-        drtiosat_tsc_loaded();
-        info!("uplink is down, switching to local oscillator clock");
-        #[cfg(has_siphaser)]
-        si5324::siphaser::select_recovered_clock(i2c, false, &mut timer).expect("failed to switch clocks");
-        #[cfg(has_wrpll)]
-        si549::wrpll::select_recovered_clock(false, &mut timer);
+    kernel_manager.process_kern_requests(router, routing_table, *rank, *destination, dma_manager, &timer);
+
+    #[cfg(has_drtio_routing)]
+    if let Some((repno, packet)) = router.get_downstream_packet() {
+        if let Err(e) = repeaters[repno].aux_send(&packet) {
+            warn!("[REP#{}] Error when sending packet to satellite ({:?})", repno, e)
+        }
+    }
+
+    if let Some(packet) = router.get_upstream_packet() {
+        drtioaux_async::send(0, &packet).await.unwrap();
     }
 }
 
