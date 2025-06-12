@@ -40,6 +40,8 @@ use libboard_artiq::io_expander;
 use libboard_artiq::si549;
 #[cfg(has_si5324)]
 use libboard_artiq::si5324;
+#[cfg(has_cxp_grabber)]
+use libboard_artiq::{cxp_grabber, cxp_phys};
 use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async, identifier_read, logger, pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
@@ -323,6 +325,12 @@ pub fn main_core0() {
 
     #[cfg(has_grabber)]
     task::spawn(grabber::grabber_thread());
+
+    #[cfg(has_cxp_grabber)]
+    {
+        cxp_phys::setup();
+        task::spawn(cxp_grabber::thread(ksupport::kernel::i2c::get_bus()));
+    }
 
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];
