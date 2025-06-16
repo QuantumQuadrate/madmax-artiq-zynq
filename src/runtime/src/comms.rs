@@ -18,7 +18,7 @@ use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{self as zynq,
                     smoltcp::{self,
                               iface::{EthernetInterfaceBuilder, NeighborCache},
-                              time::Instant,
+                              time::{Duration, Instant},
                               wire::IpCidr},
                     timer::GlobalTimer};
 use libconfig::{Config, net_settings};
@@ -910,7 +910,23 @@ pub fn main(timer: GlobalTimer, cfg: Config) {
         }
     });
 
-    Sockets::run(&mut iface, || Instant::from_millis(timer.get_time().0 as i32));
+    task::block_on(async {
+        let mut last_link_check = Instant::from_millis(0);
+        const LINK_CHECK_INTERVAL: u64 = 500;
+
+        loop {
+            let instant = Instant::from_millis(timer.get_time().0 as i32);
+            Sockets::instance().poll(&mut iface, instant);
+
+            let dev = iface.device_mut();
+            if dev.is_idle() && instant >= last_link_check + Duration::from_millis(LINK_CHECK_INTERVAL) {
+                dev.check_link_change();
+                last_link_check = instant;
+            }
+
+            task::r#yield().await;
+        }
+    })
 }
 
 pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
@@ -965,5 +981,21 @@ pub fn soft_panic_main(timer: GlobalTimer, cfg: Config) -> ! {
         err_led.toggle(true);
     }
 
-    Sockets::run(&mut iface, || Instant::from_millis(timer.get_time().0 as i32));
+    task::block_on(async {
+        let mut last_link_check = Instant::from_millis(0);
+        const LINK_CHECK_INTERVAL: u64 = 500;
+
+        loop {
+            let instant = Instant::from_millis(timer.get_time().0 as i32);
+            Sockets::instance().poll(&mut iface, instant);
+
+            let dev = iface.device_mut();
+            if dev.is_idle() && instant >= last_link_check + Duration::from_millis(LINK_CHECK_INTERVAL) {
+                dev.check_link_change();
+                last_link_check = instant;
+            }
+
+            task::r#yield().await;
+        }
+    })
 }
