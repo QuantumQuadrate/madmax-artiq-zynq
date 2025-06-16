@@ -272,11 +272,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1749540334,
-        "narHash": "sha256-fDcbXGPb9qhe6fV/E+SenIf5b1YRJC+79AUQcbUJjaA=",
+        "lastModified": 1750053479,
+        "narHash": "sha256-P3Lu6/OUpDKuAfXsyS5H1V0P3TKQ6YQ4FsKN7w4elXA=",
         "ref": "refs/heads/master",
-        "rev": "f02ac3b8564450b3a6c7da2b196379ae96085350",
-        "revCount": 708,
+        "rev": "e216a3626ce90658d1db179d874e91f1508db47a",
+        "revCount": 711,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
