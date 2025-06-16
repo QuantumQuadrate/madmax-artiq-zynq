@@ -255,7 +255,6 @@ name = "libasync"
 version = "0.0.0"
 dependencies = [
  "embedded-hal",
- "libcortex_a9",
  "nb 1.0.0",
  "smoltcp",
 ]
@@ -288,7 +287,6 @@ version = "0.0.0"
 dependencies = [
  "bit_field",
  "embedded-hal",
- "libasync",
  "libcortex_a9",
  "libregister",
  "log",
