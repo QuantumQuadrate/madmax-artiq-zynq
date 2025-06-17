@@ -274,7 +274,6 @@ dependencies = [
  "libconfig",
  "libcortex_a9",
  "libregister",
- "libsupport_zynq",
  "log",
  "log_buffer",
  "nb 1.0.0",

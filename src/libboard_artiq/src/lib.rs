@@ -14,6 +14,8 @@ extern crate libcortex_a9;
 extern crate libregister;
 extern crate log;
 extern crate log_buffer;
+#[cfg(has_drtio_eem)]
+extern crate alloc;
 
 pub mod drtio_routing;
 #[cfg(has_drtio)]

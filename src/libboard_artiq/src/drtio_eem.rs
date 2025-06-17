@@ -1,7 +1,7 @@
 use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
 use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
-use libsupport_zynq::alloc::format;
+use alloc::format;
 use log::{debug, error, info};
 
 use crate::pl;
