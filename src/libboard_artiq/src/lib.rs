@@ -3,6 +3,8 @@
 #![feature(naked_functions)]
 #![allow(unexpected_cfgs)]
 
+#[cfg(has_drtio_eem)]
+extern crate alloc;
 extern crate core_io;
 extern crate crc;
 extern crate embedded_hal;
@@ -14,8 +16,6 @@ extern crate libcortex_a9;
 extern crate libregister;
 extern crate log;
 extern crate log_buffer;
-#[cfg(has_drtio_eem)]
-extern crate alloc;
 
 pub mod drtio_routing;
 #[cfg(has_drtio)]
