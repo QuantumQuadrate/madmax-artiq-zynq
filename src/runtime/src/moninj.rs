@@ -1,15 +1,15 @@
 use alloc::{collections::BTreeMap, rc::Rc};
 use core::{cell::RefCell, fmt};
 
+use embedded_hal::timer::CountDown;
 use futures::{FutureExt, pin_mut, select_biased};
-use libasync::{block_async, nb, smoltcp::TcpStream, task};
+use libasync::{block_async, smoltcp::TcpStream, task};
 use libboard_artiq::drtio_routing;
-use libboard_zynq::{smoltcp, time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::{smoltcp, timer};
 use libcortex_a9::mutex::Mutex;
 use log::{debug, info, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use void::Void;
 
 use crate::proto_async::*;
 
@@ -63,7 +63,6 @@ mod remote_moninj {
     pub async fn read_probe(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         channel: i32,
@@ -78,7 +77,6 @@ mod remote_moninj {
                 channel: channel as _,
                 probe: probe as _,
             },
-            timer,
         )
         .await;
         match reply {
@@ -95,7 +93,6 @@ mod remote_moninj {
     pub async fn inject(
         aux_mutex: &Rc<Mutex<bool>>,
         _routing_table: &drtio_routing::RoutingTable,
-        _timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         channel: i32,
@@ -119,7 +116,6 @@ mod remote_moninj {
     pub async fn read_injection_status(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         channel: i32,
@@ -134,7 +130,6 @@ mod remote_moninj {
                 channel: channel as _,
                 overrd: overrd as _,
             },
-            timer,
         )
         .await;
         match reply {
@@ -180,7 +175,7 @@ mod local_moninj {
 
 #[cfg(has_drtio)]
 macro_rules! dispatch {
-    ($timer:ident, $aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
+    ($aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
         let destination = ($channel >> 16) as u8;
         let channel = $channel;
         let hop = $routing_table.0[destination as usize][0];
@@ -188,14 +183,14 @@ macro_rules! dispatch {
             local_moninj::$func(channel.into(), $($param, )*)
         } else {
             let linkno = hop - 1 as u8;
-            remote_moninj::$func($aux_mutex, $routing_table, $timer, linkno, destination, channel, $($param, )*).await
+            remote_moninj::$func($aux_mutex, $routing_table, linkno, destination, channel, $($param, )*).await
         }
     }}
 }
 
 #[cfg(not(has_drtio))]
 macro_rules! dispatch {
-    ($timer:ident, $aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
+    ($aux_mutex:ident, $routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
         let channel = $channel as u16;
         local_moninj::$func(channel.into(), $($param, )*)
     }}
@@ -203,7 +198,6 @@ macro_rules! dispatch {
 
 async fn handle_connection(
     stream: &TcpStream,
-    timer: GlobalTimer,
     _aux_mutex: &Rc<Mutex<bool>>,
     _routing_table: &drtio_routing::RoutingTable,
 ) -> Result<()> {
@@ -213,21 +207,13 @@ async fn handle_connection(
 
     let mut probe_watch_list: BTreeMap<(i32, i8), Option<i64>> = BTreeMap::new();
     let mut inject_watch_list: BTreeMap<(i32, i8), Option<i8>> = BTreeMap::new();
-    let mut next_check = timer.get_time();
-    let timeout = |next_check: Milliseconds| -> nb::Result<(), Void> {
-        if timer.get_time() < next_check {
-            Err(nb::Error::WouldBlock)
-        } else {
-            Ok(())
-        }
-    };
+    let mut next_check = 0;
     loop {
         // TODO: we don't need fuse() here.
         // remove after https://github.com/rust-lang/futures-rs/issues/1989 lands
         let read_message_f = read_i8(&stream).fuse();
         let next_check_c = next_check.clone();
-
-        let timeout_f = block_async!(timeout(next_check_c)).fuse();
+        let timeout_f = timer::async_delay_ms(next_check_c).fuse();
         pin_mut!(read_message_f, timeout_f);
         select_biased! {
             message = read_message_f => {
@@ -262,13 +248,13 @@ async fn handle_connection(
                         let channel = read_i32(&stream).await?;
                         let overrd = read_i8(&stream).await?;
                         let value = read_i8(&stream).await?;
-                        dispatch!(timer, _aux_mutex, _routing_table, channel, inject, overrd, value);
+                        dispatch!(_aux_mutex, _routing_table, channel, inject, overrd, value);
                         debug!("INJECT channel {}, overrd {}, value {}", channel, overrd, value);
                     },
                     HostMessage::GetInjectionStatus => {
                         let channel = read_i32(&stream).await?;
                         let overrd = read_i8(&stream).await?;
-                        let value = dispatch!(timer, _aux_mutex, _routing_table, channel, read_injection_status, overrd);
+                        let value = dispatch!(_aux_mutex, _routing_table, channel, read_injection_status, overrd);
                         write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
                         write_i8(&stream, overrd).await?;
@@ -278,7 +264,7 @@ async fn handle_connection(
             },
             _ = timeout_f => {
                 for (&(channel, probe), previous) in probe_watch_list.iter_mut() {
-                    let current = dispatch!(timer, _aux_mutex, _routing_table, channel, read_probe, probe);
+                    let current = dispatch!(_aux_mutex, _routing_table, channel, read_probe, probe);
                     if previous.is_none() || previous.unwrap() != current {
                         write_i8(&stream, DeviceMessage::MonitorStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
@@ -288,7 +274,7 @@ async fn handle_connection(
                     }
                 }
                 for (&(channel, overrd), previous) in inject_watch_list.iter_mut() {
-                    let current = dispatch!(timer, _aux_mutex, _routing_table, channel, read_injection_status, overrd);
+                    let current = dispatch!(_aux_mutex, _routing_table, channel, read_injection_status, overrd);
                     if previous.is_none() || previous.unwrap() != current {
                         write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
@@ -297,17 +283,13 @@ async fn handle_connection(
                         *previous = Some(current);
                     }
                 }
-                next_check = timer.get_time() + Milliseconds(200);
+                next_check = 200;
             }
         }
     }
 }
 
-pub fn start(
-    timer: GlobalTimer,
-    aux_mutex: &Rc<Mutex<bool>>,
-    routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>,
-) {
+pub fn start(aux_mutex: &Rc<Mutex<bool>>, routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>) {
     let aux_mutex = aux_mutex.clone();
     let routing_table = routing_table.clone();
     task::spawn(async move {
@@ -318,7 +300,7 @@ pub fn start(
             task::spawn(async move {
                 info!("received connection");
                 let routing_table = routing_table.borrow();
-                let result = handle_connection(&stream, timer, &aux_mutex, &routing_table).await;
+                let result = handle_connection(&stream, &aux_mutex, &routing_table).await;
                 match result {
                     Err(Error::NetworkError(smoltcp::Error::Finished)) => info!("peer closed connection"),
                     Err(error) => warn!("connection terminated: {}", error),

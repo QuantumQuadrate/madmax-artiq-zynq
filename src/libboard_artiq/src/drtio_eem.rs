@@ -1,7 +1,6 @@
 use alloc::format;
 
-use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
-use libboard_zynq::timer::GlobalTimer;
+use libboard_zynq::timer;
 use libconfig::Config;
 use log::{debug, error, info};
 
@@ -28,23 +27,23 @@ fn select_lane(lane_no: u8) {
     }
 }
 
-fn apply_delay(tap: u8, timer: &mut GlobalTimer) {
+fn apply_delay(tap: u8) {
     unsafe {
         pl::csr::eem_transceiver::dly_cnt_in_write(tap);
         pl::csr::eem_transceiver::dly_ld_write(1);
-        timer.delay_us(1);
+        timer::delay_us(1);
         assert!(tap as u8 == pl::csr::eem_transceiver::dly_cnt_out_read());
     }
 }
 
-fn apply_config(config: &SerdesConfig, timer: &mut GlobalTimer) {
+fn apply_config(config: &SerdesConfig) {
     for lane_no in 0..4 {
         select_lane(lane_no as u8);
-        apply_delay(config.delay[lane_no], timer);
+        apply_delay(config.delay[lane_no]);
     }
 }
 
-unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
+unsafe fn assign_delay() -> SerdesConfig {
     // Select an appropriate delay for lane 0
     select_lane(0);
 
@@ -55,8 +54,8 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
     loop {
         let mut prev = None;
         for curr_dly in 0..32 {
-            //let read_align = read_align_fn(curr_dly, timer);
-            let curr_low_rate = read_align(curr_dly, timer);
+            //let read_align = read_align_fn(curr_dly);
+            let curr_low_rate = read_align(curr_dly);
 
             if let Some(prev_low_rate) = prev {
                 // This is potentially a crossover position
@@ -87,7 +86,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
 
         if best_dly.is_none() {
             error!("setup/hold timing calibration failed, retry in 1s...");
-            timer.delay_us(1_000_000);
+            timer::delay_us(1_000_000);
         } else {
             break;
         }
@@ -95,7 +94,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
 
     let best_dly = best_dly.unwrap();
 
-    apply_delay(best_dly, timer);
+    apply_delay(best_dly);
     let mut delay_list = [best_dly; 4];
 
     // Assign delay for other lanes
@@ -106,7 +105,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
         let mut min_idx = 0;
         for dly_delta in -3..=3 {
             let index = (best_dly as isize + dly_delta) as u8;
-            let low_rate = read_align(index, timer);
+            let low_rate = read_align(index);
             // abs() from f32 is not available in core library
             let deviation = if low_rate < 0.5 { 0.5 - low_rate } else { low_rate - 0.5 };
 
@@ -116,7 +115,7 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
             }
         }
 
-        apply_delay(min_idx, timer);
+        apply_delay(min_idx);
         delay_list[lane_no] = min_idx;
     }
 
@@ -125,13 +124,13 @@ unsafe fn assign_delay(timer: &mut GlobalTimer) -> SerdesConfig {
     SerdesConfig { delay: delay_list }
 }
 
-fn read_align(dly: u8, timer: &mut GlobalTimer) -> f32 {
+fn read_align(dly: u8) -> f32 {
     unsafe {
-        apply_delay(dly, timer);
+        apply_delay(dly);
         pl::csr::eem_transceiver::counter_reset_write(1);
 
         pl::csr::eem_transceiver::counter_enable_write(1);
-        timer.delay_us(2000);
+        timer::delay_us(2000);
         pl::csr::eem_transceiver::counter_enable_write(0);
 
         let (high, low) = (
@@ -146,7 +145,7 @@ fn read_align(dly: u8, timer: &mut GlobalTimer) -> f32 {
     }
 }
 
-unsafe fn align_comma(timer: &mut GlobalTimer) {
+unsafe fn align_comma() {
     loop {
         for slip in 1..=10 {
             // The soft transceiver has 2 8b10b decoders, which receives lane
@@ -170,10 +169,10 @@ unsafe fn align_comma(timer: &mut GlobalTimer) {
             // timing is met.
             pl::csr::eem_transceiver::bitslip_write(1);
             pl::csr::eem_transceiver::bitslip_write(1);
-            timer.delay_us(1);
+            timer::delay_us(1);
 
             pl::csr::eem_transceiver::comma_align_reset_write(1);
-            timer.delay_us(100);
+            timer::delay_us(100);
 
             if pl::csr::eem_transceiver::comma_read() == 1 {
                 debug!("comma alignment completed after {} bitslips", slip);
@@ -182,18 +181,18 @@ unsafe fn align_comma(timer: &mut GlobalTimer) {
         }
 
         error!("comma alignment failed, retrying in 1s...");
-        timer.delay_us(1_000_000);
+        timer::delay_us(1_000_000);
     }
 }
 
-pub unsafe fn align_wordslip(timer: &mut GlobalTimer, trx_no: u8) -> bool {
+pub unsafe fn align_wordslip(trx_no: u8) -> bool {
     pl::csr::eem_transceiver::transceiver_sel_write(trx_no);
 
     for slip in 0..=1 {
         pl::csr::eem_transceiver::wordslip_write(slip as u8);
-        timer.delay_us(1);
+        timer::delay_us(1);
         pl::csr::eem_transceiver::comma_align_reset_write(1);
-        timer.delay_us(100);
+        timer::delay_us(100);
 
         if pl::csr::eem_transceiver::comma_read() == 1 {
             debug!("comma alignment completed with {} wordslip", slip);
@@ -204,7 +203,7 @@ pub unsafe fn align_wordslip(timer: &mut GlobalTimer, trx_no: u8) -> bool {
     false
 }
 
-pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
+pub fn init(cfg: &Config) {
     for trx_no in 0..pl::csr::CONFIG_EEM_DRTIO_COUNT {
         unsafe {
             pl::csr::eem_transceiver::transceiver_sel_write(trx_no as u8);
@@ -217,12 +216,12 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
             Ok(record) => {
                 info!("loading calibrated timing values from sd card");
                 unsafe {
-                    apply_config(&*(record.as_ptr() as *const SerdesConfig), timer);
+                    apply_config(&*(record.as_ptr() as *const SerdesConfig));
                 }
             }
             Err(_) => {
                 info!("calibrating...");
-                let config = unsafe { assign_delay(timer) };
+                let config = unsafe { assign_delay() };
 
                 match cfg.write(&key, config.as_bytes().to_vec()) {
                     Ok(()) => {
@@ -240,7 +239,7 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
         }
 
         unsafe {
-            align_comma(timer);
+            align_comma();
         }
     }
 }

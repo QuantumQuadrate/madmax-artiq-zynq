@@ -31,7 +31,6 @@ use core::cell::RefCell;
 use analyzer::Analyzer;
 use dma::Manager as DmaManager;
 use drtiosat_aux::process_aux_packets;
-use embedded_hal::blocking::delay::DelayUs;
 use libasync::task;
 #[cfg(has_drtio_eem)]
 use libboard_artiq::drtio_eem;
@@ -44,7 +43,7 @@ use libboard_artiq::si5324;
 use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async, identifier_read, logger, pl::csr};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
-use libboard_zynq::{i2c::I2c, print, println, timer::GlobalTimer};
+use libboard_zynq::{i2c::I2c, print, println, timer};
 use libconfig::Config;
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
@@ -201,16 +200,13 @@ const SI549_SETTINGS: si549::FrequencySetting = si549::FrequencySetting {
 
 #[cfg(has_grabber)]
 mod grabber {
-    use libasync::delay;
     use libboard_artiq::grabber;
-    use libboard_zynq::time::Milliseconds;
+    use libboard_zynq::timer;
 
-    use crate::GlobalTimer;
-    pub async fn grabber_thread(timer: GlobalTimer) {
-        let mut countdown = timer.countdown();
+    pub async fn grabber_thread() {
         loop {
             grabber::tick();
-            delay(&mut countdown, Milliseconds(200)).await;
+            timer::async_delay_ms(200).await;
         }
     }
 }
@@ -224,7 +220,7 @@ pub fn main_core0() {
     }
     enable_l2_cache(0x8);
 
-    let mut timer = GlobalTimer::start();
+    timer::start();
 
     let buffer_logger = unsafe { logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
@@ -266,16 +262,16 @@ pub fn main_core0() {
     }
 
     #[cfg(has_si5324)]
-    si5324::setup(i2c, &SI5324_SETTINGS, si5324::Input::Ckin1, &mut timer).expect("cannot initialize Si5324");
+    si5324::setup(i2c, &SI5324_SETTINGS, si5324::Input::Ckin1).expect("cannot initialize Si5324");
     #[cfg(has_si549)]
-    si549::main_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize main Si549");
+    si549::main_setup(&SI549_SETTINGS).expect("cannot initialize main Si549");
 
-    timer.delay_us(100_000);
+    timer::delay_us(100_000);
     info!("Switching SYS clocks...");
     unsafe {
         csr::gt_drtio::stable_clkin_write(1);
     }
-    timer.delay_us(50_000); // wait for CPLL/QPLL/MMCM lock
+    timer::delay_us(50_000); // wait for CPLL/QPLL/MMCM lock
     let clk = unsafe { csr::sys_crg::current_clock_read() };
     if clk == 1 {
         info!("SYS CLK switched successfully");
@@ -293,7 +289,7 @@ pub fn main_core0() {
     }
 
     #[cfg(has_si549)]
-    si549::helper_setup(&mut timer, &SI549_SETTINGS).expect("cannot initialize helper Si549");
+    si549::helper_setup(&SI549_SETTINGS).expect("cannot initialize helper Si549");
 
     let mut cfg = match Config::new() {
         Ok(cfg) => cfg,
@@ -319,12 +315,12 @@ pub fn main_core0() {
 
     #[cfg(has_drtio_eem)]
     {
-        drtio_eem::init(&mut timer, &cfg);
+        drtio_eem::init(&cfg);
         unsafe { csr::eem_transceiver::rx_ready_write(1) }
     }
 
     #[cfg(has_grabber)]
-    task::spawn(grabber::grabber_thread(timer));
+    task::spawn(grabber::grabber_thread());
 
     #[cfg(has_drtio_routing)]
     let mut repeaters = [repeater::Repeater::default(); csr::DRTIOREP.len()];
@@ -353,8 +349,7 @@ pub fn main_core0() {
             while !drtiosat_link_rx_up() {
                 #[allow(unused_mut)]
                 for mut rep in repeaters.iter_mut() {
-                    rep.service(&routing_table, rank, destination, &mut router, &mut timer)
-                        .await;
+                    rep.service(&routing_table, rank, destination, &mut router).await;
                 }
                 #[cfg(feature = "target_kasli_soc")]
                 {
@@ -367,12 +362,12 @@ pub fn main_core0() {
             info!("uplink is up, switching to recovered clock");
             #[cfg(has_siphaser)]
             {
-                si5324::siphaser::select_recovered_clock(i2c, true, &mut timer).expect("failed to switch clocks");
-                si5324::siphaser::calibrate_skew(&mut timer).expect("failed to calibrate skew");
+                si5324::siphaser::select_recovered_clock(i2c, true).expect("failed to switch clocks");
+                si5324::siphaser::calibrate_skew().expect("failed to calibrate skew");
             }
 
             #[cfg(has_wrpll)]
-            si549::wrpll::select_recovered_clock(true, &mut timer);
+            si549::wrpll::select_recovered_clock(true);
 
             // Various managers created here, so when link is dropped, all DMA traces
             // are cleared out for a clean slate on subsequent connections,
@@ -392,7 +387,6 @@ pub fn main_core0() {
                     &mut routing_table,
                     &mut rank,
                     &mut destination,
-                    timer,
                     i2c,
                     &mut dma_manager,
                     &mut analyzer,
@@ -414,9 +408,9 @@ pub fn main_core0() {
             drtiosat_tsc_loaded();
             info!("uplink is down, switching to local oscillator clock");
             #[cfg(has_siphaser)]
-            si5324::siphaser::select_recovered_clock(i2c, false, &mut timer).expect("failed to switch clocks");
+            si5324::siphaser::select_recovered_clock(i2c, false).expect("failed to switch clocks");
             #[cfg(has_wrpll)]
-            si549::wrpll::select_recovered_clock(false, &mut timer);
+            si549::wrpll::select_recovered_clock(false);
         }
     })
 }
@@ -426,7 +420,6 @@ async fn linkup_service<'a, 'b>(
     routing_table: &mut drtio_routing::RoutingTable,
     rank: &mut u8,
     destination: &mut u8,
-    mut timer: GlobalTimer,
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
@@ -439,7 +432,6 @@ async fn linkup_service<'a, 'b>(
         routing_table,
         rank,
         destination,
-        &mut timer,
         i2c,
         dma_manager,
         analyzer,
@@ -450,14 +442,13 @@ async fn linkup_service<'a, 'b>(
     .await;
     #[allow(unused_mut)]
     for mut rep in repeaters.iter_mut() {
-        rep.service(&routing_table, *rank, *destination, router, &mut timer)
-            .await;
+        rep.service(&routing_table, *rank, *destination, router).await;
     }
 
     if drtiosat_tsc_loaded() {
         info!("TSC loaded from uplink");
         for rep in repeaters.iter() {
-            if let Err(e) = rep.sync_tsc(&mut timer).await {
+            if let Err(e) = rep.sync_tsc().await {
                 error!("failed to sync TSC ({:?})", e);
             }
         }
@@ -486,7 +477,7 @@ async fn linkup_service<'a, 'b>(
     }
 
     kernel_manager
-        .process_kern_requests(router, routing_table, *rank, *destination, dma_manager, &timer)
+        .process_kern_requests(router, routing_table, *rank, *destination, dma_manager)
         .await;
 
     #[cfg(has_drtio_routing)]

@@ -2,7 +2,6 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 
 use libboard_artiq::{drtio_routing, drtio_routing::RoutingTable, pl::csr};
-use libboard_zynq::timer::GlobalTimer;
 use libconfig::Config;
 use libcortex_a9::mutex::Mutex;
 use log::{info, warn};
@@ -12,19 +11,16 @@ pub mod drtio {
     use alloc::vec::Vec;
     use core::fmt;
 
-    use embedded_hal::blocking::delay::DelayMs;
-    #[cfg(has_drtio_eem)]
-    use embedded_hal::blocking::delay::DelayUs;
     use ksupport::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS,
                    kernel::Message as KernelMessage, resolve_channel_name};
-    use libasync::{delay, task};
+    use libasync::task;
     #[cfg(has_drtio_eem)]
     use libboard_artiq::drtio_eem;
     use libboard_artiq::{drtioaux::Error as DrtioError,
                          drtioaux_async,
                          drtioaux_async::Packet,
                          drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus}};
-    use libboard_zynq::time::Milliseconds;
+    use libboard_zynq::timer;
     use log::{error, info, warn};
 
     use super::*;
@@ -73,18 +69,17 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &Rc<RefCell<RoutingTable>>,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        timer: GlobalTimer,
     ) {
         let aux_mutex = aux_mutex.clone();
         let routing_table = routing_table.clone();
         let up_destinations = up_destinations.clone();
         task::spawn(async move {
             let routing_table = routing_table.borrow();
-            link_task(&aux_mutex, &routing_table, &up_destinations, timer).await;
+            link_task(&aux_mutex, &routing_table, &up_destinations).await;
         });
     }
 
-    async fn link_rx_up(linkno: u8, _timer: &mut GlobalTimer) -> bool {
+    async fn link_rx_up(linkno: u8) -> bool {
         let linkno = linkno as usize;
         #[cfg(has_drtio_eem)]
         if DRTIO_EEM_LINKNOS.contains(&linkno) {
@@ -93,7 +88,7 @@ pub mod drtio {
                 csr::eem_transceiver::transceiver_sel_write(eem_trx_no as u8);
                 csr::eem_transceiver::comma_align_reset_write(1);
             }
-            _timer.delay_us(100);
+            timer::delay_us(100);
             return unsafe { csr::eem_transceiver::comma_read() == 1 };
         }
         unsafe { (csr::DRTIO[linkno].rx_up_read)() == 1 }
@@ -170,11 +165,11 @@ pub mod drtio {
         }
     }
 
-    async fn recv_aux_timeout(linkno: u8, timeout: u64, mut timer: GlobalTimer) -> Result<Packet, Error> {
-        if !link_rx_up(linkno, &mut timer).await {
+    async fn recv_aux_timeout(linkno: u8, timeout: u64) -> Result<Packet, Error> {
+        if !link_rx_up(linkno).await {
             return Err(Error::LinkDown);
         }
-        match drtioaux_async::recv_timeout(linkno, Some(timeout), timer).await {
+        match drtioaux_async::recv_timeout(linkno, Some(timeout)).await {
             Ok(packet) => return Ok(packet),
             Err(DrtioError::TimedOut) => return Err(Error::Timeout),
             Err(_) => return Err(Error::AuxError),
@@ -186,49 +181,42 @@ pub mod drtio {
         linkno: u8,
         routing_table: &RoutingTable,
         request: &Packet,
-        mut timer: GlobalTimer,
     ) -> Result<Packet, Error> {
-        if !link_rx_up(linkno, &mut timer).await {
+        if !link_rx_up(linkno).await {
             return Err(Error::LinkDown);
         }
         let _lock = aux_mutex.async_lock().await;
         drtioaux_async::send(linkno, request).await.unwrap();
         loop {
-            let packet = recv_aux_timeout(linkno, 200, timer).await?;
+            let packet = recv_aux_timeout(linkno, 200).await?;
             if let Some(packet) = process_async_packets(linkno, routing_table, packet).await {
                 return Ok(packet);
             }
         }
     }
 
-    async fn drain_buffer(linkno: u8, draining_time: Milliseconds, timer: GlobalTimer) {
-        let max_time = timer.get_time() + draining_time;
-        while timer.get_time() < max_time {
+    async fn drain_buffer(linkno: u8, draining_time: u64) {
+        let max_time = timer::get_ms() + draining_time;
+        while timer::get_ms() < max_time {
             let _ = drtioaux_async::recv(linkno).await;
         }
     }
 
-    async fn ping_remote(
-        aux_mutex: &Rc<Mutex<bool>>,
-        linkno: u8,
-        routing_table: &RoutingTable,
-        mut timer: GlobalTimer,
-    ) -> u32 {
+    async fn ping_remote(aux_mutex: &Rc<Mutex<bool>>, linkno: u8, routing_table: &RoutingTable) -> u32 {
         let mut count = 0;
         loop {
-            if !link_rx_up(linkno, &mut timer).await {
+            if !link_rx_up(linkno).await {
                 return 0;
             }
             count += 1;
             if count > 100 {
                 return 0;
             }
-            let reply = aux_transact(aux_mutex, linkno, routing_table, &Packet::EchoRequest, timer).await;
+            let reply = aux_transact(aux_mutex, linkno, routing_table, &Packet::EchoRequest).await;
             match reply {
                 Ok(Packet::EchoReply) => {
                     // make sure receive buffer is drained
-                    let draining_time = Milliseconds(200);
-                    drain_buffer(linkno, draining_time, timer).await;
+                    drain_buffer(linkno, 200).await;
                     return count;
                 }
                 _ => {}
@@ -236,7 +224,7 @@ pub mod drtio {
         }
     }
 
-    async fn sync_tsc(aux_mutex: &Rc<Mutex<bool>>, linkno: u8, timer: GlobalTimer) -> Result<(), Error> {
+    async fn sync_tsc(aux_mutex: &Rc<Mutex<bool>>, linkno: u8) -> Result<(), Error> {
         let _lock = aux_mutex.async_lock().await;
 
         unsafe {
@@ -245,7 +233,7 @@ pub mod drtio {
         }
         // TSCAck is the only aux packet that is sent spontaneously
         // by the satellite, in response to a TSC set on the RT link.
-        let reply = recv_aux_timeout(linkno, 10000, timer).await?;
+        let reply = recv_aux_timeout(linkno, 10000).await?;
         if reply == Packet::TSCAck {
             Ok(())
         } else {
@@ -257,7 +245,6 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         linkno: u8,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
     ) -> Result<(), Error> {
         for i in 0..drtio_routing::DEST_COUNT {
             let reply = aux_transact(
@@ -268,7 +255,6 @@ pub mod drtio {
                     destination: i as u8,
                     hops: routing_table.0[i],
                 },
-                timer,
             )
             .await?;
             if reply != Packet::RoutingAck {
@@ -283,16 +269,8 @@ pub mod drtio {
         linkno: u8,
         rank: u8,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
     ) -> Result<(), Error> {
-        let reply = aux_transact(
-            aux_mutex,
-            linkno,
-            routing_table,
-            &Packet::RoutingSetRank { rank: rank },
-            timer,
-        )
-        .await?;
+        let reply = aux_transact(aux_mutex, linkno, routing_table, &Packet::RoutingSetRank { rank: rank }).await?;
         match reply {
             Packet::RoutingAck => Ok(()),
             _ => Err(Error::UnexpectedReply),
@@ -376,7 +354,6 @@ pub mod drtio {
         routing_table: &RoutingTable,
         up_links: &[bool],
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        timer: GlobalTimer,
     ) {
         for destination in 0..drtio_routing::DEST_COUNT {
             let hop = routing_table.0[destination][0];
@@ -398,16 +375,13 @@ pub mod drtio {
                             &Packet::DestinationStatusRequest {
                                 destination: destination,
                             },
-                            timer,
                         )
                         .await;
                         match reply {
                             Ok(Packet::DestinationDownReply) => {
                                 destination_set_up(routing_table, up_destinations, destination, false).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false)
-                                    .await;
-                                subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false)
-                                    .await;
+                                remote_dma::destination_changed(aux_mutex, routing_table, destination, false).await;
+                                subkernel::destination_changed(aux_mutex, routing_table, destination, false).await;
                             }
                             Ok(Packet::DestinationOkReply) => (),
                             Ok(Packet::DestinationSequenceErrorReply { channel }) => {
@@ -445,8 +419,8 @@ pub mod drtio {
                         }
                     } else {
                         destination_set_up(routing_table, up_destinations, destination, false).await;
-                        remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, false).await;
-                        subkernel::destination_changed(aux_mutex, routing_table, timer, destination, false).await;
+                        remote_dma::destination_changed(aux_mutex, routing_table, destination, false).await;
+                        subkernel::destination_changed(aux_mutex, routing_table, destination, false).await;
                     }
                 } else {
                     if up_links[linkno as usize] {
@@ -457,7 +431,6 @@ pub mod drtio {
                             &Packet::DestinationStatusRequest {
                                 destination: destination,
                             },
-                            timer,
                         )
                         .await;
                         match reply {
@@ -465,10 +438,8 @@ pub mod drtio {
                             Ok(Packet::DestinationOkReply) => {
                                 destination_set_up(routing_table, up_destinations, destination, true).await;
                                 init_buffer_space(destination as u8, linkno).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, timer, destination, true)
-                                    .await;
-                                subkernel::destination_changed(aux_mutex, routing_table, timer, destination, true)
-                                    .await;
+                                remote_dma::destination_changed(aux_mutex, routing_table, destination, true).await;
+                                subkernel::destination_changed(aux_mutex, routing_table, destination, true).await;
                             }
                             Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
                             Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
@@ -483,7 +454,6 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        mut timer: GlobalTimer,
     ) {
         let mut up_links = [false; csr::DRTIO.len()];
         loop {
@@ -491,7 +461,7 @@ pub mod drtio {
                 let linkno = linkno as u8;
                 if up_links[linkno as usize] {
                     /* link was previously up */
-                    if link_rx_up(linkno, &mut timer).await {
+                    if link_rx_up(linkno).await {
                         process_unsolicited_aux(aux_mutex, linkno, routing_table).await;
                         process_local_errors(linkno).await;
                     } else {
@@ -511,7 +481,7 @@ pub mod drtio {
                     #[cfg(has_drtio_eem)]
                     if DRTIO_EEM_LINKNOS.contains(&(linkno as usize)) {
                         let eem_trx_no = linkno - DRTIO_EEM_LINKNOS.start as u8;
-                        if !unsafe { drtio_eem::align_wordslip(&mut timer, eem_trx_no) } {
+                        if !unsafe { drtio_eem::align_wordslip(eem_trx_no) } {
                             continue;
                         }
                         unsafe {
@@ -519,19 +489,19 @@ pub mod drtio {
                         }
                     }
 
-                    if link_rx_up(linkno, &mut timer).await {
+                    if link_rx_up(linkno).await {
                         info!("[LINK#{}] link RX became up, pinging", linkno);
-                        let ping_count = ping_remote(aux_mutex, linkno, routing_table, timer).await;
+                        let ping_count = ping_remote(aux_mutex, linkno, routing_table).await;
                         if ping_count > 0 {
                             info!("[LINK#{}] remote replied after {} packets", linkno, ping_count);
                             up_links[linkno as usize] = true;
-                            if let Err(e) = sync_tsc(aux_mutex, linkno, timer).await {
+                            if let Err(e) = sync_tsc(aux_mutex, linkno).await {
                                 error!("[LINK#{}] failed to sync TSC ({})", linkno, e);
                             }
-                            if let Err(e) = load_routing_table(aux_mutex, linkno, routing_table, timer).await {
+                            if let Err(e) = load_routing_table(aux_mutex, linkno, routing_table).await {
                                 error!("[LINK#{}] failed to load routing table ({})", linkno, e);
                             }
-                            if let Err(e) = set_rank(aux_mutex, linkno, 1 as u8, routing_table, timer).await {
+                            if let Err(e) = set_rank(aux_mutex, linkno, 1 as u8, routing_table).await {
                                 error!("[LINK#{}] failed to set rank ({})", linkno, e);
                             }
                             info!("[LINK#{}] link initialization completed", linkno);
@@ -541,19 +511,18 @@ pub mod drtio {
                     }
                 }
             }
-            destination_survey(aux_mutex, routing_table, &up_links, up_destinations, timer).await;
-            let mut countdown = timer.countdown();
-            delay(&mut countdown, Milliseconds(200)).await;
+            destination_survey(aux_mutex, routing_table, &up_links, up_destinations).await;
+            timer::async_delay_ms(200).await;
         }
     }
 
-    pub async fn reset(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, mut timer: GlobalTimer) {
+    pub async fn reset(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable) {
         for linkno in 0..csr::DRTIO.len() {
             unsafe {
                 (csr::DRTIO[linkno].reset_write)(1);
             }
         }
-        timer.delay_ms(1);
+        timer::delay_ms(1);
         for linkno in 0..csr::DRTIO.len() {
             unsafe {
                 (csr::DRTIO[linkno].reset_write)(0);
@@ -562,8 +531,8 @@ pub mod drtio {
 
         for linkno in 0..csr::DRTIO.len() {
             let linkno = linkno as u8;
-            if link_rx_up(linkno, &mut timer).await {
-                let reply = aux_transact(&aux_mutex, linkno, routing_table, &Packet::ResetRequest, timer).await;
+            if link_rx_up(linkno).await {
+                let reply = aux_transact(&aux_mutex, linkno, routing_table, &Packet::ResetRequest).await;
                 match reply {
                     Ok(Packet::ResetAck) => (),
                     Ok(_) => error!("[LINK#{}] reset failed, received unexpected aux packet", linkno),
@@ -577,7 +546,6 @@ pub mod drtio {
         linkno: u8,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         data: &[u8],
         packet_f: PacketF,
         reply_handler_f: HandlerF,
@@ -600,7 +568,7 @@ pub mod drtio {
             i += len;
             let status = PayloadStatus::from_status(first, last);
             let packet = packet_f(&slice, status, len);
-            let reply = aux_transact(aux_mutex, linkno, routing_table, &packet, timer).await?;
+            let reply = aux_transact(aux_mutex, linkno, routing_table, &packet).await?;
             reply_handler_f(&reply)?;
         }
         Ok(())
@@ -609,7 +577,6 @@ pub mod drtio {
     pub async fn ddma_upload_trace(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         id: u32,
         destination: u8,
         trace: &Vec<u8>,
@@ -619,7 +586,6 @@ pub mod drtio {
             linkno,
             aux_mutex,
             routing_table,
-            timer,
             trace,
             |slice, status, len| Packet::DmaAddTraceRequest {
                 id: id,
@@ -649,7 +615,6 @@ pub mod drtio {
     pub async fn ddma_send_erase(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         id: u32,
         destination: u8,
     ) -> Result<(), Error> {
@@ -663,7 +628,6 @@ pub mod drtio {
                 source: 0,
                 destination: destination,
             },
-            timer,
         )
         .await?;
         match reply {
@@ -682,7 +646,6 @@ pub mod drtio {
     pub async fn ddma_send_playback(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         id: u32,
         destination: u8,
         timestamp: u64,
@@ -698,7 +661,6 @@ pub mod drtio {
                 destination: destination,
                 timestamp: timestamp,
             },
-            timer,
         )
         .await?;
         match reply {
@@ -717,7 +679,6 @@ pub mod drtio {
     async fn analyzer_get_data(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         destination: u8,
     ) -> Result<RemoteBuffer, Error> {
         let linkno = routing_table.0[destination as usize][0] - 1;
@@ -728,7 +689,6 @@ pub mod drtio {
             &Packet::AnalyzerHeaderRequest {
                 destination: destination,
             },
-            timer,
         )
         .await?;
         let (sent, total, overflow) = match reply {
@@ -751,7 +711,6 @@ pub mod drtio {
                     &Packet::AnalyzerDataRequest {
                         destination: destination,
                     },
-                    timer,
                 )
                 .await?;
                 match reply {
@@ -776,12 +735,11 @@ pub mod drtio {
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        timer: GlobalTimer,
     ) -> Result<Vec<RemoteBuffer>, Error> {
         let mut remote_buffers: Vec<RemoteBuffer> = Vec::new();
         for i in 1..drtio_routing::DEST_COUNT {
             if destination_up(up_destinations, i as u8).await {
-                remote_buffers.push(analyzer_get_data(aux_mutex, routing_table, timer, i as u8).await?);
+                remote_buffers.push(analyzer_get_data(aux_mutex, routing_table, i as u8).await?);
             }
         }
         Ok(remote_buffers)
@@ -790,7 +748,6 @@ pub mod drtio {
     pub async fn subkernel_upload(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         id: u32,
         destination: u8,
         data: &Vec<u8>,
@@ -800,7 +757,6 @@ pub mod drtio {
             linkno,
             aux_mutex,
             routing_table,
-            timer,
             data,
             |slice, status, len| Packet::SubkernelAddDataRequest {
                 id: id,
@@ -821,7 +777,6 @@ pub mod drtio {
     pub async fn subkernel_load(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         id: u32,
         destination: u8,
         run: bool,
@@ -839,7 +794,6 @@ pub mod drtio {
                 run: run,
                 timestamp,
             },
-            timer,
         )
         .await?;
         match reply {
@@ -858,7 +812,6 @@ pub mod drtio {
     pub async fn subkernel_retrieve_exception(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         destination: u8,
     ) -> Result<Vec<u8>, Error> {
         let linkno = routing_table.0[destination as usize][0] - 1;
@@ -872,7 +825,6 @@ pub mod drtio {
                     source: 0,
                     destination: destination,
                 },
-                timer,
             )
             .await?;
             match reply {
@@ -895,7 +847,6 @@ pub mod drtio {
     pub async fn subkernel_send_message(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         id: u32,
         destination: u8,
         message: &[u8],
@@ -905,7 +856,6 @@ pub mod drtio {
             linkno,
             aux_mutex,
             routing_table,
-            timer,
             message,
             |slice, status, len| Packet::SubkernelMessage {
                 source: 0,
@@ -926,7 +876,6 @@ pub mod drtio {
     pub async fn i2c_send_basic(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         request: &KernelMessage,
         busno: u32,
     ) -> Result<bool, Error> {
@@ -945,7 +894,7 @@ pub mod drtio {
             _ => unreachable!(),
         };
         let linkno = routing_table.0[destination as usize][0] - 1;
-        let reply = aux_transact(aux_mutex, linkno, routing_table, &packet, timer).await?;
+        let reply = aux_transact(aux_mutex, linkno, routing_table, &packet).await?;
         match reply {
             Packet::I2cBasicReply { succeeded } => Ok(succeeded),
             _ => Err(Error::UnexpectedReply),
@@ -955,7 +904,6 @@ pub mod drtio {
     pub async fn i2c_send_write(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         busno: u32,
         data: u8,
     ) -> Result<(bool, bool), Error> {
@@ -971,7 +919,6 @@ pub mod drtio {
                 busno,
                 data,
             },
-            timer,
         )
         .await?;
         match reply {
@@ -983,7 +930,6 @@ pub mod drtio {
     pub async fn i2c_send_read(
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         busno: u32,
         ack: bool,
     ) -> Result<(bool, u8), Error> {
@@ -999,7 +945,6 @@ pub mod drtio {
                 busno,
                 ack,
             },
-            timer,
         )
         .await?;
         match reply {
@@ -1017,12 +962,11 @@ pub mod drtio {
         _aux_mutex: &Rc<Mutex<bool>>,
         _routing_table: &Rc<RefCell<RoutingTable>>,
         _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        _timer: GlobalTimer,
     ) {
     }
 
     #[allow(dead_code)]
-    pub fn reset(_aux_mutex: Rc<Mutex<bool>>, _routing_table: &RoutingTable, mut _timer: GlobalTimer) {}
+    pub fn reset(_aux_mutex: Rc<Mutex<bool>>, _routing_table: &RoutingTable) {}
 }
 
 fn toggle_sed_spread(val: u8) {
@@ -1052,10 +996,9 @@ pub fn startup(
     routing_table: &Rc<RefCell<RoutingTable>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     cfg: &Config,
-    timer: GlobalTimer,
 ) {
     setup_sed_spread(cfg);
-    drtio::startup(aux_mutex, routing_table, up_destinations, timer);
+    drtio::startup(aux_mutex, routing_table, up_destinations);
     unsafe {
         csr::rtio_core::reset_phy_write(1);
     }

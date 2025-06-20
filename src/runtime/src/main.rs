@@ -21,7 +21,7 @@ use libboard_artiq::drtio_eem;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
 use libboard_artiq::{identifier_read, logger, pl};
-use libboard_zynq::{gic, mpcore, timer::GlobalTimer};
+use libboard_zynq::{gic, mpcore, timer};
 use libconfig::Config;
 use libcortex_a9::l2c::enable_l2_cache;
 use libsupport_zynq::{exception_vectors, ram};
@@ -67,33 +67,26 @@ async fn io_expanders_service(
 
 #[cfg(has_grabber)]
 mod grabber {
-    use libasync::delay;
     use libboard_artiq::grabber;
-    use libboard_zynq::time::Milliseconds;
+    use libboard_zynq::timer;
 
-    use crate::GlobalTimer;
-    pub async fn grabber_thread(timer: GlobalTimer) {
-        let mut countdown = timer.countdown();
+    pub async fn grabber_thread() {
         loop {
             grabber::tick();
-            delay(&mut countdown, Milliseconds(200)).await;
+            timer::async_delay_ms(200).await;
         }
     }
 }
 
 #[cfg(has_cxp_grabber)]
 mod cxp {
-    use libasync::delay;
     use libboard_artiq::cxp_grabber;
-    use libboard_zynq::time::Milliseconds;
+    use libboard_zynq::timer;
 
-    use crate::GlobalTimer;
-
-    pub async fn grabber_thread(timer: GlobalTimer, i2c: &mut libboard_zynq::i2c::I2c) {
-        let mut countdown = timer.countdown();
+    pub async fn grabber_thread(i2c: &mut libboard_zynq::i2c::I2c) {
         loop {
-            cxp_grabber::tick(timer, i2c).await;
-            delay(&mut countdown, Milliseconds(200)).await;
+            cxp_grabber::tick(i2c).await;
+            timer::async_delay_ms(200).await;
         }
     }
 }
@@ -106,7 +99,7 @@ pub fn main_core0() {
         exception_vectors::set_vector_table(&__exceptions_start as *const u32 as u32);
     }
     enable_l2_cache(0x8);
-    let mut timer = GlobalTimer::start();
+    timer::start();
 
     let buffer_logger = unsafe { logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
@@ -160,21 +153,21 @@ pub fn main_core0() {
         }
     };
 
-    rtio_clocking::init(&mut timer, &cfg);
+    rtio_clocking::init(&cfg);
 
     #[cfg(has_drtio_eem)]
-    drtio_eem::init(&mut timer, &cfg);
+    drtio_eem::init(&cfg);
 
     #[cfg(has_grabber)]
-    task::spawn(grabber::grabber_thread(timer));
+    task::spawn(grabber::grabber_thread());
 
     task::spawn(ksupport::report_async_rtio_errors());
 
     #[cfg(has_cxp_grabber)]
     {
         cxp_phys::setup();
-        task::spawn(cxp::grabber_thread(timer, ksupport::kernel::i2c::get_bus()));
+        task::spawn(cxp::grabber_thread(ksupport::kernel::i2c::get_bus()));
     }
 
-    comms::main(timer, cfg);
+    comms::main(cfg);
 }

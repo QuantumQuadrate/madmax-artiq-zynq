@@ -1,6 +1,6 @@
 use core::{cell::Cell, fmt::Write, mem::MaybeUninit};
 
-use libboard_zynq::{println, timer::GlobalTimer};
+use libboard_zynq::{println, timer};
 use libcortex_a9::mutex::{Mutex, MutexGuard};
 use log::{LevelFilter, Log};
 use log_buffer::LogBuffer;
@@ -98,7 +98,7 @@ impl Log for BufferLogger {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            let timestamp = unsafe { GlobalTimer::get() }.get_us().0;
+            let timestamp = timer::get_us();
             let seconds = timestamp / 1_000_000;
             let micros = timestamp % 1_000_000;
 

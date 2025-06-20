@@ -1,5 +1,4 @@
-use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
-use libboard_zynq::timer::GlobalTimer;
+use libboard_zynq::timer;
 use log::info;
 
 use crate::pl::csr;
@@ -29,8 +28,8 @@ mod i2c {
         Helper,
     }
 
-    fn half_period(timer: &mut GlobalTimer) {
-        timer.delay_us(1)
+    fn half_period() {
+        timer::delay_us(1)
     }
 
     fn sda_i(dcxo: DCXO) -> bool {
@@ -72,7 +71,7 @@ mod i2c {
         };
     }
 
-    pub fn init(dcxo: DCXO, timer: &mut GlobalTimer) -> Result<(), &'static str> {
+    pub fn init(dcxo: DCXO) -> Result<(), &'static str> {
         // Set SCL as output, and high level
         scl_o(dcxo, true);
         scl_oe(dcxo, true);
@@ -100,7 +99,7 @@ mod i2c {
         Ok(())
     }
 
-    pub fn start(dcxo: DCXO, timer: &mut GlobalTimer) {
+    pub fn start(dcxo: DCXO) {
         // Set SCL high then SDA low
         scl_o(dcxo, true);
         half_period(timer);
@@ -108,7 +107,7 @@ mod i2c {
         half_period(timer);
     }
 
-    pub fn stop(dcxo: DCXO, timer: &mut GlobalTimer) {
+    pub fn stop(dcxo: DCXO) {
         // First, make sure SCL is low, so that the target releases the SDA line
         scl_o(dcxo, false);
         half_period(timer);
@@ -120,7 +119,7 @@ mod i2c {
         half_period(timer);
     }
 
-    pub fn write(dcxo: DCXO, data: u8, timer: &mut GlobalTimer) -> bool {
+    pub fn write(dcxo: DCXO, data: u8) -> bool {
         // MSB first
         for bit in (0..8).rev() {
             // Set SCL low and set our bit on SDA
@@ -143,7 +142,7 @@ mod i2c {
         !sda_i(dcxo)
     }
 
-    pub fn read(dcxo: DCXO, ack: bool, timer: &mut GlobalTimer) -> u8 {
+    pub fn read(dcxo: DCXO, ack: bool) -> u8 {
         // Set SCL low first, otherwise setting SDA as input may cause a transition
         // on SDA with SCL high which will be interpreted as START/STOP condition.
         scl_o(dcxo, false);
@@ -178,7 +177,7 @@ mod i2c {
     }
 }
 
-fn write(dcxo: i2c::DCXO, reg: u8, val: u8, timer: &mut GlobalTimer) -> Result<(), &'static str> {
+fn write(dcxo: i2c::DCXO, reg: u8, val: u8) -> Result<(), &'static str> {
     i2c::start(dcxo, timer);
     if !i2c::write(dcxo, ADDRESS << 1, timer) {
         return Err("Si549 failed to ack write address");
@@ -193,7 +192,7 @@ fn write(dcxo: i2c::DCXO, reg: u8, val: u8, timer: &mut GlobalTimer) -> Result<(
     Ok(())
 }
 
-fn read(dcxo: i2c::DCXO, reg: u8, timer: &mut GlobalTimer) -> Result<u8, &'static str> {
+fn read(dcxo: i2c::DCXO, reg: u8) -> Result<u8, &'static str> {
     i2c::start(dcxo, timer);
     if !i2c::write(dcxo, ADDRESS << 1, timer) {
         return Err("Si549 failed to ack write address");
@@ -212,7 +211,7 @@ fn read(dcxo: i2c::DCXO, reg: u8, timer: &mut GlobalTimer) -> Result<u8, &'stati
     Ok(val)
 }
 
-fn setup(dcxo: i2c::DCXO, config: &DividerConfig, timer: &mut GlobalTimer) -> Result<(), &'static str> {
+fn setup(dcxo: i2c::DCXO, config: &DividerConfig) -> Result<(), &'static str> {
     i2c::init(dcxo, timer)?;
 
     write(dcxo, 255, 0x00, timer)?; // PAGE
@@ -245,16 +244,16 @@ fn setup(dcxo: i2c::DCXO, config: &DividerConfig, timer: &mut GlobalTimer) -> Re
     Ok(())
 }
 
-pub fn main_setup(timer: &mut GlobalTimer, settings: &FrequencySetting) -> Result<(), &'static str> {
+pub fn main_setup(settings: &FrequencySetting) -> Result<(), &'static str> {
     unsafe {
         csr::wrpll::main_dcxo_bitbang_enable_write(1);
         csr::wrpll::main_dcxo_i2c_address_write(ADDRESS);
     }
 
-    setup(i2c::DCXO::Main, &settings.main, timer)?;
+    setup(i2c::DCXO::Main, &settings.main)?;
 
     // Si549 maximum settling time for large frequency change.
-    timer.delay_us(40_000);
+    timer::delay_us(40_000);
 
     unsafe {
         csr::wrpll::main_dcxo_bitbang_enable_write(0);
@@ -264,17 +263,17 @@ pub fn main_setup(timer: &mut GlobalTimer, settings: &FrequencySetting) -> Resul
     Ok(())
 }
 
-pub fn helper_setup(timer: &mut GlobalTimer, settings: &FrequencySetting) -> Result<(), &'static str> {
+pub fn helper_setup(settings: &FrequencySetting) -> Result<(), &'static str> {
     unsafe {
         csr::wrpll::helper_reset_write(1);
         csr::wrpll::helper_dcxo_bitbang_enable_write(1);
         csr::wrpll::helper_dcxo_i2c_address_write(ADDRESS);
     }
 
-    setup(i2c::DCXO::Helper, &settings.helper, timer)?;
+    setup(i2c::DCXO::Helper, &settings.helper)?;
 
     // Si549 maximum settling time for large frequency change.
-    timer.delay_us(40_000);
+    timer::delay_us(40_000);
 
     unsafe {
         csr::wrpll::helper_reset_write(0);
@@ -498,7 +497,7 @@ pub mod wrpll {
         }
     }
 
-    fn reset_plls(timer: &mut GlobalTimer) -> Result<(), &'static str> {
+    fn reset_plls() -> Result<(), &'static str> {
         unsafe {
             H_ADPLL1 = 0;
             H_ADPLL2 = 0;
@@ -512,7 +511,7 @@ pub mod wrpll {
         set_adpll(i2c::DCXO::Main, 0)?;
         set_adpll(i2c::DCXO::Helper, 0)?;
         // wait for adpll to transfer and DCXO to settle
-        timer.delay_us(200);
+        timer::delay_us(200);
         Ok(())
     }
 
@@ -579,12 +578,12 @@ pub mod wrpll {
     }
 
     #[cfg(wrpll_ref_clk = "GT_CDR")]
-    fn test_skew(timer: &mut GlobalTimer) -> Result<(), &'static str> {
+    fn test_skew() -> Result<(), &'static str> {
         // wait for PLL to stabilize
-        timer.delay_us(20_000);
+        timer::delay_us(20_000);
 
         info!("testing the skew of SYS CLK...");
-        if has_timing_error(timer) {
+        if has_timing_error() {
             return Err("the skew cannot satisfy setup/hold time constraint of RX synchronizer");
         }
         info!("the skew of SYS CLK met the timing constraint");
@@ -592,16 +591,16 @@ pub mod wrpll {
     }
 
     #[cfg(wrpll_ref_clk = "GT_CDR")]
-    fn has_timing_error(timer: &mut GlobalTimer) -> bool {
+    fn has_timing_error() -> bool {
         unsafe {
             csr::wrpll_skewtester::error_write(1);
         }
-        timer.delay_us(5_000);
+        timer::delay_us(5_000);
         unsafe { csr::wrpll_skewtester::error_read() == 1 }
     }
 
     #[cfg(feature = "calibrate_wrpll_skew")]
-    fn find_edge(target: bool, timer: &mut GlobalTimer) -> Result<u32, &'static str> {
+    fn find_edge(target: bool) -> Result<u32, &'static str> {
         const STEP: u32 = 8;
         const STABLE_THRESHOLD: u32 = 10;
 
@@ -620,9 +619,9 @@ pub mod wrpll {
             tag_collector::set_tag_offset(offset);
             offset += STEP;
             // wait for PLL to stabilize
-            timer.delay_us(20_000);
+            timer::delay_us(20_000);
 
-            let error = has_timing_error(timer);
+            let error = has_timing_error();
             // A median edge deglitcher
             match state {
                 FSM::Init => {
@@ -661,13 +660,13 @@ pub mod wrpll {
     }
 
     #[cfg(feature = "calibrate_wrpll_skew")]
-    fn calibrate_skew(timer: &mut GlobalTimer) -> Result<(), &'static str> {
+    fn calibrate_skew() -> Result<(), &'static str> {
         info!("calibrating skew to meet timing constraint...");
 
         // clear calibrated value
         tag_collector::set_tag_offset(0);
-        let rising = find_edge(true, timer)? as i32;
-        let falling = find_edge(false, timer)? as i32;
+        let rising = find_edge(true)? as i32;
+        let falling = find_edge(false)? as i32;
 
         let width = BEATING_PERIOD - (falling - rising);
         let result = falling + width / 2;
@@ -685,12 +684,12 @@ pub mod wrpll {
         Ok(())
     }
 
-    pub fn select_recovered_clock(rc: bool, timer: &mut GlobalTimer) {
+    pub fn select_recovered_clock(rc: bool) {
         set_isr(false);
 
         if rc {
             tag_collector::reset();
-            reset_plls(timer).expect("failed to reset main and helper PLL");
+            reset_plls().expect("failed to reset main and helper PLL");
 
             // get within capture range
             set_base_adpll().expect("failed to set base adpll");
@@ -704,10 +703,10 @@ pub mod wrpll {
             info!("WRPLL interrupt enabled");
 
             #[cfg(feature = "calibrate_wrpll_skew")]
-            calibrate_skew(timer).expect("failed to set the correct skew");
+            calibrate_skew().expect("failed to set the correct skew");
 
             #[cfg(wrpll_ref_clk = "GT_CDR")]
-            test_skew(timer).expect("skew test failed");
+            test_skew().expect("skew test failed");
         }
     }
 }
@@ -809,7 +808,7 @@ pub mod wrpll_refclk {
         }
     }
 
-    pub fn setup(timer: &mut GlobalTimer, settings: MmcmSetting, mmcm_bypass: bool) -> Result<(), &'static str> {
+    pub fn setup(settings: MmcmSetting, mmcm_bypass: bool) -> Result<(), &'static str> {
         unsafe {
             csr::wrpll_refclk::refclk_reset_write(1);
         }
@@ -837,7 +836,7 @@ pub mod wrpll_refclk {
             reset(false);
 
             // wait for the mmcm to lock
-            timer.delay_us(100);
+            timer::delay_us(100);
 
             let locked = unsafe { csr::wrpll_refclk::mmcm_locked_read() == 1 };
             if !locked {

@@ -14,7 +14,7 @@ use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus},
                      pl::csr};
-use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::timer;
 use libcortex_a9::sync_channel::Receiver;
 use log::warn;
 
@@ -28,14 +28,14 @@ enum KernelState {
     Loaded,
     Running,
     MsgAwait {
-        max_time: Option<Milliseconds>,
+        max_time: Option<u64>,
         id: u32,
         tags: Vec<u8>,
     },
     MsgSending,
     SubkernelAwaitLoad,
     SubkernelAwaitFinish {
-        max_time: Option<Milliseconds>,
+        max_time: Option<u64>,
         id: u32,
     },
     DmaUploading,
@@ -46,10 +46,10 @@ enum KernelState {
     DmaPendingAwait {
         id: u32,
         timestamp: u64,
-        max_time: Milliseconds,
+        max_time: u64,
     },
     DmaAwait {
-        max_time: Milliseconds,
+        max_time: u64,
     },
     SubkernelRetrievingException {
         destination: u8,
@@ -541,7 +541,6 @@ impl<'a> Manager<'a> {
         rank: u8,
         destination: u8,
         dma_manager: &mut DmaManager,
-        timer: &GlobalTimer,
     ) {
         if let Some(subkernel_finished) = self.last_finished.take() {
             info!(
@@ -566,7 +565,7 @@ impl<'a> Manager<'a> {
         }
 
         match self
-            .process_external_messages(router, routing_table, rank, destination, timer)
+            .process_external_messages(router, routing_table, rank, destination)
             .await
         {
             Ok(()) => (),
@@ -593,7 +592,7 @@ impl<'a> Manager<'a> {
         }
 
         match self
-            .process_kern_message(router, routing_table, rank, destination, dma_manager, timer)
+            .process_kern_message(router, routing_table, rank, destination, dma_manager)
             .await
         {
             Ok(true) => {
@@ -730,7 +729,6 @@ impl<'a> Manager<'a> {
         rank: u8,
         self_destination: u8,
         dma_manager: &mut DmaManager,
-        timer: &GlobalTimer,
     ) -> Result<bool, Error> {
         let reply = self.control.borrow_mut().rx.try_recv()?;
         match reply {
@@ -806,7 +804,7 @@ impl<'a> Manager<'a> {
                 }
             }
             kernel::Message::DmaAwaitRemoteRequest(_id) => {
-                let max_time = timer.get_time() + Milliseconds(10000);
+                let max_time = timer::get_ms() + 10000;
                 self.session.kernel_state = match self.session.kernel_state {
                     // if we are still waiting for the traces to be uploaded, extend the state by timeout
                     KernelState::DmaPendingPlayback { id, timestamp } => KernelState::DmaPendingAwait {
@@ -838,7 +836,7 @@ impl<'a> Manager<'a> {
             kernel::Message::SubkernelMsgRecvRequest { id, timeout, tags } => {
                 let id = if id == -1 { self.session.id } else { id as u32 };
                 let max_time = if timeout > 0 {
-                    Some(timer.get_time() + Milliseconds(timeout as u64))
+                    Some(timer::get_ms() + timeout as u64)
                 } else {
                     None
                 };
@@ -871,7 +869,7 @@ impl<'a> Manager<'a> {
 
             kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
                 let max_time = if timeout > 0 {
-                    Some(timer.get_time() + Milliseconds(timeout as u64))
+                    Some(timer::get_ms() + timeout as u64)
                 } else {
                     None
                 };
@@ -904,12 +902,11 @@ impl<'a> Manager<'a> {
         routing_table: &RoutingTable,
         rank: u8,
         self_destination: u8,
-        timer: &GlobalTimer,
     ) -> Result<(), Error> {
         match &self.session.kernel_state {
             KernelState::MsgAwait { max_time, id, tags } => {
                 if let Some(max_time) = *max_time {
-                    if timer.get_time() > max_time {
+                    if timer::get_ms() > max_time {
                         self.control
                             .borrow_mut()
                             .tx
@@ -925,7 +922,7 @@ impl<'a> Manager<'a> {
                         .send(kernel::Message::SubkernelMsgRecvReply { count: message.count });
                     let tags = tags.clone();
                     self.session.kernel_state = KernelState::Running;
-                    self.pass_message_to_kernel(&message, tags, timer).await
+                    self.pass_message_to_kernel(&message, tags).await
                 } else {
                     let id = *id;
                     self.check_finished_kernels(id, router, routing_table, rank, self_destination)
@@ -948,7 +945,7 @@ impl<'a> Manager<'a> {
             }
             KernelState::SubkernelAwaitFinish { max_time, id } => {
                 if let Some(max_time) = *max_time {
-                    if timer.get_time() > max_time {
+                    if timer::get_ms() > max_time {
                         self.control
                             .borrow_mut()
                             .tx
@@ -964,7 +961,7 @@ impl<'a> Manager<'a> {
             }
             KernelState::SubkernelRetrievingException { .. } => Err(Error::AwaitingMessage),
             KernelState::DmaAwait { max_time } | KernelState::DmaPendingAwait { max_time, .. } => {
-                if timer.get_time() > *max_time {
+                if timer::get_ms() > *max_time {
                     self.control
                         .borrow_mut()
                         .tx
@@ -983,17 +980,12 @@ impl<'a> Manager<'a> {
         }
     }
 
-    async fn pass_message_to_kernel(
-        &mut self,
-        message: &Message,
-        tags: Vec<u8>,
-        timer: &GlobalTimer,
-    ) -> Result<(), Error> {
+    async fn pass_message_to_kernel(&mut self, message: &Message, tags: Vec<u8>) -> Result<(), Error> {
         let mut reader = Cursor::new(&message.data);
         let mut current_tags: &[u8] = &tags;
         let mut i = message.count;
         loop {
-            let slot = match recv_w_timeout(&mut self.control.borrow_mut().rx, timer, 100).await? {
+            let slot = match recv_w_timeout(&mut self.control.borrow_mut().rx, 100).await? {
                 kernel::Message::RpcRecvRequest(slot) => slot,
                 other => unexpected!("expected root value slot from core1, not {:?}", other),
             };
@@ -1008,7 +1000,7 @@ impl<'a> Manager<'a> {
                         .tx
                         .async_send(kernel::Message::RpcRecvReply(Ok(size)))
                         .await;
-                    match recv_w_timeout(&mut self.control.borrow_mut().rx, timer, 100).await {
+                    match recv_w_timeout(&mut self.control.borrow_mut().rx, 100).await {
                         Ok(kernel::Message::RpcRecvRequest(slot)) => slot,
                         Ok(kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors)) => {
                             let buf: Vec<u8> = Vec::new();
@@ -1109,13 +1101,9 @@ fn write_exception<W: ProtoWrite>(
     Ok(())
 }
 
-async fn recv_w_timeout(
-    rx: &mut Receiver<'_, kernel::Message>,
-    timer: &GlobalTimer,
-    timeout: u64,
-) -> Result<kernel::Message, Error> {
-    let max_time = timer.get_time() + Milliseconds(timeout);
-    while timer.get_time() < max_time {
+async fn recv_w_timeout(rx: &mut Receiver<'_, kernel::Message>, timeout: u64) -> Result<kernel::Message, Error> {
+    let max_time = timer::get_ms() + timeout;
+    while timer::get_ms() < max_time {
         match rx.try_recv() {
             Err(_) => (),
             Ok(message) => return Ok(message),

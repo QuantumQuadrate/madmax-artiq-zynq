@@ -2,7 +2,7 @@ use core::slice;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use io::Cursor;
-use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::timer;
 
 use crate::{cxp_ctrl::{CTRL_PACKET_MAXSIZE, DATA_MAXSIZE, Error, RXCTRLPacket, TXCTRLPacket},
             mem::mem,
@@ -51,9 +51,8 @@ fn receive_ctrl_packet() -> Result<Option<RXCTRLPacket>, Error> {
 
 fn receive_ctrl_packet_timeout(timeout_ms: u64) -> Result<RXCTRLPacket, Error> {
     // assume timer was initialized successfully
-    let timer = unsafe { GlobalTimer::get() };
-    let limit = timer.get_time() + Milliseconds(timeout_ms);
-    while timer.get_time() < limit {
+    let limit = timer::get_ms() + timeout_ms;
+    while timer::get_ms() < limit {
         match receive_ctrl_packet()? {
             None => (),
             Some(packet) => return Ok(packet),

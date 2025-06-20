@@ -1,11 +1,9 @@
-use embedded_hal::blocking::delay::DelayUs;
 use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
                      logger,
                      pl::csr};
 use libboard_zynq::{i2c::{Error as I2cError, I2c},
-                    slcr,
-                    timer::GlobalTimer};
+                    slcr, timer};
 
 use crate::{analyzer::Analyzer, dma::Manager as DmaManager, drtiosat_reset, mgmt, mgmt::Manager as CoreManager,
             repeater, routing::Router, subkernel::Manager as KernelManager};
@@ -20,7 +18,6 @@ macro_rules! forward {
         $self_destination:expr,
         $repeaters:expr,
         $packet:expr,
-        $timer:expr
     ) => {{
         let hop = $routing_table.0[$destination as usize][$rank as usize];
         if hop != 0 {
@@ -28,7 +25,7 @@ macro_rules! forward {
             if repno < $repeaters.len() {
                 if $packet.expects_response() {
                     return $repeaters[repno]
-                        .aux_forward($packet, $router, $routing_table, $rank, $self_destination, $timer)
+                        .aux_forward($packet, $router, $routing_table, $rank, $self_destination)
                         .await;
                 } else {
                     return $repeaters[repno].aux_send($packet).await;
@@ -50,7 +47,6 @@ macro_rules! forward {
         $self_destination:expr,
         $repeaters:expr,
         $packet:expr,
-        $timer:expr
     ) => {};
 }
 
@@ -60,7 +56,6 @@ async fn process_aux_packet<'a, 'b>(
     rank: &mut u8,
     self_destination: &mut u8,
     packet: drtioaux::Packet,
-    timer: &mut GlobalTimer,
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
@@ -75,10 +70,10 @@ async fn process_aux_packet<'a, 'b>(
         drtioaux::Packet::ResetRequest => {
             info!("resetting RTIO");
             drtiosat_reset(true);
-            timer.delay_us(100);
+            timer::delay_us(100);
             drtiosat_reset(false);
             for rep in _repeaters.iter() {
-                if let Err(e) = rep.rtio_reset(timer).await {
+                if let Err(e) = rep.rtio_reset().await {
                     error!("failed to issue RTIO reset ({:?})", e);
                 }
             }
@@ -138,7 +133,6 @@ async fn process_aux_packet<'a, 'b>(
                                 _routing_table,
                                 *rank,
                                 *self_destination,
-                                timer,
                             )
                             .await
                         {
@@ -164,7 +158,7 @@ async fn process_aux_packet<'a, 'b>(
         drtioaux::Packet::RoutingSetPath { destination, hops } => {
             _routing_table.0[destination as usize] = hops;
             for rep in _repeaters.iter() {
-                if let Err(e) = rep.set_path(destination, &hops, timer).await {
+                if let Err(e) = rep.set_path(destination, &hops).await {
                     error!("failed to set path ({:?})", e);
                 }
             }
@@ -177,7 +171,7 @@ async fn process_aux_packet<'a, 'b>(
 
             let rep_rank = new_rank + 1;
             for rep in _repeaters.iter() {
-                if let Err(e) = rep.set_rank(rep_rank, timer).await {
+                if let Err(e) = rep.set_rank(rep_rank).await {
                     error!("failed to set rank ({:?})", e);
                 }
             }
@@ -209,7 +203,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let value;
             #[cfg(has_rtio_moninj)]
@@ -240,7 +233,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             #[cfg(has_rtio_moninj)]
             unsafe {
@@ -263,7 +255,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let value;
             #[cfg(has_rtio_moninj)]
@@ -291,7 +282,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let succeeded = i2c.start().is_ok();
             drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
@@ -308,7 +298,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let succeeded = i2c.restart().is_ok();
             drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
@@ -325,7 +314,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let succeeded = i2c.stop().is_ok();
             drtioaux_async::send(0, &drtioaux::Packet::I2cBasicReply { succeeded: succeeded }).await
@@ -343,7 +331,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             match i2c.write(data) {
                 Ok(()) => {
@@ -391,7 +378,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             match i2c.read(ack) {
                 Ok(data) => {
@@ -430,7 +416,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let ch = match mask {
                 //decode from mainline, PCA9548-centric API
@@ -465,7 +450,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             // todo: reimplement when/if SPI is available
             //let succeeded = spi::set_config(busno, flags, length, div, cs).is_ok();
@@ -484,7 +468,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             // todo: reimplement when/if SPI is available
             //let succeeded = spi::write(busno, data).is_ok();
@@ -502,7 +485,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             // todo: reimplement when/if SPI is available
             // match spi::read(busno) {
@@ -532,7 +514,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let header = analyzer.get_header();
             drtioaux_async::send(
@@ -556,7 +537,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let mut data_slice: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
             let meta = analyzer.get_data(&mut data_slice);
@@ -587,7 +567,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             *self_destination = destination;
             let succeeded = dma_manager.add(source, id, status, &trace, length as usize).is_ok();
@@ -619,7 +598,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             dma_manager.ack_upload(
                 kernel_manager,
@@ -646,7 +624,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let succeeded = dma_manager.erase(source, id).is_ok();
             router
@@ -673,7 +650,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             Ok(())
         }
@@ -691,7 +667,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let succeeded = if !kernel_manager.running() {
                 dma_manager.playback(source, id, timestamp).is_ok()
@@ -722,7 +697,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             if !succeeded {
                 kernel_manager.ddma_nack().await;
@@ -745,7 +719,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             dma_manager
                 .remote_finished(kernel_manager, id, error, channel, timestamp)
@@ -768,7 +741,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             *self_destination = destination;
             let succeeded = kernel_manager.add(id, status, &data, length as usize).is_ok();
@@ -789,7 +761,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let mut succeeded = kernel_manager.load(id).await.is_ok();
             // allow preloading a kernel with delayed run
@@ -825,7 +796,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             // received if local subkernel started another, remote subkernel
             kernel_manager.subkernel_load_run_reply(succeeded);
@@ -845,7 +815,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             kernel_manager.remote_subkernel_finished(id, with_exception, exception_src);
             Ok(())
@@ -862,7 +831,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
             let meta = kernel_manager.exception_get_slice(&mut data_slice);
@@ -894,7 +862,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             kernel_manager.received_exception(
                 &data[..length as usize],
@@ -922,7 +889,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             kernel_manager.message_handle_incoming(status, id, length as usize, &data);
             router
@@ -945,7 +911,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             if kernel_manager.message_ack_slice() {
                 let mut data_slice: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
@@ -982,7 +947,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             let mut data_slice = [0; SAT_PAYLOAD_MAX_SIZE];
             let meta = core_manager.log_get_slice(&mut data_slice, clear);
@@ -1007,7 +971,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
             mgmt::clear_log();
             drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
@@ -1024,7 +987,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
@@ -1047,7 +1009,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
@@ -1071,7 +1032,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             let mut value_slice = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -1109,7 +1069,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             let mut value_slice = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -1138,7 +1097,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             core_manager.add_config_data(&data, length as usize);
@@ -1164,7 +1122,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             let key_slice = &key[..length as usize];
@@ -1188,7 +1145,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             error!("config erase not supported on zynq device");
@@ -1206,7 +1162,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await?;
@@ -1226,7 +1181,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             error!("debug allocator not supported on zynq device");
@@ -1244,7 +1198,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             core_manager.allocate_image_buffer(payload_length as usize);
@@ -1264,7 +1217,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             core_manager.add_image_data(&data, length as usize);
@@ -1286,7 +1238,6 @@ async fn process_aux_packet<'a, 'b>(
                 *self_destination,
                 _repeaters,
                 &packet,
-                timer
             );
 
             unsafe {
@@ -1316,7 +1267,6 @@ pub async fn process_aux_packets<'a, 'b>(
     routing_table: &mut drtio_routing::RoutingTable,
     rank: &mut u8,
     self_destination: &mut u8,
-    timer: &mut GlobalTimer,
     i2c: &mut I2c,
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
@@ -1333,7 +1283,6 @@ pub async fn process_aux_packets<'a, 'b>(
                     rank,
                     self_destination,
                     packet,
-                    timer,
                     i2c,
                     dma_manager,
                     analyzer,

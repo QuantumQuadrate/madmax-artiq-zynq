@@ -5,7 +5,7 @@ use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use io::{Cursor,
          proto::{ProtoRead, ProtoWrite}};
 use libasync::{block_async, task};
-use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::timer;
 use void::Void;
 
 pub use crate::drtioaux_proto::{MAX_PACKET, Packet};
@@ -75,11 +75,11 @@ pub async fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
     .await
 }
 
-pub async fn recv_timeout(linkno: u8, timeout_ms: Option<u64>, timer: GlobalTimer) -> Result<Packet, Error> {
-    let timeout_ms = Milliseconds(timeout_ms.unwrap_or(10));
-    let limit = timer.get_time() + timeout_ms;
+pub async fn recv_timeout(linkno: u8, timeout_ms: Option<u64>) -> Result<Packet, Error> {
+    let timeout_ms = timeout_ms.unwrap_or(10);
+    let limit = timer::get_ms() + timeout_ms;
     let mut would_block = false;
-    while timer.get_time() < limit {
+    while timer::get_ms() < limit {
         // to ensure one last time recv would run one last time
         // in case async would return after timeout
         if would_block {

@@ -7,7 +7,7 @@ use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::{drtio_routing::RoutingTable,
                      logger::{BufferLogger, LogBufferRef}};
-use libboard_zynq::{smoltcp, timer::GlobalTimer};
+use libboard_zynq::smoltcp;
 use libconfig::Config;
 use libcortex_a9::{mutex::Mutex, semaphore::Semaphore};
 use log::{self, debug, error, info, warn};
@@ -146,7 +146,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
@@ -160,7 +159,6 @@ mod remote_coremgmt {
                     destination,
                     clear: false,
                 },
-                timer,
             )
             .await;
 
@@ -191,7 +189,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
@@ -200,7 +197,6 @@ mod remote_coremgmt {
             linkno,
             routing_table,
             &Packet::CoreMgmtClearLogRequest { destination },
-            timer,
         )
         .await;
 
@@ -226,7 +222,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         pull_id: &Rc<RefCell<u32>>,
@@ -253,7 +248,6 @@ mod remote_coremgmt {
                     destination,
                     clear: true,
                 },
-                timer,
             )
             .await;
 
@@ -284,7 +278,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         level: log::LevelFilter,
@@ -297,7 +290,6 @@ mod remote_coremgmt {
                 destination,
                 log_level: level as u8,
             },
-            timer,
         )
         .await;
 
@@ -323,7 +315,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         level: log::LevelFilter,
@@ -336,7 +327,6 @@ mod remote_coremgmt {
                 destination,
                 log_level: level as u8,
             },
-            timer,
         )
         .await;
 
@@ -362,7 +352,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         _cfg: &Rc<Config>,
@@ -381,7 +370,6 @@ mod remote_coremgmt {
                 length: len as u16,
                 key: config_key,
             },
-            timer,
         )
         .await;
 
@@ -404,7 +392,6 @@ mod remote_coremgmt {
                         &Packet::CoreMgmtConfigReadContinue {
                             destination: destination,
                         },
-                        timer,
                     )
                     .await;
                 }
@@ -426,7 +413,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         _cfg: &Rc<Config>,
@@ -442,7 +428,6 @@ mod remote_coremgmt {
             linkno,
             aux_mutex,
             routing_table,
-            timer,
             &message,
             |slice, status, len: usize| Packet::CoreMgmtConfigWriteRequest {
                 destination: destination,
@@ -476,7 +461,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         _cfg: &Rc<Config>,
@@ -496,7 +480,6 @@ mod remote_coremgmt {
                 length: len as u16,
                 key: config_key,
             },
-            timer,
         )
         .await;
 
@@ -522,7 +505,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
@@ -533,7 +515,6 @@ mod remote_coremgmt {
             &Packet::CoreMgmtConfigEraseRequest {
                 destination: destination,
             },
-            timer,
         )
         .await;
 
@@ -559,7 +540,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
@@ -570,7 +550,6 @@ mod remote_coremgmt {
             &Packet::CoreMgmtRebootRequest {
                 destination: destination,
             },
-            timer,
         )
         .await;
 
@@ -596,7 +575,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
@@ -607,7 +585,6 @@ mod remote_coremgmt {
             &Packet::CoreMgmtAllocatorDebugRequest {
                 destination: destination,
             },
-            timer,
         )
         .await;
 
@@ -631,7 +608,6 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
-        timer: GlobalTimer,
         linkno: u8,
         destination: u8,
         _cfg: &Rc<Config>,
@@ -647,7 +623,6 @@ mod remote_coremgmt {
                 destination: destination,
                 payload_length: image.len() as u32,
             },
-            timer,
         )
         .await;
 
@@ -680,7 +655,6 @@ mod remote_coremgmt {
                     length: len as u16,
                     data: data,
                 },
-                timer,
             )
             .await;
 
@@ -882,10 +856,10 @@ macro_rules! process {
     ($stream: ident, $drtio_context:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
         if $destination == 0 {
             local_coremgmt::$func($stream, $($param, )*).await
-        } else if let Some(DrtioContext(ref aux_mutex, ref routing_table, timer)) = $drtio_context {
+        } else if let Some(DrtioContext(ref aux_mutex, ref routing_table)) = $drtio_context {
             let routing_table = routing_table.borrow();
             let linkno = routing_table.0[$destination as usize][0] - 1 as u8;
-            remote_coremgmt::$func($stream, &aux_mutex, &routing_table, timer, linkno, $destination, $($param, )*).await
+            remote_coremgmt::$func($stream, &aux_mutex, &routing_table, linkno, $destination, $($param, )*).await
         } else {
             error!("coremgmt-over-drtio not supported for panicked device, please reboot");
             write_i8($stream, Reply::Error as i8).await?;
@@ -903,7 +877,7 @@ macro_rules! process {
 
 #[allow(dead_code)]
 #[derive(Clone)]
-pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>, pub GlobalTimer);
+pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>);
 
 async fn handle_connection(
     stream: &mut TcpStream,

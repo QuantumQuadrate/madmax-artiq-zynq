@@ -5,7 +5,7 @@ use core::cell::RefCell;
 
 use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::drtio_routing;
-use libboard_zynq::{smoltcp::Error, timer::GlobalTimer};
+use libboard_zynq::smoltcp::Error;
 use libcortex_a9::{cache, mutex::Mutex};
 use log::{debug, info, warn};
 
@@ -59,7 +59,6 @@ pub mod remote_analyzer {
         aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &drtio_routing::RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-        timer: GlobalTimer,
     ) -> Result<RemoteBuffer, drtio::Error> {
         // gets data from satellites and returns consolidated data
         let mut remote_data: Vec<u8> = Vec::new();
@@ -67,7 +66,7 @@ pub mod remote_analyzer {
         let mut remote_sent_bytes = 0;
         let mut remote_total_bytes = 0;
 
-        let data_vec = match drtio::analyzer_query(aux_mutex, routing_table, up_destinations, timer).await {
+        let data_vec = match drtio::analyzer_query(aux_mutex, routing_table, up_destinations).await {
             Ok(data_vec) => data_vec,
             Err(e) => return Err(e),
         };
@@ -111,7 +110,6 @@ async fn handle_connection(
     _aux_mutex: &Rc<Mutex<bool>>,
     _routing_table: &drtio_routing::RoutingTable,
     _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-    _timer: GlobalTimer,
 ) -> Result<(), Error> {
     info!("received connection");
 
@@ -135,7 +133,7 @@ async fn handle_connection(
     }
 
     #[cfg(has_drtio)]
-    let remote = remote_analyzer::get_data(_aux_mutex, _routing_table, _up_destinations, _timer).await;
+    let remote = remote_analyzer::get_data(_aux_mutex, _routing_table, _up_destinations).await;
     #[cfg(has_drtio)]
     let (header, remote_data) = match remote {
         Ok(remote) => (
@@ -190,7 +188,6 @@ pub fn start(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-    timer: GlobalTimer,
 ) {
     let aux_mutex = aux_mutex.clone();
     let routing_table = routing_table.clone();
@@ -201,7 +198,7 @@ pub fn start(
             let mut stream = TcpStream::accept(1382, 2048, 2048).await.unwrap();
             disarm();
             let routing_table = routing_table.borrow();
-            let _ = handle_connection(&mut stream, &aux_mutex, &routing_table, &up_destinations, timer)
+            let _ = handle_connection(&mut stream, &aux_mutex, &routing_table, &up_destinations)
                 .await
                 .map_err(|e| warn!("connection terminated: {:?}", e));
             let _ = stream.flush().await;

@@ -3,7 +3,7 @@ use alloc::{collections::BTreeMap, rc::Rc, vec::Vec};
 use libasync::task;
 use libboard_artiq::{drtio_routing::RoutingTable,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus}};
-use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::timer;
 use libcortex_a9::mutex::Mutex;
 use log::{error, warn};
 
@@ -72,22 +72,9 @@ pub async fn add_subkernel(id: u32, destination: u8, kernel: Vec<u8>) {
         .insert(id, Subkernel::new(destination, kernel));
 }
 
-pub async fn upload(
-    aux_mutex: &Rc<Mutex<bool>>,
-    routing_table: &RoutingTable,
-    timer: GlobalTimer,
-    id: u32,
-) -> Result<(), Error> {
+pub async fn upload(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, id: u32) -> Result<(), Error> {
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
-        drtio::subkernel_upload(
-            aux_mutex,
-            routing_table,
-            timer,
-            id,
-            subkernel.destination,
-            &subkernel.data,
-        )
-        .await?;
+        drtio::subkernel_upload(aux_mutex, routing_table, id, subkernel.destination, &subkernel.data).await?;
         subkernel.state = SubkernelState::Uploaded;
         Ok(())
     } else {
@@ -98,7 +85,6 @@ pub async fn upload(
 pub async fn load(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &RoutingTable,
-    timer: GlobalTimer,
     id: u32,
     run: bool,
     timestamp: u64,
@@ -107,16 +93,7 @@ pub async fn load(
         if subkernel.state != SubkernelState::Uploaded {
             return Err(Error::IncorrectState);
         }
-        drtio::subkernel_load(
-            aux_mutex,
-            routing_table,
-            timer,
-            id,
-            subkernel.destination,
-            run,
-            timestamp,
-        )
-        .await?;
+        drtio::subkernel_load(aux_mutex, routing_table, id, subkernel.destination, run, timestamp).await?;
         if run {
             subkernel.state = SubkernelState::Running;
         }
@@ -147,19 +124,12 @@ pub async fn subkernel_finished(id: u32, with_exception: bool, exception_src: u8
     }
 }
 
-pub async fn destination_changed(
-    aux_mutex: &Rc<Mutex<bool>>,
-    routing_table: &RoutingTable,
-    timer: GlobalTimer,
-    destination: u8,
-    up: bool,
-) {
+pub async fn destination_changed(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable, destination: u8, up: bool) {
     let mut locked_subkernels = SUBKERNELS.async_lock().await;
     for (id, subkernel) in locked_subkernels.iter_mut() {
         if subkernel.destination == destination {
             if up {
-                match drtio::subkernel_upload(aux_mutex, routing_table, timer, *id, destination, &subkernel.data).await
-                {
+                match drtio::subkernel_upload(aux_mutex, routing_table, *id, destination, &subkernel.data).await {
                     Ok(_) => subkernel.state = SubkernelState::Uploaded,
                     Err(e) => error!("Error adding subkernel on destination {}: {}", destination, e),
                 }
@@ -178,7 +148,6 @@ pub async fn destination_changed(
 pub async fn await_finish(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &RoutingTable,
-    timer: GlobalTimer,
     id: u32,
     timeout: i64,
 ) -> Result<SubkernelFinished, Error> {
@@ -187,15 +156,15 @@ pub async fn await_finish(
         _ => return Err(Error::IncorrectState),
     }
     if timeout > 0 {
-        let max_time = timer.get_time() + Milliseconds(timeout as u64);
-        while timer.get_time() < max_time {
+        let max_time = timer::get_ms() + timeout as u64;
+        while timer::get_ms() < max_time {
             match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
                 SubkernelState::Finished { .. } => break,
                 _ => (),
             };
             task::r#yield().await;
         }
-        if timer.get_time() >= max_time {
+        if timer::get_ms() >= max_time {
             error!("Remote subkernel finish await timed out");
             return Err(Error::Timeout);
         }
@@ -217,7 +186,7 @@ pub async fn await_finish(
                     id: id,
                     status: status,
                     exception: if let FinishStatus::Exception(dest) = status {
-                        Some(drtio::subkernel_retrieve_exception(aux_mutex, routing_table, timer, dest).await?)
+                        Some(drtio::subkernel_retrieve_exception(aux_mutex, routing_table, dest).await?)
                     } else {
                         None
                     },
@@ -285,7 +254,7 @@ pub async fn message_handle_incoming(
     }
 }
 
-pub async fn message_await(id: u32, timeout: i64, timer: GlobalTimer) -> Result<Message, Error> {
+pub async fn message_await(id: u32, timeout: i64) -> Result<Message, Error> {
     let is_subkernel = SUBKERNELS.async_lock().await.get(&id).is_some();
     if is_subkernel {
         match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
@@ -296,8 +265,8 @@ pub async fn message_await(id: u32, timeout: i64, timer: GlobalTimer) -> Result<
             _ => return Err(Error::IncorrectState),
         }
     }
-    let max_time = timer.get_time() + Milliseconds(timeout as u64);
-    while timeout < 0 || (timeout > 0 && timer.get_time() < max_time) {
+    let max_time = timer::get_ms() + timeout as u64;
+    while timeout < 0 || (timeout > 0 && timer::get_ms() < max_time) {
         {
             let mut message_queue = MESSAGE_QUEUE.async_lock().await;
             for i in 0..message_queue.len() {
@@ -327,10 +296,9 @@ pub async fn message_await(id: u32, timeout: i64, timer: GlobalTimer) -> Result<
 pub async fn message_send<'a>(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &RoutingTable,
-    timer: GlobalTimer,
     id: u32,
     destination: u8,
     message: Vec<u8>,
 ) -> Result<(), Error> {
-    Ok(drtio::subkernel_send_message(aux_mutex, routing_table, timer, id, destination, &message).await?)
+    Ok(drtio::subkernel_send_message(aux_mutex, routing_table, id, destination, &message).await?)
 }

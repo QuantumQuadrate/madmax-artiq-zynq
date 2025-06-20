@@ -23,7 +23,7 @@ cslice = "0.3"
 embedded-hal = "0.2"
 async-recursion = "1.1"
 
-libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq", features = ["ipv6"]}
+libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq", features = ["ipv6", "async"]}
 libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core"] }
 libcortex_a9 = { path = "@@ZYNQ_RS@@/libcortex_a9" }
 libasync = { path = "@@ZYNQ_RS@@/libasync" }

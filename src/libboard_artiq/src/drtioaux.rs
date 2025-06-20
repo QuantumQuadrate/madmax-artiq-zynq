@@ -4,7 +4,7 @@ use byteorder::NativeEndian;
 use core_io::{Error as IoError, ErrorKind as IoErrorKind};
 use io::{Cursor,
          proto::{ProtoRead, ProtoWrite}};
-use libboard_zynq::{time::Milliseconds, timer::GlobalTimer};
+use libboard_zynq::timer;
 
 pub use crate::drtioaux_proto::{MAX_PACKET, Packet};
 use crate::{drtioaux_proto::Error as ProtocolError, mem::mem::DRTIOAUX_MEM, pl::csr::DRTIOAUX};
@@ -107,10 +107,10 @@ pub fn recv(linkno: u8) -> Result<Option<Packet>, Error> {
     })
 }
 
-pub fn recv_timeout(linkno: u8, timeout_ms: Option<u64>, timer: GlobalTimer) -> Result<Packet, Error> {
-    let timeout_ms = Milliseconds(timeout_ms.unwrap_or(10));
-    let limit = timer.get_time() + timeout_ms;
-    while timer.get_time() < limit {
+pub fn recv_timeout(linkno: u8, timeout_ms: Option<u64>) -> Result<Packet, Error> {
+    let timeout_ms = timeout_ms.unwrap_or(10);
+    let limit = timer::get_ms() + timeout_ms;
+    while timer::get_ms() < limit {
         match recv(linkno)? {
             None => (),
             Some(packet) => return Ok(packet),

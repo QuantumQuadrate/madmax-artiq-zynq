@@ -1,9 +1,7 @@
 use core::result;
 
-use embedded_hal::blocking::delay::DelayUs;
 use libboard_zynq::{i2c::{Error as I2cError, I2c},
-                    time::Milliseconds,
-                    timer::GlobalTimer};
+                    timer};
 use log::info;
 
 #[cfg(not(si5324_soft_reset))]
@@ -14,15 +12,15 @@ type Result<T> = result::Result<T, &'static str>;
 const ADDRESS: u8 = 0x68;
 
 #[cfg(not(si5324_soft_reset))]
-fn hard_reset(timer: &mut GlobalTimer) {
+fn hard_reset() {
     unsafe {
         csr::si5324_rst_n::out_write(0);
     }
-    timer.delay_us(1_000);
+    timer::delay_us(1_000);
     unsafe {
         csr::si5324_rst_n::out_write(1);
     }
-    timer.delay_us(10_000);
+    timer::delay_us(10_000);
 }
 
 // NOTE: the logical parameters DO NOT MAP to physical values written
@@ -166,10 +164,10 @@ fn ident(i2c: &mut I2c) -> Result<u16> {
 }
 
 #[cfg(si5324_soft_reset)]
-fn soft_reset(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
+fn soft_reset(i2c: &mut I2c) -> Result<()> {
     let val = read(i2c, 136)?;
     write_no_ack_value(i2c, 136, val | 0x80)?;
-    timer.delay_us(10_000);
+    timer::delay_us(10_000);
     Ok(())
 }
 
@@ -188,12 +186,12 @@ fn locked(i2c: &mut I2c) -> Result<bool> {
     Ok((read(i2c, 130)? & 0x01) == 0) // LOL_INT=0
 }
 
-fn monitor_lock(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
+fn monitor_lock(i2c: &mut I2c) -> Result<()> {
     info!("waiting for Si5324 lock...");
-    let timeout = timer.get_time() + Milliseconds(20_000);
+    let timeout = timer::get_ms() + 20_000;
     while !locked(i2c)? {
         // Yes, lock can be really slow.
-        if timer.get_time() > timeout {
+        if timer::get_ms() > timeout {
             return Err("Si5324 lock timeout");
         }
     }
@@ -201,9 +199,9 @@ fn monitor_lock(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
     Ok(())
 }
 
-fn init(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
+fn init(i2c: &mut I2c) -> Result<()> {
     #[cfg(not(si5324_soft_reset))]
-    hard_reset(timer);
+    hard_reset();
 
     #[cfg(feature = "target_kasli_soc")]
     {
@@ -220,16 +218,16 @@ fn init(i2c: &mut I2c, timer: &mut GlobalTimer) -> Result<()> {
     }
 
     #[cfg(si5324_soft_reset)]
-    soft_reset(i2c, timer)?;
+    soft_reset(i2c)?;
     Ok(())
 }
 
-pub fn bypass(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Result<()> {
+pub fn bypass(i2c: &mut I2c, input: Input) -> Result<()> {
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
     };
-    init(i2c, timer)?;
+    init(i2c)?;
     rmw(i2c, 21, |v| v & 0xfe)?; // CKSEL_PIN=0
     rmw(i2c, 3, |v| (v & 0x3f) | (cksel_reg << 6))?; // CKSEL_REG
     rmw(i2c, 4, |v| (v & 0x3f) | (0b00 << 6))?; // AUTOSEL_REG=b00
@@ -238,14 +236,14 @@ pub fn bypass(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Result<()
     Ok(())
 }
 
-pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input, timer: &mut GlobalTimer) -> Result<()> {
+pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input) -> Result<()> {
     let s = map_frequency_settings(settings)?;
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
     };
 
-    init(i2c, timer)?;
+    init(i2c)?;
     if settings.crystal_as_ckin2 {
         rmw(i2c, 0, |v| v | 0x40)?; // FREE_RUN=1
     }
@@ -280,11 +278,11 @@ pub fn setup(i2c: &mut I2c, settings: &FrequencySettings, input: Input, timer: &
         return Err("Si5324 misses clock input signal");
     }
 
-    monitor_lock(i2c, timer)?;
+    monitor_lock(i2c)?;
     Ok(())
 }
 
-pub fn select_input(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Result<()> {
+pub fn select_input(i2c: &mut I2c, input: Input) -> Result<()> {
     let cksel_reg = match input {
         Input::Ckin1 => 0b00,
         Input::Ckin2 => 0b01,
@@ -293,7 +291,7 @@ pub fn select_input(i2c: &mut I2c, input: Input, timer: &mut GlobalTimer) -> Res
     if !has_ckin(i2c, input)? {
         return Err("Si5324 misses clock input signal");
     }
-    monitor_lock(i2c, timer)?;
+    monitor_lock(i2c)?;
     Ok(())
 }
 
@@ -302,7 +300,7 @@ pub mod siphaser {
     use super::*;
     use crate::pl::csr;
 
-    pub fn select_recovered_clock(i2c: &mut I2c, rc: bool, timer: &mut GlobalTimer) -> Result<()> {
+    pub fn select_recovered_clock(i2c: &mut I2c, rc: bool) -> Result<()> {
         let val = read(i2c, 3)?;
         write(i2c, 3, (val & 0xdf) | (1 << 5))?; // DHOLD=1
         unsafe {
@@ -310,35 +308,35 @@ pub mod siphaser {
         }
         let val = read(i2c, 3)?;
         write(i2c, 3, (val & 0xdf) | (0 << 5))?; // DHOLD=0
-        monitor_lock(i2c, timer)?;
+        monitor_lock(i2c)?;
         Ok(())
     }
 
-    fn phase_shift(direction: u8, timer: &mut GlobalTimer) {
+    fn phase_shift(direction: u8) {
         unsafe {
             csr::siphaser::phase_shift_write(direction);
             while csr::siphaser::phase_shift_done_read() == 0 {}
         }
         // wait for the Si5324 loop to stabilize
-        timer.delay_us(500);
+        timer::delay_us(500);
     }
 
-    fn has_error(timer: &mut GlobalTimer) -> bool {
+    fn has_error() -> bool {
         unsafe {
             csr::siphaser::error_write(1);
         }
-        timer.delay_us(5_000);
+        timer::delay_us(5_000);
         unsafe { csr::siphaser::error_read() != 0 }
     }
 
-    fn find_edge(target: bool, timer: &mut GlobalTimer) -> Result<u32> {
+    fn find_edge(target: bool) -> Result<u32> {
         let mut nshifts = 0;
 
-        let mut previous = has_error(timer);
+        let mut previous = has_error();
         loop {
-            phase_shift(1, timer);
+            phase_shift(1);
             nshifts += 1;
-            let current = has_error(timer);
+            let current = has_error();
             if previous != target && current == target {
                 return Ok(nshifts);
             }
@@ -349,13 +347,13 @@ pub mod siphaser {
         }
     }
 
-    pub fn calibrate_skew(timer: &mut GlobalTimer) -> Result<()> {
+    pub fn calibrate_skew() -> Result<()> {
         let jitter_margin = 32;
-        let lead = find_edge(false, timer)?;
+        let lead = find_edge(false)?;
         for _ in 0..jitter_margin {
-            phase_shift(1, timer);
+            phase_shift(1);
         }
-        let width = find_edge(true, timer)? + jitter_margin;
+        let width = find_edge(true)? + jitter_margin;
         // width is 360 degrees (one full rotation of the phase between s/h limits) minus jitter
         info!(
             "calibration successful, lead: {}, width: {} ({}deg)",
@@ -367,7 +365,7 @@ pub mod siphaser {
         // Apply reverse phase shift for half the width to get into the
         // middle of the working region.
         for _ in 0..width / 2 {
-            phase_shift(0, timer);
+            phase_shift(0);
         }
 
         Ok(())

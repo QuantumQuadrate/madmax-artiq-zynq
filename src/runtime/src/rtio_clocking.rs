@@ -1,5 +1,3 @@
-#[cfg(not(feature = "target_ebaz4205"))]
-use embedded_hal::blocking::delay::DelayMs;
 #[cfg(has_si5324)]
 use ksupport::kernel::i2c;
 #[cfg(not(feature = "target_ebaz4205"))]
@@ -10,7 +8,7 @@ use libboard_artiq::si549;
 use libboard_artiq::si5324;
 #[cfg(has_si5324)]
 use libboard_zynq::i2c::I2c;
-use libboard_zynq::timer::GlobalTimer;
+use libboard_zynq::timer;
 use libconfig::Config;
 use log::{info, warn};
 #[cfg(feature = "target_ebaz4205")]
@@ -74,14 +72,14 @@ fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
 }
 
 #[cfg(not(any(has_drtio, feature = "target_ebaz4205")))]
-fn init_rtio(timer: &mut GlobalTimer) {
+fn init_rtio() {
     info!("Switching SYS clocks...");
     unsafe {
         pl::csr::sys_crg::clock_switch_write(1);
     }
     // if it's not locked, it will hang at the CSR.
 
-    timer.delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
+    timer::delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
     let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
     if clk == 1 {
         info!("SYS CLK switched successfully");
@@ -95,12 +93,12 @@ fn init_rtio(timer: &mut GlobalTimer) {
 }
 
 #[cfg(has_drtio)]
-fn init_drtio(timer: &mut GlobalTimer) {
+fn init_drtio() {
     unsafe {
         pl::csr::gt_drtio::stable_clkin_write(1);
     }
 
-    timer.delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
+    timer::delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
     let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
     if clk == 1 {
         info!("SYS CLK switched successfully");
@@ -121,7 +119,7 @@ fn init_drtio(timer: &mut GlobalTimer) {
 const SI5324_EXT_INPUT: si5324::Input = si5324::Input::Ckin1;
 
 #[cfg(has_si5324)]
-fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
+fn setup_si5324(i2c: &mut I2c, clk: RtioClock) {
     let (si5324_settings, si5324_ref_input) = match clk {
         RtioClock::Ext0_Synth0_10to125 => {
             // 125 MHz output from 10 MHz CLKINx reference, 504 Hz BW
@@ -263,11 +261,11 @@ fn setup_si5324(i2c: &mut I2c, timer: &mut GlobalTimer, clk: RtioClock) {
             )
         }
     };
-    si5324::setup(i2c, &si5324_settings, si5324_ref_input, timer).expect("cannot initialize Si5324");
+    si5324::setup(i2c, &si5324_settings, si5324_ref_input).expect("cannot initialize Si5324");
 }
 
 #[cfg(all(has_si549, has_wrpll))]
-fn wrpll_setup(timer: &mut GlobalTimer, clk: RtioClock, si549_settings: &si549::FrequencySetting) {
+fn wrpll_setup(clk: RtioClock, si549_settings: &si549::FrequencySetting) {
     // register values are directly copied from preconfigured mmcm
     let (mmcm_setting, mmcm_bypass) = match clk {
         RtioClock::Ext0_Synth0_10to125 => (
@@ -341,9 +339,9 @@ fn wrpll_setup(timer: &mut GlobalTimer, clk: RtioClock, si549_settings: &si549::
         _ => unreachable!(),
     };
 
-    si549::helper_setup(timer, &si549_settings).expect("cannot initialize helper Si549");
-    si549::wrpll_refclk::setup(timer, mmcm_setting, mmcm_bypass).expect("cannot initialize ref clk for wrpll");
-    si549::wrpll::select_recovered_clock(true, timer);
+    si549::helper_setup(&si549_settings).expect("cannot initialize helper Si549");
+    si549::wrpll_refclk::setup(mmcm_setting, mmcm_bypass).expect("cannot initialize ref clk for wrpll");
+    si549::wrpll::select_recovered_clock(true);
 }
 
 #[cfg(has_si549)]
@@ -442,7 +440,7 @@ fn set_fclk0_freq(clk: RtioClock, cfg: &Config) {
     );
 }
 
-pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
+pub fn init(cfg: &Config) {
     let clk = get_rtio_clock_cfg(cfg);
     #[cfg(has_si5324)]
     {
@@ -450,9 +448,9 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
         match clk {
             RtioClock::Ext0_Bypass => {
                 info!("bypassing the PLL for RTIO clock");
-                si5324::bypass(i2c, SI5324_EXT_INPUT, timer).expect("cannot bypass Si5324")
+                si5324::bypass(i2c, SI5324_EXT_INPUT).expect("cannot bypass Si5324")
             }
-            _ => setup_si5324(i2c, timer, clk),
+            _ => setup_si5324(i2c, clk),
         }
     }
 
@@ -460,13 +458,13 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
     let si549_settings = get_si549_setting(clk);
 
     #[cfg(has_si549)]
-    si549::main_setup(timer, &si549_settings).expect("cannot initialize main Si549");
+    si549::main_setup(&si549_settings).expect("cannot initialize main Si549");
 
     #[cfg(has_drtio)]
-    init_drtio(timer);
+    init_drtio();
 
     #[cfg(not(any(has_drtio, feature = "target_ebaz4205")))]
-    init_rtio(timer);
+    init_rtio();
 
     #[cfg(feature = "target_ebaz4205")]
     {
@@ -486,7 +484,7 @@ pub fn init(timer: &mut GlobalTimer, cfg: &Config) {
             | RtioClock::Ext0_Synth0_80to125
             | RtioClock::Ext0_Synth0_100to125
             | RtioClock::Ext0_Synth0_125to125 => {
-                wrpll_setup(timer, clk, &si549_settings);
+                wrpll_setup(clk, &si549_settings);
             }
             _ => {}
         }
