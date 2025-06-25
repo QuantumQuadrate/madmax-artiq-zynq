@@ -48,7 +48,7 @@
       };
 
       nativeBuildInputs = with pkgs.python3Packages; [ pbr ];
-      propagatedBuildInputs = with pkgs.python3Packages; [ future fastnumbers ];
+      propagatedBuildInputs = with pkgs.python3Packages; [ fastnumbers ];
 
       checkInputs = with pkgs.python3Packages; [ pytest ];
       checkPhase = "pytest";
