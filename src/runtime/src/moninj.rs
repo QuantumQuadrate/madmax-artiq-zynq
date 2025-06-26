@@ -1,9 +1,8 @@
 use alloc::{collections::BTreeMap, rc::Rc};
 use core::{cell::RefCell, fmt};
 
-use embedded_hal::timer::CountDown;
 use futures::{FutureExt, pin_mut, select_biased};
-use libasync::{block_async, smoltcp::TcpStream, task};
+use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::drtio_routing;
 use libboard_zynq::{smoltcp, timer};
 use libcortex_a9::mutex::Mutex;

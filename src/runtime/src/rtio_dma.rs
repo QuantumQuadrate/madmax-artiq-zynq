@@ -6,7 +6,6 @@ use ksupport::kernel::DmaRecorder;
 #[cfg(has_drtio)]
 use libasync::task;
 use libboard_artiq::drtio_routing::RoutingTable;
-use libboard_zynq::timer;
 use libcortex_a9::{cache::dcci_slice, mutex::Mutex};
 
 const ALIGNMENT: usize = 16 * 8;
@@ -16,6 +15,7 @@ static DMA_RECORD_STORE: Mutex<BTreeMap<String, (u32, Vec<u8>, i64)>> = Mutex::n
 #[allow(static_mut_refs)]
 #[cfg(has_drtio)]
 pub mod remote_dma {
+    use libboard_zynq::timer;
     use log::error;
 
     use super::*;
