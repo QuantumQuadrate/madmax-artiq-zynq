@@ -5,6 +5,11 @@ use io::proto::{ProtoRead, ProtoWrite};
 pub const MAX_PACKET: usize = 1024;
 
 // maximum size of arbitrary payloads
+// used by satellite -> master CoaXPress communication and errors
+pub const CXP_PAYLOAD_MAX_SIZE: usize = /*max size*/
+    MAX_PACKET - /*packet ID*/1 - /*length*/2 - /*CRC*/4 - /*padding to keep CXP register access 4 bytes align*/1;
+// used by satellite -> master CoaXPress roi viewer pixel data transfer
+pub const CXP_PAYLOAD_MAX_SIZE_U64: usize = CXP_PAYLOAD_MAX_SIZE / 8;
 // used by satellite -> master analyzer, subkernel exceptions
 pub const SAT_PAYLOAD_MAX_SIZE: usize = /*max size*/
     MAX_PACKET - /*CRC*/4 - /*packet ID*/1 - /*last*/1 - /*length*/2;
@@ -360,6 +365,46 @@ pub enum Packet {
     },
     CoreMgmtReply {
         succeeded: bool,
+    },
+    CXPError {
+        length: u16,
+        message: [u8; CXP_PAYLOAD_MAX_SIZE],
+    },
+    CXPWaitReply,
+    CXPReadRequest {
+        destination: u8,
+        address: u32,
+        length: u16,
+    },
+    CXPReadReply {
+        length: u16,
+        data: [u8; CXP_PAYLOAD_MAX_SIZE],
+    },
+    CXPWrite32Request {
+        destination: u8,
+        address: u32,
+        value: u32,
+    },
+    CXPWrite32Reply,
+    CXPROIViewerSetupRequest {
+        destination: u8,
+        x0: u16,
+        y0: u16,
+        x1: u16,
+        y1: u16,
+    },
+    CXPROIViewerSetupReply,
+    CXPROIViewerDataRequest {
+        destination: u8,
+    },
+    CXPROIViewerPixelDataReply {
+        length: u16,
+        data: [u64; CXP_PAYLOAD_MAX_SIZE_U64],
+    },
+    CXPROIViewerFrameDataReply {
+        width: u16,
+        height: u16,
+        pixel_code: u16,
     },
 }
 
@@ -745,7 +790,54 @@ impl Packet {
             0xe1 => Packet::CoreMgmtReply {
                 succeeded: reader.read_bool()?,
             },
-
+            0xe2 => {
+                let length = reader.read_u16::<NativeEndian>()?;
+                let mut message: [u8; CXP_PAYLOAD_MAX_SIZE] = [0; CXP_PAYLOAD_MAX_SIZE];
+                reader.read_exact(&mut message[0..length as usize])?;
+                Packet::CXPError { length, message }
+            }
+            0xe3 => Self::CXPWaitReply,
+            0xe4 => Packet::CXPReadRequest {
+                destination: reader.read_u8()?,
+                address: reader.read_u32::<NativeEndian>()?,
+                length: reader.read_u16::<NativeEndian>()?,
+            },
+            0xe5 => {
+                let length = reader.read_u16::<NativeEndian>()?;
+                let mut data: [u8; CXP_PAYLOAD_MAX_SIZE] = [0; CXP_PAYLOAD_MAX_SIZE];
+                reader.read_exact(&mut data[0..length as usize])?;
+                Packet::CXPReadReply { length, data }
+            }
+            0xe6 => Packet::CXPWrite32Request {
+                destination: reader.read_u8()?,
+                address: reader.read_u32::<NativeEndian>()?,
+                value: reader.read_u32::<NativeEndian>()?,
+            },
+            0xe7 => Packet::CXPWrite32Reply,
+            0xe8 => Packet::CXPROIViewerSetupRequest {
+                destination: reader.read_u8()?,
+                x0: reader.read_u16::<NativeEndian>()?,
+                y0: reader.read_u16::<NativeEndian>()?,
+                x1: reader.read_u16::<NativeEndian>()?,
+                y1: reader.read_u16::<NativeEndian>()?,
+            },
+            0xe9 => Packet::CXPROIViewerSetupReply,
+            0xea => Packet::CXPROIViewerDataRequest {
+                destination: reader.read_u8()?,
+            },
+            0xeb => {
+                let length = reader.read_u16::<NativeEndian>()?;
+                let mut data: [u64; CXP_PAYLOAD_MAX_SIZE / 8] = [0; CXP_PAYLOAD_MAX_SIZE / 8];
+                for i in 0..length as usize {
+                    data[i] = reader.read_u64::<NativeEndian>()?;
+                }
+                Packet::CXPROIViewerPixelDataReply { length, data }
+            }
+            0xec => Packet::CXPROIViewerFrameDataReply {
+                width: reader.read_u16::<NativeEndian>()?,
+                height: reader.read_u16::<NativeEndian>()?,
+                pixel_code: reader.read_u16::<NativeEndian>()?,
+            },
             ty => return Err(Error::UnknownPacket(ty)),
         })
     }
@@ -1230,6 +1322,80 @@ impl Packet {
             Packet::CoreMgmtReply { succeeded } => {
                 writer.write_u8(0xe1)?;
                 writer.write_bool(succeeded)?;
+            }
+            Packet::CXPError { length, message } => {
+                writer.write_u8(0xe2)?;
+                writer.write_u16::<NativeEndian>(length)?;
+                writer.write_all(&message[0..length as usize])?;
+            }
+            Packet::CXPWaitReply => {
+                writer.write_u8(0xe3)?;
+            }
+            Packet::CXPReadRequest {
+                destination,
+                address,
+                length,
+            } => {
+                writer.write_u8(0xe4)?;
+                writer.write_u8(destination)?;
+                writer.write_u32::<NativeEndian>(address)?;
+                writer.write_u16::<NativeEndian>(length)?;
+            }
+            Packet::CXPReadReply { length, data } => {
+                writer.write_u8(0xe5)?;
+                writer.write_u16::<NativeEndian>(length)?;
+                writer.write_all(&data[0..length as usize])?;
+            }
+            Packet::CXPWrite32Request {
+                destination,
+                address,
+                value,
+            } => {
+                writer.write_u8(0xe6)?;
+                writer.write_u8(destination)?;
+                writer.write_u32::<NativeEndian>(address)?;
+                writer.write_u32::<NativeEndian>(value)?;
+            }
+            Packet::CXPWrite32Reply => {
+                writer.write_u8(0xe7)?;
+            }
+            Packet::CXPROIViewerSetupRequest {
+                destination,
+                x0,
+                y0,
+                x1,
+                y1,
+            } => {
+                writer.write_u8(0xe8)?;
+                writer.write_u8(destination)?;
+                writer.write_u16::<NativeEndian>(x0)?;
+                writer.write_u16::<NativeEndian>(y0)?;
+                writer.write_u16::<NativeEndian>(x1)?;
+                writer.write_u16::<NativeEndian>(y1)?;
+            }
+            Packet::CXPROIViewerSetupReply => {
+                writer.write_u8(0xe9)?;
+            }
+            Packet::CXPROIViewerDataRequest { destination } => {
+                writer.write_u8(0xea)?;
+                writer.write_u8(destination)?;
+            }
+            Packet::CXPROIViewerPixelDataReply { length, data } => {
+                writer.write_u8(0xeb)?;
+                writer.write_u16::<NativeEndian>(length)?;
+                for i in 0..length as usize {
+                    writer.write_u64::<NativeEndian>(data[i])?;
+                }
+            }
+            Packet::CXPROIViewerFrameDataReply {
+                width,
+                height,
+                pixel_code,
+            } => {
+                writer.write_u8(0xec)?;
+                writer.write_u16::<NativeEndian>(width)?;
+                writer.write_u16::<NativeEndian>(height)?;
+                writer.write_u16::<NativeEndian>(pixel_code)?;
             }
         }
         Ok(())
