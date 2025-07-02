@@ -359,12 +359,7 @@ pub mod drtio {
             let hop = routing_table.0[destination][0];
             let destination = destination as u8;
 
-            if hop == 0 {
-                /* local RTIO */
-                if !destination_up(up_destinations, destination).await {
-                    destination_set_up(routing_table, up_destinations, destination, true).await;
-                }
-            } else if hop as usize <= csr::DRTIO.len() {
+            if hop > 0 && hop as usize <= csr::DRTIO.len() {
                 let linkno = hop - 1;
                 if destination_up(up_destinations, destination).await {
                     if up_links[linkno as usize] {
@@ -456,6 +451,8 @@ pub mod drtio {
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     ) {
         let mut up_links = [false; csr::DRTIO.len()];
+        // set up local RTIO
+        destination_set_up(routing_table, up_destinations, 0, true).await;
         loop {
             for linkno in 0..csr::DRTIO.len() {
                 let linkno = linkno as u8;
