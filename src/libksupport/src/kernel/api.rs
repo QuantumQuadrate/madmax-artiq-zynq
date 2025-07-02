@@ -4,6 +4,8 @@ use core::{ffi::VaList, ptr, str};
 use libc::{c_char, c_int, size_t};
 use log::{info, warn};
 
+#[cfg(has_cxp_grabber)]
+use super::cxp;
 #[cfg(has_drtio)]
 use super::subkernel;
 use super::{cache,
@@ -11,8 +13,6 @@ use super::{cache,
             dma, i2c, linalg,
             rpc::{rpc_recv, rpc_send, rpc_send_async},
             rtio};
-#[cfg(has_cxp_grabber)]
-use super::cxp;
 use crate::eh_artiq;
 
 extern "C" {

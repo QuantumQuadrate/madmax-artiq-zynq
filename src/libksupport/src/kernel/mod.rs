@@ -20,11 +20,11 @@ pub mod rtio;
 pub mod rtio;
 pub use dma::DmaRecorder;
 mod cache;
+#[cfg(has_cxp_grabber)]
+mod cxp;
 mod linalg;
 #[cfg(has_drtio)]
 mod subkernel;
-#[cfg(has_cxp_grabber)]
-mod cxp;
 
 #[cfg(has_drtio)]
 #[derive(Debug, Clone)]
