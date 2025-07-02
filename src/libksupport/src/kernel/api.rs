@@ -4,7 +4,7 @@ use core::{ffi::VaList, ptr, str};
 use libc::{c_char, c_int, size_t};
 use log::{info, warn};
 
-#[cfg(has_cxp_grabber)]
+#[cfg(any(has_drtio, has_cxp_grabber))]
 use super::cxp;
 #[cfg(has_drtio)]
 use super::subkernel;
@@ -129,15 +129,15 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(subkernel_await_message = subkernel::await_message),
 
         // cxp grabber
-        #[cfg(has_cxp_grabber)]
+        #[cfg(any(has_drtio, has_cxp_grabber))]
         api!(cxp_download_xml_file = cxp::download_xml_file),
-        #[cfg(has_cxp_grabber)]
+        #[cfg(any(has_drtio, has_cxp_grabber))]
         api!(cxp_read32 = cxp::read32),
-        #[cfg(has_cxp_grabber)]
+        #[cfg(any(has_drtio, has_cxp_grabber))]
         api!(cxp_write32 = cxp::write32),
-        #[cfg(has_cxp_grabber)]
+        #[cfg(any(has_drtio, has_cxp_grabber))]
         api!(cxp_start_roi_viewer = cxp::start_roi_viewer),
-        #[cfg(has_cxp_grabber)]
+        #[cfg(any(has_drtio, has_cxp_grabber))]
         api!(cxp_download_roi_viewer_frame = cxp::download_roi_viewer_frame),
 
         // Double-precision floating-point arithmetic helper functions
