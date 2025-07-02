@@ -100,7 +100,8 @@ pub mod drtio {
                 return i as u8;
             }
         }
-        unreachable!();
+        error!("Master is not defined in the routing table");
+        0
     }
 
     async fn route_packet(linkno: u8, routing_table: &RoutingTable, packet: Packet, destination: u8) {
