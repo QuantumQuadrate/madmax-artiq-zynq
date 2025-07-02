@@ -1,4 +1,6 @@
-use alloc::{collections::BTreeMap, rc::Rc, string::String, vec, vec::Vec};
+#[cfg(has_drtio)]
+use alloc::string::ToString;
+use alloc::{collections::BTreeMap, rc::Rc, string::String, vec::Vec};
 use core::{cell::RefCell, fmt, slice, str};
 
 use core_io::Error as IoError;
@@ -13,6 +15,8 @@ use ksupport::{kernel, resolve_channel_name};
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
 use libboard_artiq::drtio_routing;
+#[cfg(has_drtio)]
+use libboard_artiq::drtioaux::Packet;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{self as zynq,
@@ -558,6 +562,164 @@ async fn handle_run_kernel(
             #[cfg(has_drtio)]
             kernel::Message::RtioInitRequest => {
                 rtio_mgt::drtio::reset(aux_mutex, routing_table).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::CXPReadRequest {
+                destination,
+                address,
+                length,
+            } => {
+                let linkno = routing_table.0[destination as usize][0] - 1;
+                let reply = loop {
+                    let result = rtio_mgt::drtio::aux_transact(
+                        aux_mutex,
+                        linkno,
+                        routing_table,
+                        &Packet::CXPReadRequest {
+                            destination,
+                            address,
+                            length,
+                        },
+                    )
+                    .await;
+
+                    match result {
+                        Ok(Packet::CXPWaitReply) => {}
+                        Ok(Packet::CXPReadReply { length, data }) => {
+                            break kernel::Message::CXPReadReply { length, data };
+                        }
+                        Ok(Packet::CXPError { length, message }) => {
+                            break kernel::Message::CXPError(
+                                String::from_utf8_lossy(&message[..length as usize]).to_string(),
+                            );
+                        }
+                        Ok(packet) => {
+                            error!("received unexpected aux packet {:?}", packet);
+                            break kernel::Message::CXPError("recevied unexpected drtio aux reply".to_string());
+                        }
+                        Err(e) => {
+                            error!("aux packet error ({})", e);
+                            break kernel::Message::CXPError("drtio aux error".to_string());
+                        }
+                    };
+                };
+                control.borrow_mut().tx.async_send(reply).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::CXPWrite32Request {
+                destination,
+                address,
+                value,
+            } => {
+                let linkno = routing_table.0[destination as usize][0] - 1;
+                let reply = loop {
+                    let drtioaux_packet = rtio_mgt::drtio::aux_transact(
+                        aux_mutex,
+                        linkno,
+                        routing_table,
+                        &Packet::CXPWrite32Request {
+                            destination,
+                            address,
+                            value,
+                        },
+                    )
+                    .await;
+
+                    match drtioaux_packet {
+                        Ok(Packet::CXPWaitReply) => {}
+                        Ok(Packet::CXPWrite32Reply) => break kernel::Message::CXPWrite32Reply,
+                        Ok(Packet::CXPError { length, message }) => {
+                            break kernel::Message::CXPError(
+                                String::from_utf8_lossy(&message[..length as usize]).to_string(),
+                            );
+                        }
+                        Ok(packet) => {
+                            error!("received unexpected aux packet {:?}", packet);
+                            break kernel::Message::CXPError("recevied unexpected drtio aux reply".to_string());
+                        }
+                        Err(e) => {
+                            error!("aux packet error ({})", e);
+                            break kernel::Message::CXPError("drtio aux error".to_string());
+                        }
+                    };
+                };
+                control.borrow_mut().tx.async_send(reply).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::CXPROIViewerSetupRequest {
+                destination,
+                x0,
+                y0,
+                x1,
+                y1,
+            } => {
+                let linkno = routing_table.0[destination as usize][0] - 1;
+                let drtioaux_packet = rtio_mgt::drtio::aux_transact(
+                    aux_mutex,
+                    linkno,
+                    routing_table,
+                    &Packet::CXPROIViewerSetupRequest {
+                        destination,
+                        x0,
+                        y0,
+                        x1,
+                        y1,
+                    },
+                )
+                .await;
+
+                let reply = match drtioaux_packet {
+                    Ok(Packet::CXPROIViewerSetupReply) => kernel::Message::CXPROIViewerSetupReply,
+                    Ok(packet) => {
+                        error!("received unexpected aux packet {:?}", packet);
+                        kernel::Message::CXPError("recevied unexpected drtio aux reply".to_string())
+                    }
+                    Err(e) => {
+                        error!("aux packet error ({})", e);
+                        kernel::Message::CXPError("drtio aux error".to_string())
+                    }
+                };
+                control.borrow_mut().tx.async_send(reply).await;
+            }
+            #[cfg(has_drtio)]
+            kernel::Message::CXPROIViewerDataRequest { destination } => {
+                let linkno = routing_table.0[destination as usize][0] - 1;
+                let reply = loop {
+                    let drtioaux_packet = rtio_mgt::drtio::aux_transact(
+                        aux_mutex,
+                        linkno,
+                        routing_table,
+                        &Packet::CXPROIViewerDataRequest { destination },
+                    )
+                    .await;
+
+                    let reply = match drtioaux_packet {
+                        Ok(Packet::CXPWaitReply) => {}
+                        Ok(Packet::CXPROIViewerPixelDataReply { length, data }) => {
+                            break kernel::Message::CXPROIVIewerPixelDataReply { length, data };
+                        }
+                        Ok(Packet::CXPROIViewerFrameDataReply {
+                            width,
+                            height,
+                            pixel_code,
+                        }) => {
+                            break kernel::Message::CXPROIVIewerFrameDataReply {
+                                width,
+                                height,
+                                pixel_code,
+                            };
+                        }
+                        Ok(packet) => {
+                            error!("received unexpected aux packet {:?}", packet);
+                            break kernel::Message::CXPError("recevied unexpected drtio aux reply".to_string());
+                        }
+                        Err(e) => {
+                            error!("aux packet error ({})", e);
+                            break kernel::Message::CXPError("drtio aux error".to_string());
+                        }
+                    };
+                };
+                control.borrow_mut().tx.async_send(reply).await;
             }
             _ => {
                 panic!("unexpected message from core1 while kernel was running: {:?}", reply);

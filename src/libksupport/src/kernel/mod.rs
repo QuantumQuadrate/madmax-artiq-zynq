@@ -1,6 +1,8 @@
 use alloc::{string::String, vec::Vec};
 use core::ptr;
 
+#[cfg(has_drtio)]
+use libboard_artiq::drtioaux_proto::{CXP_PAYLOAD_MAX_SIZE, CXP_PAYLOAD_MAX_SIZE_U64};
 use libcortex_a9::{mutex::Mutex, semaphore::Semaphore, sync_channel};
 
 use crate::{RPCException, eh_artiq};
@@ -20,7 +22,7 @@ pub mod rtio;
 pub mod rtio;
 pub use dma::DmaRecorder;
 mod cache;
-#[cfg(has_cxp_grabber)]
+#[cfg(any(has_drtio, has_cxp_grabber))]
 mod cxp;
 mod linalg;
 #[cfg(has_drtio)]
@@ -162,6 +164,52 @@ pub enum Message {
     },
     #[cfg(has_drtio)]
     SubkernelError(SubkernelStatus),
+    #[cfg(has_drtio)]
+    CXPError(String),
+    #[cfg(has_drtio)]
+    CXPReadRequest {
+        destination: u8,
+        address: u32,
+        length: u16,
+    },
+    #[cfg(has_drtio)]
+    CXPReadReply {
+        length: u16,
+        data: [u8; CXP_PAYLOAD_MAX_SIZE],
+    },
+    #[cfg(has_drtio)]
+    CXPWrite32Request {
+        destination: u8,
+        address: u32,
+        value: u32,
+    },
+    #[cfg(has_drtio)]
+    CXPWrite32Reply,
+    #[cfg(has_drtio)]
+    CXPROIViewerSetupRequest {
+        destination: u8,
+        x0: u16,
+        y0: u16,
+        x1: u16,
+        y1: u16,
+    },
+    #[cfg(has_drtio)]
+    CXPROIViewerSetupReply,
+    #[cfg(has_drtio)]
+    CXPROIViewerDataRequest {
+        destination: u8,
+    },
+    #[cfg(has_drtio)]
+    CXPROIVIewerPixelDataReply {
+        length: u16,
+        data: [u64; CXP_PAYLOAD_MAX_SIZE_U64],
+    },
+    #[cfg(has_drtio)]
+    CXPROIVIewerFrameDataReply {
+        width: u16,
+        height: u16,
+        pixel_code: u16,
+    },
 }
 
 static CHANNEL_0TO1: Mutex<Option<sync_channel::Sender<'static, Message>>> = Mutex::new(None);
