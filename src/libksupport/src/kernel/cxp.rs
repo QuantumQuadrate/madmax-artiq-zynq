@@ -5,7 +5,7 @@ use core::fmt;
 use byteorder::{ByteOrder, NetworkEndian};
 use cslice::CMutSlice;
 use libboard_artiq::{cxp_ctrl::{DATA_MAXSIZE, Error as CtrlErr},
-                     cxp_grabber::{camera_connected, with_tag},
+                     cxp_grabber::{camera_connected, roi_viewer_setup, with_tag},
                      cxp_packet::{read_bytes, read_u32, write_u32}};
 use log::info;
 
@@ -177,17 +177,7 @@ pub extern "C" fn start_roi_viewer(x0: i32, y0: i32, x1: i32, y1: i32) {
     if width * height > ROI_MAX_SIZE || height > ROI_MAX_SIZE / 4 {
         artiq_raise!("CXPError", format!("{}", Error::ROISizeTooBig(width, height)));
     } else {
-        unsafe {
-            // flush the fifo before arming
-            while cxp_grabber::roi_viewer_fifo_stb_read() == 1 {
-                cxp_grabber::roi_viewer_fifo_ack_write(1);
-            }
-            cxp_grabber::roi_viewer_x0_write(x0 as u16);
-            cxp_grabber::roi_viewer_x1_write(x1 as u16);
-            cxp_grabber::roi_viewer_y0_write(y0 as u16);
-            cxp_grabber::roi_viewer_y1_write(y1 as u16);
-            cxp_grabber::roi_viewer_arm_write(1);
-        }
+        roi_viewer_setup(x0 as u16, y0 as u16, x1 as u16, y1 as u16);
     }
 }
 

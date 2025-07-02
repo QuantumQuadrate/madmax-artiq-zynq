@@ -107,3 +107,17 @@ async fn tick(_i2c: &mut i2c::I2c) {
         }
     };
 }
+
+pub fn roi_viewer_setup(x0: u16, y0: u16, x1: u16, y1: u16) {
+    unsafe {
+        // flush the fifo before arming
+        while csr::cxp_grabber::roi_viewer_fifo_stb_read() == 1 {
+            csr::cxp_grabber::roi_viewer_fifo_ack_write(1);
+        }
+        csr::cxp_grabber::roi_viewer_x0_write(x0);
+        csr::cxp_grabber::roi_viewer_x1_write(x1);
+        csr::cxp_grabber::roi_viewer_y0_write(y0);
+        csr::cxp_grabber::roi_viewer_y1_write(y1);
+        csr::cxp_grabber::roi_viewer_arm_write(1);
+    }
+}
