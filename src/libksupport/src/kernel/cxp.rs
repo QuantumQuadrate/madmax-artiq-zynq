@@ -203,6 +203,8 @@ pub extern "C" fn download_roi_viewer_frame(buffer: &mut CMutSlice<i64>) -> ROIV
     let buf = buffer.as_mut_slice();
     unsafe {
         while cxp_grabber::roi_viewer_ready_read() == 0 {}
+        cxp_grabber::roi_viewer_ready_write(1);
+
         let mut i = 0;
         while cxp_grabber::roi_viewer_fifo_stb_read() == 1 {
             buf[i] = cxp_grabber::roi_viewer_fifo_data_read() as i64;
