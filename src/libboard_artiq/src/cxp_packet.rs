@@ -2,6 +2,8 @@ use core::slice;
 
 use byteorder::{ByteOrder, NetworkEndian};
 use io::Cursor;
+#[cfg(has_drtio)]
+use libasync::task;
 use libboard_zynq::timer;
 
 use crate::{cxp_ctrl::{CTRL_PACKET_MAXSIZE, DATA_MAXSIZE, Error, RXCTRLPacket, TXCTRLPacket},
@@ -188,4 +190,76 @@ pub fn read_u64(addr: u32, with_tag: bool) -> Result<u64, Error> {
     let val = NetworkEndian::read_u64(&bytes);
 
     Ok(val)
+}
+
+#[cfg(has_drtio)]
+async fn async_receive_ctrl_packet_timeout(timeout_ms: u64) -> Result<RXCTRLPacket, Error> {
+    // assume timer was initialized successfully
+    let limit = timer::get_ms() + timeout_ms;
+    while timer::get_ms() < limit {
+        match receive_ctrl_packet()? {
+            None => (),
+            Some(packet) => return Ok(packet),
+        }
+        task::r#yield().await;
+    }
+    Err(Error::TimedOut)
+}
+
+#[cfg(has_drtio)]
+pub async fn async_read_bytes(addr: u32, bytes: &mut [u8], with_tag: bool) -> Result<(), Error> {
+    let length = bytes.len() as u32;
+    check_length(length)?;
+    let tag: Option<u8> = if with_tag { Some(unsafe { TAG }) } else { None };
+    send_ctrl_packet(&TXCTRLPacket::CtrlRead { tag, addr, length })?;
+
+    let mut timeout_ms = TRANSMISSION_TIMEOUT;
+    loop {
+        match async_receive_ctrl_packet_timeout(timeout_ms).await? {
+            RXCTRLPacket::CtrlDelay { tag, time } => {
+                check_tag(tag)?;
+                timeout_ms = time.into();
+            }
+            RXCTRLPacket::CtrlReply {
+                tag,
+                length: replied_length,
+                data,
+            } => {
+                check_tag(tag)?;
+                if replied_length != length {
+                    return Err(Error::UnexpectedReply);
+                };
+                if with_tag {
+                    increment_tag();
+                };
+
+                bytes.copy_from_slice(&data[..length as usize]);
+                return Ok(());
+            }
+            _ => return Err(Error::UnexpectedReply),
+        }
+    }
+}
+
+#[cfg(has_drtio)]
+pub async fn async_write_u32(addr: u32, val: u32, with_tag: bool) -> Result<(), Error> {
+    write_bytes_no_ack(addr, &val.to_be_bytes(), with_tag)?;
+
+    let mut timeout_ms = TRANSMISSION_TIMEOUT;
+    loop {
+        match async_receive_ctrl_packet_timeout(timeout_ms).await? {
+            RXCTRLPacket::CtrlDelay { tag, time } => {
+                check_tag(tag)?;
+                timeout_ms = time as u64;
+            }
+            RXCTRLPacket::CtrlAck { tag } => {
+                check_tag(tag)?;
+                if with_tag {
+                    increment_tag();
+                };
+                return Ok(());
+            }
+            _ => return Err(Error::UnexpectedReply),
+        }
+    }
 }
