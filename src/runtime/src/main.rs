@@ -14,12 +14,12 @@ extern crate alloc;
 use core::cell::RefCell;
 
 use libasync::task;
-#[cfg(has_cxp_grabber)]
-use libboard_artiq::cxp_phys;
 #[cfg(has_drtio_eem)]
 use libboard_artiq::drtio_eem;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_artiq::io_expander;
+#[cfg(has_cxp_grabber)]
+use libboard_artiq::{cxp_grabber, cxp_phys};
 use libboard_artiq::{identifier_read, logger, pl};
 use libboard_zynq::{gic, mpcore, timer};
 use libconfig::Config;
@@ -73,19 +73,6 @@ mod grabber {
     pub async fn grabber_thread() {
         loop {
             grabber::tick();
-            timer::async_delay_ms(200).await;
-        }
-    }
-}
-
-#[cfg(has_cxp_grabber)]
-mod cxp {
-    use libboard_artiq::cxp_grabber;
-    use libboard_zynq::timer;
-
-    pub async fn grabber_thread(i2c: &mut libboard_zynq::i2c::I2c) {
-        loop {
-            cxp_grabber::tick(i2c).await;
             timer::async_delay_ms(200).await;
         }
     }
@@ -166,7 +153,7 @@ pub fn main_core0() {
     #[cfg(has_cxp_grabber)]
     {
         cxp_phys::setup();
-        task::spawn(cxp::grabber_thread(ksupport::kernel::i2c::get_bus()));
+        task::spawn(cxp_grabber::thread(ksupport::kernel::i2c::get_bus()));
     }
 
     comms::main(cfg);

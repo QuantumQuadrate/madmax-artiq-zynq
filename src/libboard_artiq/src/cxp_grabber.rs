@@ -1,4 +1,4 @@
-use libboard_zynq::i2c;
+use libboard_zynq::{i2c, timer};
 use libcortex_a9::mutex::Mutex;
 use log::{error, info};
 
@@ -26,9 +26,16 @@ pub fn with_tag() -> bool {
     *WITH_TAG.lock()
 }
 
-pub async fn tick(_i2c: &mut i2c::I2c) {
-    let mut state_guard = STATE.lock();
-    let mut with_tag_guard = WITH_TAG.lock();
+pub async fn thread(i2c: &mut i2c::I2c) {
+    loop {
+        tick(i2c).await;
+        timer::async_delay_ms(200).await;
+    }
+}
+
+async fn tick(_i2c: &mut i2c::I2c) {
+    let mut state_guard = STATE.async_lock().await;
+    let mut with_tag_guard = WITH_TAG.async_lock().await;
     *state_guard = match *state_guard {
         State::Disconnected => {
             #[cfg(has_cxp_led)]
