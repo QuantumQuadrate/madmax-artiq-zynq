@@ -26,6 +26,14 @@ pub fn with_tag() -> bool {
     *WITH_TAG.lock()
 }
 
+pub async fn async_camera_connected() -> bool {
+    *STATE.async_lock().await == State::Connected
+}
+
+pub async fn async_with_tag() -> bool {
+    *WITH_TAG.async_lock().await
+}
+
 pub async fn thread(i2c: &mut i2c::I2c) {
     loop {
         tick(i2c).await;
@@ -34,9 +42,9 @@ pub async fn thread(i2c: &mut i2c::I2c) {
 }
 
 async fn tick(_i2c: &mut i2c::I2c) {
-    let mut state_guard = STATE.async_lock().await;
-    let mut with_tag_guard = WITH_TAG.async_lock().await;
-    *state_guard = match *state_guard {
+    // Get the value and drop the mutexguard to prevent blocking other async task that need to use it
+    let current_state = { *STATE.async_lock().await };
+    let next_state = match current_state {
         State::Disconnected => {
             #[cfg(has_cxp_led)]
             update_led(_i2c, LEDState::RedFlash1Hz);
@@ -54,12 +62,12 @@ async fn tick(_i2c: &mut i2c::I2c) {
             match camera_setup().await {
                 Ok(with_tag) => {
                     info!("camera setup complete");
-                    *with_tag_guard = with_tag;
+                    *WITH_TAG.async_lock().await = with_tag;
                     State::Connected
                 }
                 Err(e) => {
                     error!("camera setup failure: {}", e);
-                    *with_tag_guard = false;
+                    *WITH_TAG.async_lock().await = false;
                     State::Disconnected
                 }
             }
@@ -100,11 +108,14 @@ async fn tick(_i2c: &mut i2c::I2c) {
                 }
                 State::Connected
             } else {
-                *with_tag_guard = false;
+                *WITH_TAG.async_lock().await = false;
                 info!("camera disconnected");
                 State::Disconnected
             }
         }
+    };
+    {
+        *STATE.async_lock().await = next_state
     };
 }
 
