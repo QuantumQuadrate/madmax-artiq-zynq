@@ -55,6 +55,8 @@ use subkernel::Manager as KernelManager;
 mod analyzer;
 mod dma;
 mod drtiosat_aux;
+#[cfg(has_cxp_grabber)]
+mod drtiosat_cxp;
 mod mgmt;
 mod repeater;
 mod routing;

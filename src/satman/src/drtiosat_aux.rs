@@ -5,6 +5,8 @@ use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
 use libboard_zynq::{i2c::{Error as I2cError, I2c},
                     slcr, timer};
 
+#[cfg(has_cxp_grabber)]
+use crate::drtiosat_cxp;
 use crate::{analyzer::Analyzer, dma::Manager as DmaManager, drtiosat_reset, mgmt, mgmt::Manager as CoreManager,
             repeater, routing::Router, subkernel::Manager as KernelManager};
 
@@ -1252,6 +1254,79 @@ async fn process_aux_packet<'a, 'b>(
             core_manager.write_image();
             info!("reboot imminent");
             slcr::reboot();
+            Ok(())
+        }
+        drtioaux::Packet::CXPReadRequest {
+            destination: _destination,
+            address: _address,
+            length: _length,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+            );
+            #[cfg(has_cxp_grabber)]
+            drtiosat_cxp::process_read_request(_address, _length).await?;
+            Ok(())
+        }
+        #[cfg(has_cxp_grabber)]
+        drtioaux::Packet::CXPWrite32Request {
+            destination: _destination,
+            address: _address,
+            value: _value,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+            );
+            #[cfg(has_cxp_grabber)]
+            drtiosat_cxp::process_write32_request(_address, _value).await?;
+            Ok(())
+        }
+        drtioaux::Packet::CXPROIViewerSetupRequest {
+            destination: _destination,
+            x0: _x0,
+            y0: _y0,
+            x1: _x1,
+            y1: _y1,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+            );
+            #[cfg(has_cxp_grabber)]
+            drtiosat_cxp::process_roi_viewer_setup_request(_x0, _y0, _x1, _y1).await?;
+            Ok(())
+        }
+        drtioaux::Packet::CXPROIViewerDataRequest {
+            destination: _destination,
+        } => {
+            forward!(
+                router,
+                _routing_table,
+                _destination,
+                *rank,
+                *self_destination,
+                _repeaters,
+                &packet,
+            );
+            #[cfg(has_cxp_grabber)]
+            drtiosat_cxp::process_roi_viewer_data_request().await?;
             Ok(())
         }
 
