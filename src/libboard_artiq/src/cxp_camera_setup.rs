@@ -5,7 +5,8 @@ use libboard_zynq::timer;
 use log::debug;
 
 use crate::{cxp_ctrl::Error as CtrlErr,
-            cxp_packet::{read_u32, read_u64, reset_tag, send_test_packet, write_bytes_no_ack, write_u32, write_u64},
+            cxp_packet::{async_read_u32, async_read_u64, async_write_u32, async_write_u64, reset_tag,
+                         send_test_packet, write_bytes_no_ack},
             cxp_phys::{CXPSpeed, rx, tx},
             pl::csr};
 
@@ -112,19 +113,18 @@ pub async fn discover_camera() -> Result<(), Error> {
         rx::change_linerate(*speed);
 
         // Check the camera is responsive in case the RX phy picks up noise as an IDLE word
-        if monitor_channel_status_timeout()
-            .await
-            .is_ok_and(|_| matches!(read_u32(STANDARD, false), Ok(0xC0A79AE5)))
-        {
-            debug!("camera detected at linerate {:}", speed);
-            return Ok(());
+        if monitor_channel_status_timeout().await.is_ok() {
+            if let Ok(0xC0A79AE5) = async_read_u32(STANDARD, false).await {
+                debug!("camera detected at linerate {:}", speed);
+                return Ok(());
+            }
         }
     }
     Err(Error::CameraNotDetected)
 }
 
-fn check_master_channel() -> Result<(), Error> {
-    if read_u32(DEVICE_CONNECTION_ID, false)? == 0 {
+async fn check_master_channel() -> Result<(), Error> {
+    if async_read_u32(DEVICE_CONNECTION_ID, false).await? == 0 {
         Ok(())
     } else {
         Err(Error::UnsupportedTopology)
@@ -132,7 +132,7 @@ fn check_master_channel() -> Result<(), Error> {
 }
 
 async fn disable_excess_channels() -> Result<(), Error> {
-    let current_cfg = read_u32(CONNECTION_CFG, false)?;
+    let current_cfg = async_read_u32(CONNECTION_CFG, false).await?;
     let active_camera_chs = current_cfg >> 16;
     // After camera receive ConnectionReset, only the master connection should be active while
     // the extension connections shall not be active - Section 12.3.33 (CXP-001-2021)
@@ -144,7 +144,7 @@ async fn disable_excess_channels() -> Result<(), Error> {
             CHANNEL_LEN
         );
         // disable excess channels and preserve the discovery linerate
-        write_u32(CONNECTION_CFG, current_cfg & 0xFFFF | (CHANNEL_LEN as u32) << 16, false)?;
+        async_write_u32(CONNECTION_CFG, current_cfg & 0xFFFF | (CHANNEL_LEN as u32) << 16, false).await?;
 
         // check if the master channel is down after the cfg change
         monitor_channel_status_timeout().await
@@ -153,14 +153,14 @@ async fn disable_excess_channels() -> Result<(), Error> {
     }
 }
 
-fn set_host_connection_id() -> Result<(), Error> {
+async fn set_host_connection_id() -> Result<(), Error> {
     debug!("set host connection id to = {:#X}", HOST_CONNECTION_ID);
-    write_u32(MASTER_HOST_CONNECTION_ID, HOST_CONNECTION_ID, false)?;
+    async_write_u32(MASTER_HOST_CONNECTION_ID, HOST_CONNECTION_ID, false).await?;
     Ok(())
 }
 
-fn negotiate_cxp_version() -> Result<bool, Error> {
-    let rev = read_u32(REVISION, false)?;
+async fn negotiate_cxp_version() -> Result<bool, Error> {
+    let rev = async_read_u32(REVISION, false).await?;
 
     let mut major_rev: u32 = rev >> 16;
     let mut minor_rev: u32 = rev & 0xFF;
@@ -170,7 +170,7 @@ fn negotiate_cxp_version() -> Result<bool, Error> {
     // For CXP 2.0 and onward, Host need to check the VersionSupported register to determine
     // the highest common version that supported by both device & host
     if major_rev >= 2 {
-        let reg = read_u32(VERSION_SUPPORTED, false)?;
+        let reg = async_read_u32(VERSION_SUPPORTED, false).await?;
 
         // grabber support CXP 2.1, 2.0 and 1.1 only
         if ((reg >> 3) & 1) == 1 {
@@ -186,7 +186,7 @@ fn negotiate_cxp_version() -> Result<bool, Error> {
             return Err(Error::UnsupportedVersion);
         }
 
-        write_u32(VERSION_USED, major_rev << 16 | minor_rev, false)?;
+        async_write_u32(VERSION_USED, major_rev << 16 | minor_rev, false).await?;
     }
     debug!(
         "both camera and cxp grabber support CoaXPress {}.{}, switch to CoaXPress {}.{} protocol now",
@@ -196,8 +196,8 @@ fn negotiate_cxp_version() -> Result<bool, Error> {
     Ok(major_rev >= 2)
 }
 
-fn negotiate_pak_max_size(with_tag: bool) -> Result<(), Error> {
-    write_u32(STREAM_PACKET_SIZE_MAX, MAX_STREAM_PAK_SIZE, with_tag)?;
+async fn negotiate_pak_max_size(with_tag: bool) -> Result<(), Error> {
+    async_write_u32(STREAM_PACKET_SIZE_MAX, MAX_STREAM_PAK_SIZE, with_tag).await?;
     Ok(())
 }
 
@@ -215,18 +215,19 @@ fn decode_cxp_speed(linerate_code: u32) -> Option<CXPSpeed> {
 }
 
 async fn set_operation_linerate(with_tag: bool) -> Result<(), Error> {
-    let recommended_linerate_code = read_u32(CONNECTION_CFG_DEFAULT, with_tag)? & 0xFFFF;
+    let recommended_linerate_code = async_read_u32(CONNECTION_CFG_DEFAULT, with_tag).await? & 0xFFFF;
 
     if let Some(speed) = decode_cxp_speed(recommended_linerate_code) {
         debug!("changing linerate to {}", speed);
 
         // preserve the number of active channels
-        let current_cfg = read_u32(CONNECTION_CFG, with_tag)?;
-        write_u32(
+        let current_cfg = async_read_u32(CONNECTION_CFG, with_tag).await?;
+        async_write_u32(
             CONNECTION_CFG,
             current_cfg & 0xFFFF0000 | recommended_linerate_code,
             with_tag,
-        )?;
+        )
+        .await?;
 
         tx::change_linerate(speed);
         rx::change_linerate(speed);
@@ -236,30 +237,30 @@ async fn set_operation_linerate(with_tag: bool) -> Result<(), Error> {
     }
 }
 
-fn test_counter_reset(with_tag: bool) -> Result<(), Error> {
+async fn test_counter_reset(with_tag: bool) -> Result<(), Error> {
     unsafe { csr::cxp_grabber::core_rx_test_counts_reset_write(1) };
-    write_u32(TEST_ERROR_COUNT_SELECTOR, 0, with_tag)?;
-    write_u32(TEST_ERROR_COUNT, 0, with_tag)?;
-    write_u64(TEST_PACKET_COUNT_TX, 0, with_tag)?;
-    write_u64(TEST_PACKET_COUNT_RX, 0, with_tag)?;
+    async_write_u32(TEST_ERROR_COUNT_SELECTOR, 0, with_tag).await?;
+    async_write_u32(TEST_ERROR_COUNT, 0, with_tag).await?;
+    async_write_u64(TEST_PACKET_COUNT_TX, 0, with_tag).await?;
+    async_write_u64(TEST_PACKET_COUNT_RX, 0, with_tag).await?;
     Ok(())
 }
 
-fn verify_test_result(with_tag: bool) -> Result<(), Error> {
-    write_u32(TEST_ERROR_COUNT_SELECTOR, 0, with_tag)?;
+async fn verify_test_result(with_tag: bool) -> Result<(), Error> {
+    async_write_u32(TEST_ERROR_COUNT_SELECTOR, 0, with_tag).await?;
 
     // Section 9.9.3 (CXP-001-2021)
     // verify grabber -> camera connection test result
-    if read_u64(TEST_PACKET_COUNT_RX, with_tag)? != TX_TEST_CNT as u64 {
+    if async_read_u64(TEST_PACKET_COUNT_RX, with_tag).await? != TX_TEST_CNT as u64 {
         return Err(Error::UnstableTX);
     };
-    if read_u32(TEST_ERROR_COUNT, with_tag)? > 0 {
+    if async_read_u32(TEST_ERROR_COUNT, with_tag).await? > 0 {
         return Err(Error::UnstableTX);
     };
 
     // Section 9.9.4 (CXP-001-2021)
     // verify camera -> grabber connection test result
-    let camera_test_pak_cnt = read_u64(TEST_PACKET_COUNT_TX, true)?;
+    let camera_test_pak_cnt = async_read_u64(TEST_PACKET_COUNT_TX, true).await?;
     unsafe {
         if csr::cxp_grabber::core_rx_test_packet_counter_read() != camera_test_pak_cnt as u16 {
             return Err(Error::UnstableRX);
@@ -273,7 +274,7 @@ fn verify_test_result(with_tag: bool) -> Result<(), Error> {
 }
 
 async fn test_channel_stability(with_tag: bool) -> Result<(), Error> {
-    test_counter_reset(with_tag)?;
+    test_counter_reset(with_tag).await?;
 
     // cxp grabber -> camera connection test
     for _ in 0..TX_TEST_CNT {
@@ -285,24 +286,24 @@ async fn test_channel_stability(with_tag: bool) -> Result<(), Error> {
 
     // camera -> grabber connection test
     // enabling the TESTMODE on master channel will send test packets on all channels
-    write_u32(TESTMODE, 1, with_tag)?;
+    async_write_u32(TESTMODE, 1, with_tag).await?;
     timer::async_delay_ms(2000).await;
-    write_u32(TESTMODE, 0, with_tag)?;
+    async_write_u32(TESTMODE, 0, with_tag).await?;
 
-    verify_test_result(with_tag)?;
+    verify_test_result(with_tag).await?;
 
     Ok(())
 }
 
 pub async fn camera_setup() -> Result<bool, Error> {
     reset_tag();
-    check_master_channel()?;
+    check_master_channel().await?;
 
     disable_excess_channels().await?;
-    set_host_connection_id()?;
-    let with_tag = negotiate_cxp_version()?;
+    set_host_connection_id().await?;
+    let with_tag = negotiate_cxp_version().await?;
 
-    negotiate_pak_max_size(with_tag)?;
+    negotiate_pak_max_size(with_tag).await?;
     set_operation_linerate(with_tag).await?;
 
     test_channel_stability(with_tag).await?;
