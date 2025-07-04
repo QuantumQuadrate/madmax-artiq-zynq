@@ -693,7 +693,7 @@ async fn handle_run_kernel(
                     )
                     .await;
 
-                    let reply = match drtioaux_packet {
+                    match drtioaux_packet {
                         Ok(Packet::CXPWaitReply) => {}
                         Ok(Packet::CXPROIViewerPixelDataReply { length, data }) => {
                             break kernel::Message::CXPROIVIewerPixelDataReply { length, data };
