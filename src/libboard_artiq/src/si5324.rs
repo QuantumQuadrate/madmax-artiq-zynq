@@ -199,10 +199,7 @@ fn monitor_lock(i2c: &mut I2c) -> Result<()> {
     Ok(())
 }
 
-fn init(i2c: &mut I2c) -> Result<()> {
-    #[cfg(not(si5324_soft_reset))]
-    hard_reset();
-
+fn i2c_mux_setup(i2c: &mut I2c) -> Result<()> {
     #[cfg(feature = "target_kasli_soc")]
     {
         i2c.pca954x_select(0x70, None)?;
@@ -212,6 +209,14 @@ fn init(i2c: &mut I2c) -> Result<()> {
     {
         i2c.pca954x_select(0x74, Some(4))?;
     }
+    Ok(())
+}
+
+fn init(i2c: &mut I2c) -> Result<()> {
+    #[cfg(not(si5324_soft_reset))]
+    hard_reset();
+
+    i2c_mux_setup(i2c)?;
 
     if ident(i2c)? != 0x0182 {
         return Err("Si5324 does not have expected product number");
@@ -301,8 +306,7 @@ pub mod siphaser {
     use crate::pl::csr;
 
     pub fn select_recovered_clock(i2c: &mut I2c, rc: bool) -> Result<()> {
-        i2c.pca954x_select(0x70, None)?;
-        i2c.pca954x_select(0x71, Some(3))?;
+        i2c_mux_setup(i2c)?;
         let val = read(i2c, 3)?;
         write(i2c, 3, (val & 0xdf) | (1 << 5))?; // DHOLD=1
         unsafe {
