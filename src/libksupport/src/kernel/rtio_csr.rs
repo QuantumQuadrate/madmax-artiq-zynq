@@ -29,10 +29,7 @@ pub extern "C" fn init() {
         KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::RtioInitRequest);
         match KERNEL_CHANNEL_0TO1.as_mut().unwrap().recv() {
             Message::RtioInitReply => (),
-            other => panic!(
-                "Expected RtioInitReply after RtioInitRequest, but got {:?}",
-                other
-            ),
+            other => panic!("Expected RtioInitReply after RtioInitRequest, but got {:?}", other),
         }
     }
 }

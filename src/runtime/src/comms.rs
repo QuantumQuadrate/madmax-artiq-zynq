@@ -562,11 +562,7 @@ async fn handle_run_kernel(
             #[cfg(has_drtio)]
             kernel::Message::RtioInitRequest => {
                 rtio_mgt::drtio::reset(aux_mutex, routing_table).await;
-                control
-                    .borrow_mut()
-                    .tx
-                    .async_send(kernel::Message::RtioInitReply)
-                    .await;
+                control.borrow_mut().tx.async_send(kernel::Message::RtioInitReply).await;
             }
             #[cfg(has_drtio)]
             kernel::Message::CXPReadRequest {
