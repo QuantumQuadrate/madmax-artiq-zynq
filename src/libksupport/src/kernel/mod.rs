@@ -55,6 +55,8 @@ pub enum Message {
 
     #[cfg(has_drtio)]
     RtioInitRequest,
+    #[cfg(has_drtio)]
+    RtioInitReply,
 
     RpcSend {
         is_async: bool,

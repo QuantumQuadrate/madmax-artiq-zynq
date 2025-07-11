@@ -5,7 +5,7 @@ use libcortex_a9::asm;
 use vcell::VolatileCell;
 
 #[cfg(has_drtio)]
-use super::{KERNEL_CHANNEL_1TO0, Message};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use crate::{artiq_raise, pl::csr, resolve_channel_name, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
@@ -61,6 +61,13 @@ pub extern "C" fn init() {
     #[cfg(has_drtio)]
     unsafe {
         KERNEL_CHANNEL_1TO0.as_mut().unwrap().send(Message::RtioInitRequest);
+        match KERNEL_CHANNEL_0TO1.as_mut().unwrap().recv() {
+            Message::RtioInitReply => (),
+            other => panic!(
+                "Expected RtioInitReply after RtioInitRequest, but got {:?}",
+                other
+            ),
+        }
     }
 }
 
