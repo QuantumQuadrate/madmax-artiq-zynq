@@ -6,7 +6,6 @@ use crc::crc32;
 use io::ProtoRead;
 use libboard_artiq::{drtioaux_proto::SAT_PAYLOAD_MAX_SIZE,
                      logger::{BufferLogger, LogBufferRef}};
-use libconfig::Config;
 use log::{LevelFilter, debug, error, info, warn};
 
 use crate::routing::{SliceMeta, Sliceable};
@@ -42,18 +41,16 @@ pub fn clear_log() {
     buffer.clear();
 }
 
-pub struct Manager<'a> {
-    cfg: &'a mut Config,
+pub struct Manager {
     last_log: Sliceable,
     config_payload: Vec<u8>,
     last_value: Sliceable,
     image_payload: Vec<u8>,
 }
 
-impl<'a> Manager<'_> {
-    pub fn new(cfg: &mut Config) -> Manager {
+impl Manager {
+    pub fn new() -> Manager {
         Manager {
-            cfg: cfg,
             last_log: Sliceable::new(0, Vec::new()),
             config_payload: Vec::new(),
             last_value: Sliceable::new(0, Vec::new()),
@@ -75,8 +72,7 @@ impl<'a> Manager<'_> {
     }
 
     pub fn fetch_config_value(&mut self, key: &str) -> Result<()> {
-        self.cfg
-            .read(&key)
+        libconfig::read(&key)
             .map(|value| {
                 debug!("got value");
                 self.last_value = Sliceable::new(0, value)
@@ -104,16 +100,14 @@ impl<'a> Manager<'_> {
         debug!("write key: {}", key);
         let value = payload.read_bytes::<NativeEndian>().unwrap();
 
-        self.cfg
-            .write(&key, value)
+        libconfig::write(&key, value)
             .map(|()| debug!("write success"))
             .map_err(|err| error!("failed to write: {:?}", err))
     }
 
     pub fn remove_config(&mut self, key: &str) -> Result<()> {
         debug!("erase key: {}", key);
-        self.cfg
-            .remove(&key)
+        libconfig::remove(&key)
             .map(|()| debug!("erase success"))
             .map_err(|err| warn!("failed to erase: {:?}", err))
     }
@@ -141,7 +135,7 @@ impl<'a> Manager<'_> {
         if actual_crc == expected_crc {
             info!("CRC passed. Writing boot image to SD card...");
             image.truncate(bin_len);
-            self.cfg.write("boot", image).expect("failed to write boot image");
+            libconfig::write("boot", image).expect("failed to write boot image");
         } else {
             panic!(
                 "CRC failed, images have not been written to flash.\n(actual {:08x}, expected {:08x})",

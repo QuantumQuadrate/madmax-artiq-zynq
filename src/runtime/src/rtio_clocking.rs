@@ -9,7 +9,7 @@ use libboard_artiq::si5324;
 #[cfg(has_si5324)]
 use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer;
-use libconfig::Config;
+use libconfig;
 use log::{info, warn};
 #[cfg(feature = "target_ebaz4205")]
 use {libboard_zynq::slcr, libregister::RegisterRW};
@@ -29,9 +29,9 @@ pub enum RtioClock {
 }
 
 #[allow(unreachable_code)]
-fn get_rtio_clock_cfg(cfg: &Config) -> RtioClock {
+fn get_rtio_clock_cfg() -> RtioClock {
     let mut res = RtioClock::Default;
-    if let Ok(clk) = cfg.read_str("rtio_clock") {
+    if let Ok(clk) = libconfig::read_str("rtio_clock") {
         res = match clk.as_ref() {
             "int_125" => RtioClock::Int_125,
             "int_100" => RtioClock::Int_100,
@@ -409,7 +409,7 @@ fn get_si549_setting(clk: RtioClock) -> si549::FrequencySetting {
 }
 
 #[cfg(feature = "target_ebaz4205")]
-fn set_fclk0_freq(clk: RtioClock, cfg: &Config) {
+fn set_fclk0_freq(clk: RtioClock) {
     let io_pll_freq: u32 = 1_000_000_000; // Hardcoded in zynq-rs
     let mut target_freq = 0;
     let mut divisor0 = 1u8;
@@ -440,8 +440,8 @@ fn set_fclk0_freq(clk: RtioClock, cfg: &Config) {
     );
 }
 
-pub fn init(cfg: &Config) {
-    let clk = get_rtio_clock_cfg(cfg);
+pub fn init() {
+    let clk = get_rtio_clock_cfg();
     #[cfg(has_si5324)]
     {
         let i2c = i2c::get_bus();
@@ -470,7 +470,7 @@ pub fn init(cfg: &Config) {
     {
         match clk {
             RtioClock::Int_100 | RtioClock::Int_125 => {
-                set_fclk0_freq(clk, cfg);
+                set_fclk0_freq(clk);
             }
             _ => {} // Not set for external clocks
         }

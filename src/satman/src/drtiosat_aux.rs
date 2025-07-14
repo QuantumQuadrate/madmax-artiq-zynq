@@ -62,7 +62,7 @@ async fn process_aux_packet<'a, 'b>(
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
     kernel_manager: &mut KernelManager<'a>,
-    core_manager: &mut CoreManager<'b>,
+    core_manager: &mut CoreManager,
     router: &mut Router,
 ) -> Result<(), drtioaux::Error> {
     // In the code below, *_chan_sel_write takes an u8 if there are fewer than 256 channels,
@@ -1346,7 +1346,7 @@ pub async fn process_aux_packets<'a, 'b>(
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
     kernel_manager: &mut KernelManager<'a>,
-    core_manager: &mut CoreManager<'b>,
+    core_manager: &mut CoreManager,
     router: &mut Router,
 ) {
     let result = match drtioaux::recv(0) {

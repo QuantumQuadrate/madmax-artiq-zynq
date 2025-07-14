@@ -1,7 +1,7 @@
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{print, println, timer};
-use libconfig::Config;
+use libconfig;
 use libcortex_a9::regs::MPIDR;
 use libregister::RegisterR;
 use log::error;
@@ -59,11 +59,8 @@ fn soft_panic(info: &core::panic::PanicInfo) -> ! {
     }
     error!("panic message: {}", info.message());
     timer::start();
-    let cfg = match Config::new() {
-        Ok(cfg) => cfg,
-        Err(_) => Config::new_dummy(),
-    };
-    soft_panic_main(cfg);
+    let _ = libconfig::init();
+    soft_panic_main();
 }
 
 #[lang = "eh_personality"]

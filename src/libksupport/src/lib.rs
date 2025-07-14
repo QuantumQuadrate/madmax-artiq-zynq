@@ -13,7 +13,7 @@ use alloc::{collections::BTreeMap, string::String};
 use byteorder::NativeEndian;
 use io::{Cursor, ProtoRead};
 use libasync::block_async;
-use libconfig::Config;
+use libconfig;
 use log::{error, warn};
 #[cfg(has_drtiosat)]
 pub use pl::csr::drtiosat as rtio_core;
@@ -109,10 +109,9 @@ pub async fn report_async_rtio_errors() {
 
 static mut RTIO_DEVICE_MAP: BTreeMap<u32, String> = BTreeMap::new();
 
-fn read_device_map(cfg: &Config) -> BTreeMap<u32, String> {
+fn read_device_map() -> BTreeMap<u32, String> {
     let mut device_map: BTreeMap<u32, String> = BTreeMap::new();
-    let _ = cfg
-        .read("device_map")
+    let _ = libconfig::read("device_map")
         .and_then(|raw_bytes| {
             let mut bytes_cr = Cursor::new(raw_bytes);
             let size = bytes_cr.read_u32::<NativeEndian>().unwrap();
@@ -147,8 +146,8 @@ pub fn resolve_channel_name(channel: u32) -> String {
     }
 }
 
-pub fn setup_device_map(cfg: &Config) {
+pub fn setup_device_map() {
     unsafe {
-        RTIO_DEVICE_MAP = read_device_map(cfg);
+        RTIO_DEVICE_MAP = read_device_map();
     }
 }

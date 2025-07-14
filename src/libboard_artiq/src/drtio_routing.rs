@@ -1,6 +1,6 @@
 use core::fmt;
 
-use libconfig::Config;
+use libconfig;
 use log::{info, warn};
 
 #[cfg(has_drtio_routing)]
@@ -56,9 +56,9 @@ impl fmt::Display for RoutingTable {
     }
 }
 
-pub fn config_routing_table(default_n_links: usize, cfg: &Config) -> RoutingTable {
+pub fn config_routing_table(default_n_links: usize) -> RoutingTable {
     let mut ret = RoutingTable::default_master(default_n_links);
-    if let Ok(data) = cfg.read("routing_table") {
+    if let Ok(data) = libconfig::read("routing_table") {
         if data.len() == DEST_COUNT * MAX_HOPS {
             for i in 0..DEST_COUNT {
                 for j in 0..MAX_HOPS {

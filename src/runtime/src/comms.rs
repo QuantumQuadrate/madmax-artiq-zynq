@@ -25,7 +25,7 @@ use libboard_zynq::{self as zynq,
                               time::{Duration, Instant},
                               wire::IpCidr},
                     timer};
-use libconfig::{Config, net_settings};
+use libconfig::{self, net_settings};
 use libcortex_a9::{mutex::Mutex,
                    semaphore::Semaphore,
                    sync_channel::{Receiver, Sender}};
@@ -884,8 +884,8 @@ async fn handle_connection(
     }
 }
 
-pub fn main(cfg: Config) {
-    let net_addresses = net_settings::get_addresses(&cfg);
+pub fn main() {
+    let net_addresses = net_settings::get_addresses();
     info!("network addresses: {}", net_addresses);
 
     let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
@@ -927,24 +927,21 @@ pub fn main(cfg: Config) {
 
     let aux_mutex: Rc<Mutex<bool>> = Rc::new(Mutex::new(false));
     #[cfg(has_drtio)]
-    let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::config_routing_table(
-        pl::csr::DRTIO.len(),
-        &cfg,
-    )));
+    let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::config_routing_table(pl::csr::DRTIO.len())));
     #[cfg(not(has_drtio))]
     let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::RoutingTable::default_empty()));
     let up_destinations = Rc::new(RefCell::new([false; drtio_routing::DEST_COUNT]));
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
-    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations, &cfg);
-    ksupport::setup_device_map(&cfg);
+    rtio_mgt::startup(&aux_mutex, &drtio_routing_table, &up_destinations);
+    ksupport::setup_device_map();
 
     analyzer::start(&aux_mutex, &drtio_routing_table, &up_destinations);
     moninj::start(&aux_mutex, &drtio_routing_table);
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
-    if let Ok(buffer) = cfg.read("startup_kernel") {
+    if let Ok(buffer) = libconfig::read("startup_kernel") {
         info!("Loading startup kernel...");
         let routing_table = drtio_routing_table.borrow();
         if let Ok(()) = task::block_on(handle_flash_kernel(
@@ -968,10 +965,8 @@ pub fn main(cfg: Config) {
         }
     }
 
-    let cfg = Rc::new(cfg);
     let restart_idle = Rc::new(Semaphore::new(1, 1));
     mgmt::start(
-        cfg.clone(),
         restart_idle.clone(),
         Some(mgmt::DrtioContext(aux_mutex.clone(), drtio_routing_table.clone())),
     );
@@ -999,7 +994,7 @@ pub fn main(cfg: Config) {
                 connection.async_wait().await;
             }
 
-            let maybe_idle_kernel = cfg.read("idle_kernel").ok();
+            let maybe_idle_kernel = libconfig::read("idle_kernel").ok();
             if maybe_idle_kernel.is_none() && maybe_stream.is_none() {
                 control.borrow_mut().restart(); // terminate idle kernel if running
             }
@@ -1074,8 +1069,8 @@ pub fn main(cfg: Config) {
     })
 }
 
-pub fn soft_panic_main(cfg: Config) -> ! {
-    let net_addresses = net_settings::get_addresses(&cfg);
+pub fn soft_panic_main() -> ! {
+    let net_addresses = net_settings::get_addresses();
     info!("network addresses: {}", net_addresses);
 
     let eth = zynq::eth::Eth::eth0(net_addresses.hardware_addr.0.clone());
@@ -1116,7 +1111,7 @@ pub fn soft_panic_main(cfg: Config) -> ! {
     Sockets::init(32);
 
     let dummy = Rc::new(Semaphore::new(0, 1));
-    mgmt::start(Rc::new(cfg), dummy, None);
+    mgmt::start(dummy, None);
 
     // getting eth settings disables the LED as it resets GPIO
     // need to re-enable it here

@@ -22,7 +22,7 @@ use libboard_artiq::io_expander;
 use libboard_artiq::{cxp_grabber, cxp_phys};
 use libboard_artiq::{identifier_read, logger, pl};
 use libboard_zynq::{gic, mpcore, timer};
-use libconfig::Config;
+use libconfig;
 use libcortex_a9::l2c::enable_l2_cache;
 use libsupport_zynq::{exception_vectors, ram};
 use log::{info, warn};
@@ -132,18 +132,13 @@ pub fn main_core0() {
         ));
     }
 
-    let cfg = match Config::new() {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            warn!("config initialization failed: {}", err);
-            Config::new_dummy()
-        }
-    };
-
-    rtio_clocking::init(&cfg);
+    if let Err(err) = libconfig::init() {
+        warn!("config initialization failed: {}", err);
+    }
+    rtio_clocking::init();
 
     #[cfg(has_drtio_eem)]
-    drtio_eem::init(&cfg);
+    drtio_eem::init();
 
     #[cfg(has_grabber)]
     task::spawn(grabber::grabber_thread());
@@ -156,5 +151,5 @@ pub fn main_core0() {
         task::spawn(cxp_grabber::thread(ksupport::kernel::i2c::get_bus()));
     }
 
-    comms::main(cfg);
+    comms::main();
 }

@@ -46,7 +46,6 @@ use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async, identifier_read, l
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{i2c::I2c, print, println, timer};
-use libconfig::Config;
 use libcortex_a9::{l2c::enable_l2_cache, regs::MPIDR};
 use libregister::RegisterR;
 use libsupport_zynq::{exception_vectors, ram};
@@ -295,15 +294,11 @@ pub fn main_core0() {
     #[cfg(has_si549)]
     si549::helper_setup(&SI549_SETTINGS).expect("cannot initialize helper Si549");
 
-    let mut cfg = match Config::new() {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            warn!("config initialization failed: {}", err);
-            Config::new_dummy()
-        }
-    };
+    if let Err(err) = libconfig::init() {
+        warn!("config initialization failed: {}", err);
+    }
 
-    if let Ok(spread_enable) = cfg.read_str("sed_spread_enable") {
+    if let Ok(spread_enable) = libconfig::read_str("sed_spread_enable") {
         match spread_enable.as_ref() {
             "1" => toggle_sed_spread(1),
             "0" => toggle_sed_spread(0),
@@ -319,7 +314,7 @@ pub fn main_core0() {
 
     #[cfg(has_drtio_eem)]
     {
-        drtio_eem::init(&cfg);
+        drtio_eem::init();
         unsafe { csr::eem_transceiver::rx_ready_write(1) }
     }
 
@@ -385,7 +380,7 @@ pub fn main_core0() {
             let mut dma_manager = DmaManager::new();
             let mut analyzer = Analyzer::new();
             let mut kernel_manager = KernelManager::new(&control);
-            let mut core_manager = CoreManager::new(&mut cfg);
+            let mut core_manager = CoreManager::new();
 
             drtioaux::reset(0);
             drtiosat_reset(false);
@@ -425,7 +420,7 @@ pub fn main_core0() {
     })
 }
 
-async fn linkup_service<'a, 'b>(
+async fn linkup_service<'a>(
     repeaters: &mut [repeater::Repeater],
     routing_table: &mut drtio_routing::RoutingTable,
     rank: &mut u8,
@@ -434,7 +429,7 @@ async fn linkup_service<'a, 'b>(
     dma_manager: &mut DmaManager,
     analyzer: &mut Analyzer,
     kernel_manager: &mut KernelManager<'a>,
-    core_manager: &mut CoreManager<'b>,
+    core_manager: &mut CoreManager,
     router: &mut Router,
 ) {
     process_aux_packets(

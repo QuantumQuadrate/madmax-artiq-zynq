@@ -1,7 +1,7 @@
 use alloc::format;
 
 use libboard_zynq::timer;
-use libconfig::Config;
+use libconfig;
 use log::{debug, error, info};
 
 use crate::pl;
@@ -203,7 +203,7 @@ pub unsafe fn align_wordslip(trx_no: u8) -> bool {
     false
 }
 
-pub fn init(cfg: &Config) {
+pub fn init() {
     for trx_no in 0..pl::csr::CONFIG_EEM_DRTIO_COUNT {
         unsafe {
             pl::csr::eem_transceiver::transceiver_sel_write(trx_no as u8);
@@ -211,7 +211,7 @@ pub fn init(cfg: &Config) {
 
         let key = format!("eem_drtio_delay{}", trx_no);
 
-        let cfg_read = cfg.read(&key);
+        let cfg_read = libconfig::read(&key);
         match cfg_read {
             Ok(record) => {
                 info!("loading calibrated timing values from sd card");
@@ -223,7 +223,7 @@ pub fn init(cfg: &Config) {
                 info!("calibrating...");
                 let config = unsafe { assign_delay() };
 
-                match cfg.write(&key, config.as_bytes().to_vec()) {
+                match libconfig::write(&key, config.as_bytes().to_vec()) {
                     Ok(()) => {
                         info!("storing calibration timing values into sd card");
                     }

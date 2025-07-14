@@ -2,7 +2,7 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 
 use libboard_artiq::{drtio_routing, drtio_routing::RoutingTable, pl::csr};
-use libconfig::Config;
+use libconfig;
 use libcortex_a9::mutex::Mutex;
 use log::{info, warn};
 
@@ -1056,8 +1056,8 @@ fn toggle_sed_spread(val: u8) {
     }
 }
 
-fn setup_sed_spread(cfg: &Config) {
-    if let Ok(spread_enable) = cfg.read_str("sed_spread_enable") {
+fn setup_sed_spread() {
+    if let Ok(spread_enable) = libconfig::read_str("sed_spread_enable") {
         match spread_enable.as_ref() {
             "1" => toggle_sed_spread(1),
             "0" => toggle_sed_spread(0),
@@ -1076,9 +1076,8 @@ pub fn startup(
     aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &Rc<RefCell<RoutingTable>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-    cfg: &Config,
 ) {
-    setup_sed_spread(cfg);
+    setup_sed_spread();
     drtio::startup(aux_mutex, routing_table, up_destinations);
     unsafe {
         csr::rtio_core::reset_phy_write(1);

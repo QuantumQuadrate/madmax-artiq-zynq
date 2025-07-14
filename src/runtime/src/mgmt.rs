@@ -8,7 +8,7 @@ use libasync::{smoltcp::TcpStream, task};
 use libboard_artiq::{drtio_routing::RoutingTable,
                      logger::{BufferLogger, LogBufferRef}};
 use libboard_zynq::smoltcp;
-use libconfig::Config;
+use libconfig;
 use libcortex_a9::{mutex::Mutex, semaphore::Semaphore};
 use log::{self, debug, error, info, warn};
 use num_derive::FromPrimitive;
@@ -354,7 +354,6 @@ mod remote_coremgmt {
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
-        _cfg: &Rc<Config>,
         key: &String,
     ) -> Result<()> {
         let mut config_key: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
@@ -415,7 +414,6 @@ mod remote_coremgmt {
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
-        _cfg: &Rc<Config>,
         key: &String,
         value: Vec<u8>,
         _restart_idle: &Rc<Semaphore>,
@@ -463,7 +461,6 @@ mod remote_coremgmt {
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
-        _cfg: &Rc<Config>,
         key: &String,
         _restart_idle: &Rc<Semaphore>,
     ) -> Result<()> {
@@ -610,7 +607,6 @@ mod remote_coremgmt {
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
-        _cfg: &Rc<Config>,
         image: Vec<u8>,
     ) -> Result<()> {
         let mut image = &image[..];
@@ -747,8 +743,8 @@ mod local_coremgmt {
         Ok(())
     }
 
-    pub async fn config_read(stream: &mut TcpStream, cfg: &Rc<Config>, key: &String) -> Result<()> {
-        let value = cfg.read(&key);
+    pub async fn config_read(stream: &mut TcpStream, key: &String) -> Result<()> {
+        let value = libconfig::read(&key);
         if let Ok(value) = value {
             debug!("got value");
             write_i8(stream, Reply::ConfigData as i8).await?;
@@ -762,12 +758,11 @@ mod local_coremgmt {
 
     pub async fn config_write(
         stream: &mut TcpStream,
-        cfg: &Rc<Config>,
         key: &String,
         value: Vec<u8>,
         restart_idle: &Rc<Semaphore>,
     ) -> Result<()> {
-        let value = cfg.write(&key, value);
+        let value = libconfig::write(&key, value);
         if value.is_ok() {
             debug!("write success");
             if key == "idle_kernel" {
@@ -782,14 +777,9 @@ mod local_coremgmt {
         Ok(())
     }
 
-    pub async fn config_remove(
-        stream: &mut TcpStream,
-        cfg: &Rc<Config>,
-        key: &String,
-        restart_idle: &Rc<Semaphore>,
-    ) -> Result<()> {
+    pub async fn config_remove(stream: &mut TcpStream, key: &String, restart_idle: &Rc<Semaphore>) -> Result<()> {
         debug!("erase key: {}", key);
-        let value = cfg.remove(&key);
+        let value = libconfig::remove(&key);
         if value.is_ok() {
             debug!("erase success");
             if key == "idle_kernel" {
@@ -823,7 +813,7 @@ mod local_coremgmt {
         Ok(())
     }
 
-    pub async fn image_write(stream: &mut TcpStream, cfg: &Rc<Config>, image: Vec<u8>) -> Result<()> {
+    pub async fn image_write(stream: &mut TcpStream, image: Vec<u8>) -> Result<()> {
         let mut image = image.clone();
         let image_ref = &image[..];
         let bin_len = image.len() - 4;
@@ -838,7 +828,7 @@ mod local_coremgmt {
         if actual_crc == expected_crc {
             info!("CRC passed. Writing boot image to SD card...");
             image.truncate(bin_len);
-            cfg.write("boot", image).expect("failed to write boot image");
+            libconfig::write("boot", image).expect("failed to write boot image");
             reboot(stream).await?;
         } else {
             error!(
@@ -882,7 +872,6 @@ pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>);
 async fn handle_connection(
     stream: &mut TcpStream,
     pull_id: Rc<RefCell<u32>>,
-    cfg: Rc<Config>,
     restart_idle: Rc<Semaphore>,
     _drtio_context: Option<DrtioContext>,
 ) -> Result<()> {
@@ -913,7 +902,7 @@ async fn handle_connection(
             }
             Request::ConfigRead => {
                 let key = read_key(stream).await?;
-                process!(stream, _drtio_context, _destination, config_read, &cfg, &key)
+                process!(stream, _drtio_context, _destination, config_read, &key)
             }
             Request::ConfigWrite => {
                 let key = read_key(stream).await?;
@@ -929,7 +918,6 @@ async fn handle_connection(
                     _drtio_context,
                     _destination,
                     config_write,
-                    &cfg,
                     &key,
                     buffer,
                     &restart_idle
@@ -937,15 +925,7 @@ async fn handle_connection(
             }
             Request::ConfigRemove => {
                 let key = read_key(stream).await?;
-                process!(
-                    stream,
-                    _drtio_context,
-                    _destination,
-                    config_remove,
-                    &cfg,
-                    &key,
-                    &restart_idle
-                )
+                process!(stream, _drtio_context, _destination, config_remove, &key, &restart_idle)
             }
             Request::Reboot => {
                 process!(stream, _drtio_context, _destination, reboot)
@@ -967,24 +947,23 @@ async fn handle_connection(
                     buffer.set_len(len as usize);
                 }
                 read_chunk(stream, &mut buffer).await?;
-                process!(stream, _drtio_context, _destination, image_write, &cfg, buffer)
+                process!(stream, _drtio_context, _destination, image_write, buffer)
             }
         }?;
     }
 }
 
-pub fn start(cfg: Rc<Config>, restart_idle: Rc<Semaphore>, drtio_context: Option<DrtioContext>) {
+pub fn start(restart_idle: Rc<Semaphore>, drtio_context: Option<DrtioContext>) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
         loop {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
-            let cfg = cfg.clone();
             let restart_idle = restart_idle.clone();
             let drtio_context = drtio_context.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id, cfg, restart_idle, drtio_context)
+                let _ = handle_connection(&mut stream, pull_id, restart_idle, drtio_context)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;
