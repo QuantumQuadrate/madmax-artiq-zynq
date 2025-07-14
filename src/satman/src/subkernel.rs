@@ -888,7 +888,13 @@ impl<'a> Manager<'a> {
                     .await;
             }
             /* core.reset() on satellites only affects the satellite, ignore the request */
-            kernel::Message::RtioInitRequest => {}
+            kernel::Message::RtioInitRequest => {
+                self.control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::RtioInitReply)
+                    .await;
+            }
             _ => {
                 unexpected!("unexpected message from core1 while kernel was running: {:?}", reply);
             }
