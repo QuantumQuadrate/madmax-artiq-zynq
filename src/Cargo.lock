@@ -286,6 +286,7 @@ version = "0.0.0"
 dependencies = [
  "bit_field",
  "embedded-hal",
+ "libasync",
  "libcortex_a9",
  "libregister",
  "log",
