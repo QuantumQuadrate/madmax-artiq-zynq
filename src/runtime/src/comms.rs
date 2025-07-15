@@ -116,6 +116,8 @@ enum Reply {
 
 static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new());
 
+pub static RESTART_IDLE: Semaphore = Semaphore::new(1, 1);
+
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream
         .send_slice(&[0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()])
@@ -965,17 +967,12 @@ pub fn main() {
         }
     }
 
-    let restart_idle = Rc::new(Semaphore::new(1, 1));
-    mgmt::start(
-        restart_idle.clone(),
-        Some(mgmt::DrtioContext(aux_mutex.clone(), drtio_routing_table.clone())),
-    );
+    mgmt::start(Some(mgmt::DrtioContext(aux_mutex.clone(), drtio_routing_table.clone())));
 
     task::spawn(async move {
         let connection = Rc::new(Semaphore::new(1, 1));
         let terminate = Rc::new(Semaphore::new(0, 1));
         let can_restart_idle = Rc::new(Semaphore::new(1, 1));
-        let restart_idle = restart_idle.clone();
         loop {
             let control = control.clone();
             let mut maybe_stream = select_biased! {
@@ -983,7 +980,7 @@ pub fn main() {
                         TcpStream::accept(1381, 0x10_000, 0x10_000).await.unwrap()
                     }).fuse() => Some(s),
                 _ = (async {
-                        restart_idle.async_wait().await;
+                        RESTART_IDLE.async_wait().await;
                         can_restart_idle.async_wait().await;
                     }).fuse() => None
             };
@@ -1110,8 +1107,7 @@ pub fn soft_panic_main() -> ! {
 
     Sockets::init(32);
 
-    let dummy = Rc::new(Semaphore::new(0, 1));
-    mgmt::start(dummy, None);
+    mgmt::start(None);
 
     // getting eth settings disables the LED as it resets GPIO
     // need to re-enable it here

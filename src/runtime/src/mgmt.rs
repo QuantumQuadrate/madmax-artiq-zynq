@@ -9,14 +9,14 @@ use libboard_artiq::{drtio_routing::RoutingTable,
                      logger::{BufferLogger, LogBufferRef}};
 use libboard_zynq::smoltcp;
 use libconfig;
-use libcortex_a9::{mutex::Mutex, semaphore::Semaphore};
+use libcortex_a9::mutex::Mutex;
 use log::{self, debug, error, info, warn};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
-use crate::proto_async::*;
 #[cfg(has_drtio)]
 use crate::rtio_mgt::drtio;
+use crate::{comms::RESTART_IDLE, proto_async::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -416,7 +416,6 @@ mod remote_coremgmt {
         destination: u8,
         key: &String,
         value: Vec<u8>,
-        _restart_idle: &Rc<Semaphore>,
     ) -> Result<()> {
         let mut message = Vec::with_capacity(key.len() + value.len() + 4 * 2);
         message.write_string::<NativeEndian>(key).unwrap();
@@ -462,7 +461,6 @@ mod remote_coremgmt {
         linkno: u8,
         destination: u8,
         key: &String,
-        _restart_idle: &Rc<Semaphore>,
     ) -> Result<()> {
         let mut config_key: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
         let len = key.len();
@@ -756,17 +754,12 @@ mod local_coremgmt {
         Ok(())
     }
 
-    pub async fn config_write(
-        stream: &mut TcpStream,
-        key: &String,
-        value: Vec<u8>,
-        restart_idle: &Rc<Semaphore>,
-    ) -> Result<()> {
+    pub async fn config_write(stream: &mut TcpStream, key: &String, value: Vec<u8>) -> Result<()> {
         let value = libconfig::write(&key, value);
         if value.is_ok() {
             debug!("write success");
             if key == "idle_kernel" {
-                restart_idle.signal();
+                RESTART_IDLE.signal();
             }
             write_i8(stream, Reply::Success as i8).await?;
         } else {
@@ -777,13 +770,13 @@ mod local_coremgmt {
         Ok(())
     }
 
-    pub async fn config_remove(stream: &mut TcpStream, key: &String, restart_idle: &Rc<Semaphore>) -> Result<()> {
+    pub async fn config_remove(stream: &mut TcpStream, key: &String) -> Result<()> {
         debug!("erase key: {}", key);
         let value = libconfig::remove(&key);
         if value.is_ok() {
             debug!("erase success");
             if key == "idle_kernel" {
-                restart_idle.signal();
+                RESTART_IDLE.signal();
             }
             write_i8(stream, Reply::Success as i8).await?;
         } else {
@@ -872,7 +865,6 @@ pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>);
 async fn handle_connection(
     stream: &mut TcpStream,
     pull_id: Rc<RefCell<u32>>,
-    restart_idle: Rc<Semaphore>,
     _drtio_context: Option<DrtioContext>,
 ) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
@@ -913,19 +905,11 @@ async fn handle_connection(
                     buffer.set_len(len);
                 }
                 read_chunk(stream, &mut buffer).await?;
-                process!(
-                    stream,
-                    _drtio_context,
-                    _destination,
-                    config_write,
-                    &key,
-                    buffer,
-                    &restart_idle
-                )
+                process!(stream, _drtio_context, _destination, config_write, &key, buffer)
             }
             Request::ConfigRemove => {
                 let key = read_key(stream).await?;
-                process!(stream, _drtio_context, _destination, config_remove, &key, &restart_idle)
+                process!(stream, _drtio_context, _destination, config_remove, &key)
             }
             Request::Reboot => {
                 process!(stream, _drtio_context, _destination, reboot)
@@ -953,17 +937,16 @@ async fn handle_connection(
     }
 }
 
-pub fn start(restart_idle: Rc<Semaphore>, drtio_context: Option<DrtioContext>) {
+pub fn start(drtio_context: Option<DrtioContext>) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
         loop {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
-            let restart_idle = restart_idle.clone();
             let drtio_context = drtio_context.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id, restart_idle, drtio_context)
+                let _ = handle_connection(&mut stream, pull_id, drtio_context)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;
