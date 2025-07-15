@@ -30,6 +30,8 @@ pub mod drtio {
     const DRTIO_EEM_LINKNOS: core::ops::Range<usize> =
         (csr::DRTIO.len() - csr::CONFIG_EEM_DRTIO_COUNT as usize)..csr::DRTIO.len();
 
+    pub static AUX_MUTEX: Mutex<bool> = Mutex::new(false);
+
     #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub enum Error {
         Timeout,
@@ -66,16 +68,14 @@ pub mod drtio {
     }
 
     pub fn startup(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &Rc<RefCell<RoutingTable>>,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     ) {
-        let aux_mutex = aux_mutex.clone();
         let routing_table = routing_table.clone();
         let up_destinations = up_destinations.clone();
         task::spawn(async move {
             let routing_table = routing_table.borrow();
-            link_task(&aux_mutex, &routing_table, &up_destinations).await;
+            link_task(&routing_table, &up_destinations).await;
         });
     }
 
@@ -200,16 +200,11 @@ pub mod drtio {
         }
     }
 
-    pub async fn aux_transact(
-        aux_mutex: &Mutex<bool>,
-        linkno: u8,
-        routing_table: &RoutingTable,
-        request: &Packet,
-    ) -> Result<Packet, Error> {
+    pub async fn aux_transact(linkno: u8, routing_table: &RoutingTable, request: &Packet) -> Result<Packet, Error> {
         if !link_rx_up(linkno).await {
             return Err(Error::LinkDown);
         }
-        let _lock = aux_mutex.async_lock().await;
+        let _lock = AUX_MUTEX.async_lock().await;
         drtioaux_async::send(linkno, request).await.unwrap();
         loop {
             let packet = recv_aux_timeout(linkno, 200).await?;
@@ -226,7 +221,7 @@ pub mod drtio {
         }
     }
 
-    async fn ping_remote(aux_mutex: &Rc<Mutex<bool>>, linkno: u8, routing_table: &RoutingTable) -> u32 {
+    async fn ping_remote(linkno: u8, routing_table: &RoutingTable) -> u32 {
         let mut count = 0;
         loop {
             if !link_rx_up(linkno).await {
@@ -236,7 +231,7 @@ pub mod drtio {
             if count > 100 {
                 return 0;
             }
-            let reply = aux_transact(aux_mutex, linkno, routing_table, &Packet::EchoRequest).await;
+            let reply = aux_transact(linkno, routing_table, &Packet::EchoRequest).await;
             match reply {
                 Ok(Packet::EchoReply) => {
                     // make sure receive buffer is drained
@@ -248,8 +243,8 @@ pub mod drtio {
         }
     }
 
-    async fn sync_tsc(aux_mutex: &Rc<Mutex<bool>>, linkno: u8) -> Result<(), Error> {
-        let _lock = aux_mutex.async_lock().await;
+    async fn sync_tsc(linkno: u8) -> Result<(), Error> {
+        let _lock = AUX_MUTEX.async_lock().await;
 
         unsafe {
             (csr::DRTIO[linkno as usize].set_time_write)(1);
@@ -265,14 +260,9 @@ pub mod drtio {
         }
     }
 
-    async fn load_routing_table(
-        aux_mutex: &Rc<Mutex<bool>>,
-        linkno: u8,
-        routing_table: &RoutingTable,
-    ) -> Result<(), Error> {
+    async fn load_routing_table(linkno: u8, routing_table: &RoutingTable) -> Result<(), Error> {
         for i in 0..drtio_routing::DEST_COUNT {
             let reply = aux_transact(
-                aux_mutex,
                 linkno,
                 routing_table,
                 &Packet::RoutingSetPath {
@@ -288,13 +278,8 @@ pub mod drtio {
         Ok(())
     }
 
-    async fn set_rank(
-        aux_mutex: &Rc<Mutex<bool>>,
-        linkno: u8,
-        rank: u8,
-        routing_table: &RoutingTable,
-    ) -> Result<(), Error> {
-        let reply = aux_transact(aux_mutex, linkno, routing_table, &Packet::RoutingSetRank { rank: rank }).await?;
+    async fn set_rank(linkno: u8, rank: u8, routing_table: &RoutingTable) -> Result<(), Error> {
+        let reply = aux_transact(linkno, routing_table, &Packet::RoutingSetRank { rank: rank }).await?;
         match reply {
             Packet::RoutingAck => Ok(()),
             _ => Err(Error::UnexpectedReply),
@@ -317,8 +302,8 @@ pub mod drtio {
         }
     }
 
-    async fn process_unsolicited_aux(aux_mutex: &Mutex<bool>, linkno: u8, routing_table: &RoutingTable) {
-        let _lock = aux_mutex.async_lock().await;
+    async fn process_unsolicited_aux(linkno: u8, routing_table: &RoutingTable) {
+        let _lock = AUX_MUTEX.async_lock().await;
         match drtioaux_async::recv(linkno).await {
             Ok(Some(packet)) => {
                 if let Some(packet) = process_async_packets(linkno, routing_table, packet).await {
@@ -374,7 +359,6 @@ pub mod drtio {
     }
 
     async fn destination_survey(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         up_links: &[bool],
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
@@ -388,7 +372,6 @@ pub mod drtio {
                 if destination_up(up_destinations, destination).await {
                     if up_links[linkno as usize] {
                         let reply = aux_transact(
-                            aux_mutex,
                             linkno,
                             routing_table,
                             &Packet::DestinationStatusRequest {
@@ -399,8 +382,8 @@ pub mod drtio {
                         match reply {
                             Ok(Packet::DestinationDownReply) => {
                                 destination_set_up(routing_table, up_destinations, destination, false).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, destination, false).await;
-                                subkernel::destination_changed(aux_mutex, routing_table, destination, false).await;
+                                remote_dma::destination_changed(routing_table, destination, false).await;
+                                subkernel::destination_changed(routing_table, destination, false).await;
                             }
                             Ok(Packet::DestinationOkReply) => (),
                             Ok(Packet::DestinationSequenceErrorReply { channel }) => {
@@ -438,13 +421,12 @@ pub mod drtio {
                         }
                     } else {
                         destination_set_up(routing_table, up_destinations, destination, false).await;
-                        remote_dma::destination_changed(aux_mutex, routing_table, destination, false).await;
-                        subkernel::destination_changed(aux_mutex, routing_table, destination, false).await;
+                        remote_dma::destination_changed(routing_table, destination, false).await;
+                        subkernel::destination_changed(routing_table, destination, false).await;
                     }
                 } else {
                     if up_links[linkno as usize] {
                         let reply = aux_transact(
-                            aux_mutex,
                             linkno,
                             routing_table,
                             &Packet::DestinationStatusRequest {
@@ -457,8 +439,8 @@ pub mod drtio {
                             Ok(Packet::DestinationOkReply) => {
                                 destination_set_up(routing_table, up_destinations, destination, true).await;
                                 init_buffer_space(destination as u8, linkno).await;
-                                remote_dma::destination_changed(aux_mutex, routing_table, destination, true).await;
-                                subkernel::destination_changed(aux_mutex, routing_table, destination, true).await;
+                                remote_dma::destination_changed(routing_table, destination, true).await;
+                                subkernel::destination_changed(routing_table, destination, true).await;
                             }
                             Ok(packet) => error!("[DEST#{}] received unexpected aux packet: {:?}", destination, packet),
                             Err(e) => error!("[DEST#{}] communication failed ({})", destination, e),
@@ -470,7 +452,6 @@ pub mod drtio {
     }
 
     pub async fn link_task(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     ) {
@@ -485,7 +466,7 @@ pub mod drtio {
                 if up_links[linkno as usize] {
                     /* link was previously up */
                     if link_rx_up(linkno).await {
-                        process_unsolicited_aux(aux_mutex, linkno, routing_table).await;
+                        process_unsolicited_aux(linkno, routing_table).await;
                         process_local_errors(linkno).await;
                     } else {
                         info!("[LINK#{}] link is down", linkno);
@@ -514,17 +495,17 @@ pub mod drtio {
 
                     if link_rx_up(linkno).await {
                         info!("[LINK#{}] link RX became up, pinging", linkno);
-                        let ping_count = ping_remote(aux_mutex, linkno, routing_table).await;
+                        let ping_count = ping_remote(linkno, routing_table).await;
                         if ping_count > 0 {
                             info!("[LINK#{}] remote replied after {} packets", linkno, ping_count);
                             up_links[linkno as usize] = true;
-                            if let Err(e) = sync_tsc(aux_mutex, linkno).await {
+                            if let Err(e) = sync_tsc(linkno).await {
                                 error!("[LINK#{}] failed to sync TSC ({})", linkno, e);
                             }
-                            if let Err(e) = load_routing_table(aux_mutex, linkno, routing_table).await {
+                            if let Err(e) = load_routing_table(linkno, routing_table).await {
                                 error!("[LINK#{}] failed to load routing table ({})", linkno, e);
                             }
-                            if let Err(e) = set_rank(aux_mutex, linkno, 1 as u8, routing_table).await {
+                            if let Err(e) = set_rank(linkno, 1 as u8, routing_table).await {
                                 error!("[LINK#{}] failed to set rank ({})", linkno, e);
                             }
                             info!("[LINK#{}] link initialization completed", linkno);
@@ -534,12 +515,12 @@ pub mod drtio {
                     }
                 }
             }
-            destination_survey(aux_mutex, routing_table, &up_links, up_destinations).await;
+            destination_survey(routing_table, &up_links, up_destinations).await;
             timer::async_delay_ms(200).await;
         }
     }
 
-    pub async fn reset(aux_mutex: &Rc<Mutex<bool>>, routing_table: &RoutingTable) {
+    pub async fn reset(routing_table: &RoutingTable) {
         for linkno in 0..csr::DRTIO.len() {
             unsafe {
                 (csr::DRTIO[linkno].reset_write)(1);
@@ -555,7 +536,7 @@ pub mod drtio {
         for linkno in 0..csr::DRTIO.len() {
             let linkno = linkno as u8;
             if link_rx_up(linkno).await {
-                let reply = aux_transact(&aux_mutex, linkno, routing_table, &Packet::ResetRequest).await;
+                let reply = aux_transact(linkno, routing_table, &Packet::ResetRequest).await;
                 match reply {
                     Ok(Packet::ResetAck) => (),
                     Ok(_) => error!("[LINK#{}] reset failed, received unexpected aux packet", linkno),
@@ -567,7 +548,6 @@ pub mod drtio {
 
     pub async fn partition_data<PacketF, HandlerF>(
         linkno: u8,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         data: &[u8],
         packet_f: PacketF,
@@ -591,14 +571,13 @@ pub mod drtio {
             i += len;
             let status = PayloadStatus::from_status(first, last);
             let packet = packet_f(&slice, status, len);
-            let reply = aux_transact(aux_mutex, linkno, routing_table, &packet).await?;
+            let reply = aux_transact(linkno, routing_table, &packet).await?;
             reply_handler_f(&reply)?;
         }
         Ok(())
     }
 
     pub async fn ddma_upload_trace(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         id: u32,
         destination: u8,
@@ -608,7 +587,6 @@ pub mod drtio {
         let master_destination = get_master_destination(routing_table);
         partition_data(
             linkno,
-            aux_mutex,
             routing_table,
             trace,
             |slice, status, len| Packet::DmaAddTraceRequest {
@@ -648,16 +626,10 @@ pub mod drtio {
         .await
     }
 
-    pub async fn ddma_send_erase(
-        aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &RoutingTable,
-        id: u32,
-        destination: u8,
-    ) -> Result<(), Error> {
+    pub async fn ddma_send_erase(routing_table: &RoutingTable, id: u32, destination: u8) -> Result<(), Error> {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let master_destination = get_master_destination(routing_table);
         let reply = aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::DmaRemoveTraceRequest {
@@ -693,7 +665,6 @@ pub mod drtio {
     }
 
     pub async fn ddma_send_playback(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         id: u32,
         destination: u8,
@@ -702,7 +673,6 @@ pub mod drtio {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let master_destination = get_master_destination(routing_table);
         let reply = aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::DmaPlaybackRequest {
@@ -738,14 +708,9 @@ pub mod drtio {
         }
     }
 
-    async fn analyzer_get_data(
-        aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &RoutingTable,
-        destination: u8,
-    ) -> Result<RemoteBuffer, Error> {
+    async fn analyzer_get_data(routing_table: &RoutingTable, destination: u8) -> Result<RemoteBuffer, Error> {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let reply = aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::AnalyzerHeaderRequest {
@@ -767,7 +732,6 @@ pub mod drtio {
             let mut last_packet = false;
             while !last_packet {
                 let reply = aux_transact(
-                    aux_mutex,
                     linkno,
                     routing_table,
                     &Packet::AnalyzerDataRequest {
@@ -794,21 +758,19 @@ pub mod drtio {
     }
 
     pub async fn analyzer_query(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     ) -> Result<Vec<RemoteBuffer>, Error> {
         let mut remote_buffers: Vec<RemoteBuffer> = Vec::new();
         for i in 1..drtio_routing::DEST_COUNT {
             if destination_up(up_destinations, i as u8).await {
-                remote_buffers.push(analyzer_get_data(aux_mutex, routing_table, i as u8).await?);
+                remote_buffers.push(analyzer_get_data(routing_table, i as u8).await?);
             }
         }
         Ok(remote_buffers)
     }
 
     pub async fn subkernel_upload(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         id: u32,
         destination: u8,
@@ -817,7 +779,6 @@ pub mod drtio {
         let linkno = routing_table.0[destination as usize][0] - 1;
         partition_data(
             linkno,
-            aux_mutex,
             routing_table,
             data,
             |slice, status, len| Packet::SubkernelAddDataRequest {
@@ -837,7 +798,6 @@ pub mod drtio {
     }
 
     pub async fn subkernel_load(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         id: u32,
         destination: u8,
@@ -847,7 +807,6 @@ pub mod drtio {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let master_destination = get_master_destination(routing_table);
         let reply = aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::SubkernelLoadRunRequest {
@@ -884,17 +843,12 @@ pub mod drtio {
         }
     }
 
-    pub async fn subkernel_retrieve_exception(
-        aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &RoutingTable,
-        destination: u8,
-    ) -> Result<Vec<u8>, Error> {
+    pub async fn subkernel_retrieve_exception(routing_table: &RoutingTable, destination: u8) -> Result<Vec<u8>, Error> {
         let linkno = routing_table.0[destination as usize][0] - 1;
         let mut remote_data: Vec<u8> = Vec::new();
         let master_destination = get_master_destination(routing_table);
         loop {
             let reply = aux_transact(
-                aux_mutex,
                 linkno,
                 routing_table,
                 &Packet::SubkernelExceptionRequest {
@@ -925,7 +879,6 @@ pub mod drtio {
     }
 
     pub async fn subkernel_send_message(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         id: u32,
         destination: u8,
@@ -935,7 +888,6 @@ pub mod drtio {
         let master_destination = get_master_destination(routing_table);
         partition_data(
             linkno,
-            aux_mutex,
             routing_table,
             message,
             |slice, status, len| Packet::SubkernelMessage {
@@ -955,7 +907,6 @@ pub mod drtio {
     }
 
     pub async fn i2c_send_basic(
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         request: &KernelMessage,
         busno: u32,
@@ -975,24 +926,18 @@ pub mod drtio {
             _ => unreachable!(),
         };
         let linkno = routing_table.0[destination as usize][0] - 1;
-        let reply = aux_transact(aux_mutex, linkno, routing_table, &packet).await?;
+        let reply = aux_transact(linkno, routing_table, &packet).await?;
         match reply {
             Packet::I2cBasicReply { succeeded } => Ok(succeeded),
             _ => Err(Error::UnexpectedReply),
         }
     }
 
-    pub async fn i2c_send_write(
-        aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &RoutingTable,
-        busno: u32,
-        data: u8,
-    ) -> Result<(bool, bool), Error> {
+    pub async fn i2c_send_write(routing_table: &RoutingTable, busno: u32, data: u8) -> Result<(bool, bool), Error> {
         let destination = (busno >> 16) as u8;
         let busno = busno as u8;
         let linkno = routing_table.0[destination as usize][0] - 1;
         let reply = aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::I2cWriteRequest {
@@ -1008,17 +953,11 @@ pub mod drtio {
         }
     }
 
-    pub async fn i2c_send_read(
-        aux_mutex: &Rc<Mutex<bool>>,
-        routing_table: &RoutingTable,
-        busno: u32,
-        ack: bool,
-    ) -> Result<(bool, u8), Error> {
+    pub async fn i2c_send_read(routing_table: &RoutingTable, busno: u32, ack: bool) -> Result<(bool, u8), Error> {
         let destination = (busno >> 16) as u8;
         let busno = busno as u8;
         let linkno = routing_table.0[destination as usize][0] - 1;
         let reply = aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::I2cReadRequest {
@@ -1040,14 +979,13 @@ pub mod drtio {
     use super::*;
 
     pub fn startup(
-        _aux_mutex: &Rc<Mutex<bool>>,
         _routing_table: &Rc<RefCell<RoutingTable>>,
         _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
     ) {
     }
 
     #[allow(dead_code)]
-    pub fn reset(_aux_mutex: Rc<Mutex<bool>>, _routing_table: &RoutingTable) {}
+    pub fn reset(_routing_table: &RoutingTable) {}
 }
 
 fn toggle_sed_spread(val: u8) {
@@ -1073,12 +1011,11 @@ fn setup_sed_spread() {
 }
 
 pub fn startup(
-    aux_mutex: &Rc<Mutex<bool>>,
     routing_table: &Rc<RefCell<RoutingTable>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
 ) {
     setup_sed_spread();
-    drtio::startup(aux_mutex, routing_table, up_destinations);
+    drtio::startup(routing_table, up_destinations);
     unsafe {
         csr::rtio_core::reset_phy_write(1);
     }

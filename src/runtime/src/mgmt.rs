@@ -9,7 +9,6 @@ use libboard_artiq::{drtio_routing::RoutingTable,
                      logger::{BufferLogger, LogBufferRef}};
 use libboard_zynq::smoltcp;
 use libconfig;
-use libcortex_a9::mutex::Mutex;
 use log::{self, debug, error, info, warn};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -144,7 +143,6 @@ mod remote_coremgmt {
 
     pub async fn get_log(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
@@ -152,7 +150,6 @@ mod remote_coremgmt {
         let mut buffer = Vec::new();
         loop {
             let reply = drtio::aux_transact(
-                aux_mutex,
                 linkno,
                 routing_table,
                 &Packet::CoreMgmtGetLogRequest {
@@ -187,18 +184,11 @@ mod remote_coremgmt {
 
     pub async fn clear_log(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
-        let reply = drtio::aux_transact(
-            aux_mutex,
-            linkno,
-            routing_table,
-            &Packet::CoreMgmtClearLogRequest { destination },
-        )
-        .await;
+        let reply = drtio::aux_transact(linkno, routing_table, &Packet::CoreMgmtClearLogRequest { destination }).await;
 
         match reply {
             Ok(Packet::CoreMgmtReply { succeeded: true }) => {
@@ -220,7 +210,6 @@ mod remote_coremgmt {
 
     pub async fn pull_log(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
@@ -241,7 +230,6 @@ mod remote_coremgmt {
             }
 
             let reply = drtio::aux_transact(
-                aux_mutex,
                 linkno,
                 routing_table,
                 &Packet::CoreMgmtGetLogRequest {
@@ -276,14 +264,12 @@ mod remote_coremgmt {
 
     pub async fn set_log_filter(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
         level: log::LevelFilter,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtSetLogLevelRequest {
@@ -313,14 +299,12 @@ mod remote_coremgmt {
 
     pub async fn set_uart_log_filter(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
         level: log::LevelFilter,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtSetUartLogLevelRequest {
@@ -350,7 +334,6 @@ mod remote_coremgmt {
 
     pub async fn config_read(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
@@ -361,7 +344,6 @@ mod remote_coremgmt {
         config_key[..len].clone_from_slice(key.as_bytes());
 
         let mut reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtConfigReadRequest {
@@ -385,7 +367,6 @@ mod remote_coremgmt {
                     }
 
                     reply = drtio::aux_transact(
-                        aux_mutex,
                         linkno,
                         routing_table,
                         &Packet::CoreMgmtConfigReadContinue {
@@ -410,7 +391,6 @@ mod remote_coremgmt {
 
     pub async fn config_write(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
@@ -423,7 +403,6 @@ mod remote_coremgmt {
 
         match drtio::partition_data(
             linkno,
-            aux_mutex,
             routing_table,
             &message,
             |slice, status, len: usize| Packet::CoreMgmtConfigWriteRequest {
@@ -456,7 +435,6 @@ mod remote_coremgmt {
 
     pub async fn config_remove(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
@@ -467,7 +445,6 @@ mod remote_coremgmt {
         config_key[..len].clone_from_slice(key.as_bytes());
 
         let reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtConfigRemoveRequest {
@@ -498,13 +475,11 @@ mod remote_coremgmt {
 
     pub async fn config_erase(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtConfigEraseRequest {
@@ -533,13 +508,11 @@ mod remote_coremgmt {
 
     pub async fn reboot(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtRebootRequest {
@@ -568,13 +541,11 @@ mod remote_coremgmt {
 
     pub async fn debug_allocator(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
     ) -> Result<()> {
         let reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtAllocatorDebugRequest {
@@ -601,7 +572,6 @@ mod remote_coremgmt {
 
     pub async fn image_write(
         stream: &mut TcpStream,
-        aux_mutex: &Rc<Mutex<bool>>,
         routing_table: &RoutingTable,
         linkno: u8,
         destination: u8,
@@ -610,7 +580,6 @@ mod remote_coremgmt {
         let mut image = &image[..];
 
         let alloc_reply = drtio::aux_transact(
-            aux_mutex,
             linkno,
             routing_table,
             &Packet::CoreMgmtFlashRequest {
@@ -640,7 +609,6 @@ mod remote_coremgmt {
             let last = image.is_empty();
 
             let reply = drtio::aux_transact(
-                aux_mutex,
                 linkno,
                 routing_table,
                 &Packet::CoreMgmtFlashAddDataRequest {
@@ -836,13 +804,13 @@ mod local_coremgmt {
 
 #[cfg(has_drtio)]
 macro_rules! process {
-    ($stream: ident, $drtio_context:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
+    ($stream: ident, $routing_table:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
         if $destination == 0 {
             local_coremgmt::$func($stream, $($param, )*).await
-        } else if let Some(DrtioContext(ref aux_mutex, ref routing_table)) = $drtio_context {
+        } else if let Some(ref routing_table) = $routing_table {
             let routing_table = routing_table.borrow();
             let linkno = routing_table.0[$destination as usize][0] - 1 as u8;
-            remote_coremgmt::$func($stream, &aux_mutex, &routing_table, linkno, $destination, $($param, )*).await
+            remote_coremgmt::$func($stream, &routing_table, linkno, $destination, $($param, )*).await
         } else {
             error!("coremgmt-over-drtio not supported for panicked device, please reboot");
             write_i8($stream, Reply::Error as i8).await?;
@@ -853,19 +821,15 @@ macro_rules! process {
 
 #[cfg(not(has_drtio))]
 macro_rules! process {
-    ($stream: ident, $drtio_context:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
+    ($stream: ident, $routing_table:ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
         local_coremgmt::$func($stream, $($param, )*).await
     }}
 }
 
-#[allow(dead_code)]
-#[derive(Clone)]
-pub struct DrtioContext(pub Rc<Mutex<bool>>, pub Rc<RefCell<RoutingTable>>);
-
 async fn handle_connection(
     stream: &mut TcpStream,
     pull_id: Rc<RefCell<u32>>,
-    _drtio_context: Option<DrtioContext>,
+    _routing_table: Option<Rc<RefCell<RoutingTable>>>,
 ) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
@@ -881,20 +845,20 @@ async fn handle_connection(
         }
         let msg: Request = FromPrimitive::from_i8(msg?).ok_or(Error::UnrecognizedPacket)?;
         match msg {
-            Request::GetLog => process!(stream, _drtio_context, _destination, get_log),
-            Request::ClearLog => process!(stream, _drtio_context, _destination, clear_log),
-            Request::PullLog => process!(stream, _drtio_context, _destination, pull_log, &pull_id),
+            Request::GetLog => process!(stream, _routing_table, _destination, get_log),
+            Request::ClearLog => process!(stream, _routing_table, _destination, clear_log),
+            Request::PullLog => process!(stream, _routing_table, _destination, pull_log, &pull_id),
             Request::SetLogFilter => {
                 let lvl = read_log_level_filter(stream).await?;
-                process!(stream, _drtio_context, _destination, set_log_filter, lvl)
+                process!(stream, _routing_table, _destination, set_log_filter, lvl)
             }
             Request::SetUartLogFilter => {
                 let lvl = read_log_level_filter(stream).await?;
-                process!(stream, _drtio_context, _destination, set_uart_log_filter, lvl)
+                process!(stream, _routing_table, _destination, set_uart_log_filter, lvl)
             }
             Request::ConfigRead => {
                 let key = read_key(stream).await?;
-                process!(stream, _drtio_context, _destination, config_read, &key)
+                process!(stream, _routing_table, _destination, config_read, &key)
             }
             Request::ConfigWrite => {
                 let key = read_key(stream).await?;
@@ -905,20 +869,20 @@ async fn handle_connection(
                     buffer.set_len(len);
                 }
                 read_chunk(stream, &mut buffer).await?;
-                process!(stream, _drtio_context, _destination, config_write, &key, buffer)
+                process!(stream, _routing_table, _destination, config_write, &key, buffer)
             }
             Request::ConfigRemove => {
                 let key = read_key(stream).await?;
-                process!(stream, _drtio_context, _destination, config_remove, &key)
+                process!(stream, _routing_table, _destination, config_remove, &key)
             }
             Request::Reboot => {
-                process!(stream, _drtio_context, _destination, reboot)
+                process!(stream, _routing_table, _destination, reboot)
             }
             Request::ConfigErase => {
-                process!(stream, _drtio_context, _destination, config_erase)
+                process!(stream, _routing_table, _destination, config_erase)
             }
             Request::DebugAllocator => {
-                process!(stream, _drtio_context, _destination, debug_allocator)
+                process!(stream, _routing_table, _destination, debug_allocator)
             }
             Request::Flash => {
                 let len = read_i32(stream).await?;
@@ -931,22 +895,22 @@ async fn handle_connection(
                     buffer.set_len(len as usize);
                 }
                 read_chunk(stream, &mut buffer).await?;
-                process!(stream, _drtio_context, _destination, image_write, buffer)
+                process!(stream, _routing_table, _destination, image_write, buffer)
             }
         }?;
     }
 }
 
-pub fn start(drtio_context: Option<DrtioContext>) {
+pub fn start(routing_table: Option<Rc<RefCell<RoutingTable>>>) {
     task::spawn(async move {
         let pull_id = Rc::new(RefCell::new(0u32));
         loop {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
             let pull_id = pull_id.clone();
-            let drtio_context = drtio_context.clone();
+            let routing_table = routing_table.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id, drtio_context)
+                let _ = handle_connection(&mut stream, pull_id, routing_table)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;
