@@ -44,6 +44,7 @@ eem_iostandard_dict = {
     11: "LVDS",
 }
 
+DRTIO_EEM_PERIPHERALS = ["shuttler", "phaser_drtio"]
 
 def eem_iostandard(eem):
     return IOStandard(eem_iostandard_dict[eem])
@@ -273,7 +274,7 @@ class GenericMaster(SoCCore):
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
 
-        has_drtio_over_eem = any(peripheral["type"] == "shuttler" for peripheral in description["peripherals"])
+        has_drtio_over_eem = any(peripheral["type"] in DRTIO_EEM_PERIPHERALS for peripheral in description["peripherals"])
         self.acpki = acpki
 
         platform = kasli_soc.Platform()
@@ -497,7 +498,7 @@ class GenericSatellite(SoCCore):
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
 
-        has_drtio_over_eem = any(peripheral["type"] == "shuttler" for peripheral in description["peripherals"])
+        has_drtio_over_eem = any(peripheral["type"] in DRTIO_EEM_PERIPHERALS for peripheral in description["peripherals"])
         self.acpki = acpki
 
         platform = kasli_soc.Platform()
@@ -781,6 +782,10 @@ def main():
         cls = GenericSatellite
     else:
         raise ValueError("Invalid DRTIO role")
+
+    for peripheral in description["peripherals"]:
+        if peripheral["type"] in DRTIO_EEM_PERIPHERALS and description["drtio_role"] == "standalone":
+            raise ValueError("{} requires DRTIO, please switch role to master or satellite".format(peripheral["type"]))
 
     soc = cls(description, acpki=args.acpki)
     soc.finalize()
