@@ -14,6 +14,7 @@ use byteorder::NativeEndian;
 use io::{Cursor, ProtoRead};
 use libasync::block_async;
 use libconfig;
+use libcortex_a9::once_lock::OnceLock;
 use log::{error, warn};
 #[cfg(has_drtiosat)]
 pub use pl::csr::drtiosat as rtio_core;
@@ -107,7 +108,7 @@ pub async fn report_async_rtio_errors() {
     }
 }
 
-static mut RTIO_DEVICE_MAP: BTreeMap<u32, String> = BTreeMap::new();
+static RTIO_DEVICE_MAP: OnceLock<BTreeMap<u32, String>> = OnceLock::new();
 
 fn read_device_map() -> BTreeMap<u32, String> {
     let mut device_map: BTreeMap<u32, String> = BTreeMap::new();
@@ -138,16 +139,18 @@ fn read_device_map() -> BTreeMap<u32, String> {
 }
 
 pub fn resolve_channel_name(channel: u32) -> String {
-    unsafe {
-        match RTIO_DEVICE_MAP.get(&channel) {
-            Some(val) => val.clone(),
-            None => String::from("unknown"),
-        }
+    match RTIO_DEVICE_MAP
+        .get()
+        .expect("cannot get device map before it is set up")
+        .get(&channel)
+    {
+        Some(val) => val.clone(),
+        None => String::from("unknown"),
     }
 }
 
 pub fn setup_device_map() {
-    unsafe {
-        RTIO_DEVICE_MAP = read_device_map();
-    }
+    RTIO_DEVICE_MAP
+        .set(read_device_map())
+        .expect("device map can only be initialized once");
 }
