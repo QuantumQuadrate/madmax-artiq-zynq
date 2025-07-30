@@ -254,6 +254,18 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
                 fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
             }
         ),
+        api!(
+            bcmp,
+            extern "C" {
+                fn bcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
+            }
+        ),
+        api!(
+            strlen,
+            extern "C" {
+                fn strlen(s: *const core::ffi::c_char) -> usize;
+            }
+        ),
 
         // exceptions
         api!(_Unwind_Resume = unwind::_Unwind_Resume),
