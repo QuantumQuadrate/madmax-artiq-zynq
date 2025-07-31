@@ -23,6 +23,8 @@
         inherit pname version;
         sha256 = "sha256-4JLTP4uVwxcaL7NOV57+DFSwKQ3X+W/6onYkN2AdkKc=";
       };
+      pyproject = true;
+      build-system = [pkgs.python3Packages.setuptools];
     };
 
     artiq-netboot = pkgs.python3Packages.buildPythonPackage rec {
@@ -34,6 +36,8 @@
         rev = "04f69eb07df73abe4b89fde2c24084f7664f2104";
         sha256 = "0ql4fr8m8gpb2yql8aqsdqsssxb8zqd6l65kl1f6s9845zy7shs9";
       };
+      pyproject = true;
+      build-system = [pkgs.python3Packages.setuptools];
     };
 
     ramda = pkgs.python3Packages.buildPythonPackage {
@@ -46,6 +50,8 @@
         rev = "d315a9717ebd639366bf3fe26bad9e3d08ec3c49";
         sha256 = "sha256-bmSt/IHDnULsZjsC6edELnNH7LoJSVF4L4XhwBAXRkY=";
       };
+      pyproject = true;
+      build-system = [pkgs.python3Packages.setuptools];
 
       nativeBuildInputs = with pkgs.python3Packages; [ pbr ];
       propagatedBuildInputs = with pkgs.python3Packages; [ fastnumbers ];
@@ -69,8 +75,8 @@
         rev = "98649a92ed7d4e43f75231e6ef9753e1212fab41";
         sha256 = "sha256-0kEHK+l6gZW750tq89fHRxIh3Gnj5EP2GZX/neWaWzU=";
       };
-
-      format = "pyproject";
+      pyproject = true;
+      build-system = [pkgs.python3Packages.setuptools];
 
       propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
 
