@@ -1,8 +1,7 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 
 use libasync::task;
-use libboard_artiq::{drtio_routing::RoutingTable,
-                     drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus}};
+use libboard_artiq::drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus};
 use libboard_zynq::timer;
 use libcortex_a9::mutex::Mutex;
 use log::{error, warn};
@@ -72,9 +71,9 @@ pub async fn add_subkernel(id: u32, destination: u8, kernel: Vec<u8>) {
         .insert(id, Subkernel::new(destination, kernel));
 }
 
-pub async fn upload(routing_table: &RoutingTable, id: u32) -> Result<(), Error> {
+pub async fn upload(id: u32) -> Result<(), Error> {
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
-        drtio::subkernel_upload(routing_table, id, subkernel.destination, &subkernel.data).await?;
+        drtio::subkernel_upload(id, subkernel.destination, &subkernel.data).await?;
         subkernel.state = SubkernelState::Uploaded;
         Ok(())
     } else {
@@ -82,12 +81,12 @@ pub async fn upload(routing_table: &RoutingTable, id: u32) -> Result<(), Error> 
     }
 }
 
-pub async fn load(routing_table: &RoutingTable, id: u32, run: bool, timestamp: u64) -> Result<(), Error> {
+pub async fn load(id: u32, run: bool, timestamp: u64) -> Result<(), Error> {
     if let Some(subkernel) = SUBKERNELS.async_lock().await.get_mut(&id) {
         if subkernel.state != SubkernelState::Uploaded {
             return Err(Error::IncorrectState);
         }
-        drtio::subkernel_load(routing_table, id, subkernel.destination, run, timestamp).await?;
+        drtio::subkernel_load(id, subkernel.destination, run, timestamp).await?;
         if run {
             subkernel.state = SubkernelState::Running;
         }
@@ -118,12 +117,12 @@ pub async fn subkernel_finished(id: u32, with_exception: bool, exception_src: u8
     }
 }
 
-pub async fn destination_changed(routing_table: &RoutingTable, destination: u8, up: bool) {
+pub async fn destination_changed(destination: u8, up: bool) {
     let mut locked_subkernels = SUBKERNELS.async_lock().await;
     for (id, subkernel) in locked_subkernels.iter_mut() {
         if subkernel.destination == destination {
             if up {
-                match drtio::subkernel_upload(routing_table, *id, destination, &subkernel.data).await {
+                match drtio::subkernel_upload(*id, destination, &subkernel.data).await {
                     Ok(_) => subkernel.state = SubkernelState::Uploaded,
                     Err(e) => error!("Error adding subkernel on destination {}: {}", destination, e),
                 }
@@ -139,7 +138,7 @@ pub async fn destination_changed(routing_table: &RoutingTable, destination: u8, 
     }
 }
 
-pub async fn await_finish(routing_table: &RoutingTable, id: u32, timeout: i64) -> Result<SubkernelFinished, Error> {
+pub async fn await_finish(id: u32, timeout: i64) -> Result<SubkernelFinished, Error> {
     match SUBKERNELS.async_lock().await.get(&id).unwrap().state {
         SubkernelState::Running | SubkernelState::Finished { .. } => (),
         _ => return Err(Error::IncorrectState),
@@ -175,7 +174,7 @@ pub async fn await_finish(routing_table: &RoutingTable, id: u32, timeout: i64) -
                     id: id,
                     status: status,
                     exception: if let FinishStatus::Exception(dest) = status {
-                        Some(drtio::subkernel_retrieve_exception(routing_table, dest).await?)
+                        Some(drtio::subkernel_retrieve_exception(dest).await?)
                     } else {
                         None
                     },
@@ -282,11 +281,6 @@ pub async fn message_await(id: u32, timeout: i64) -> Result<Message, Error> {
     Err(Error::Timeout)
 }
 
-pub async fn message_send<'a>(
-    routing_table: &RoutingTable,
-    id: u32,
-    destination: u8,
-    message: Vec<u8>,
-) -> Result<(), Error> {
-    Ok(drtio::subkernel_send_message(routing_table, id, destination, &message).await?)
+pub async fn message_send<'a>(id: u32, destination: u8, message: Vec<u8>) -> Result<(), Error> {
+    Ok(drtio::subkernel_send_message(id, destination, &message).await?)
 }

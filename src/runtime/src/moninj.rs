@@ -1,15 +1,14 @@
-use alloc::{collections::BTreeMap, rc::Rc};
-use core::{cell::RefCell, fmt};
+use alloc::collections::BTreeMap;
+use core::fmt;
 
 use futures::{FutureExt, pin_mut, select_biased};
 use libasync::{smoltcp::TcpStream, task};
-use libboard_artiq::drtio_routing;
 use libboard_zynq::{smoltcp, timer};
 use log::{debug, info, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 
-use crate::proto_async::*;
+use crate::{comms::ROUTING_TABLE, proto_async::*};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -59,16 +58,9 @@ mod remote_moninj {
     use crate::rtio_mgt::{drtio,
                           drtio::{AUX_MUTEX, Error as DrtioError}};
 
-    pub async fn read_probe(
-        routing_table: &drtio_routing::RoutingTable,
-        linkno: u8,
-        destination: u8,
-        channel: i32,
-        probe: i8,
-    ) -> i64 {
+    pub async fn read_probe(linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
         let reply = drtio::aux_transact(
             linkno,
-            routing_table,
             &drtioaux_async::Packet::MonitorRequest {
                 destination: destination,
                 channel: channel as _,
@@ -87,14 +79,7 @@ mod remote_moninj {
         0
     }
 
-    pub async fn inject(
-        _routing_table: &drtio_routing::RoutingTable,
-        linkno: u8,
-        destination: u8,
-        channel: i32,
-        overrd: i8,
-        value: i8,
-    ) {
+    pub async fn inject(linkno: u8, destination: u8, channel: i32, overrd: i8, value: i8) {
         let _lock = AUX_MUTEX.async_lock().await;
         drtioaux_async::send(
             linkno,
@@ -109,16 +94,9 @@ mod remote_moninj {
         .unwrap();
     }
 
-    pub async fn read_injection_status(
-        routing_table: &drtio_routing::RoutingTable,
-        linkno: u8,
-        destination: u8,
-        channel: i32,
-        overrd: i8,
-    ) -> i8 {
+    pub async fn read_injection_status(linkno: u8, destination: u8, channel: i32, overrd: i8) -> i8 {
         let reply = drtio::aux_transact(
             linkno,
-            routing_table,
             &drtioaux_async::Packet::InjectionStatusRequest {
                 destination: destination,
                 channel: channel as _,
@@ -169,28 +147,28 @@ mod local_moninj {
 
 #[cfg(has_drtio)]
 macro_rules! dispatch {
-    ($routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
+    ($channel:expr, $func:ident $(, $param:expr)*) => {{
         let destination = ($channel >> 16) as u8;
         let channel = $channel;
-        let hop = $routing_table.0[destination as usize][0];
+        let hop = ROUTING_TABLE.get().unwrap().0[destination as usize][0];
         if hop == 0 {
             local_moninj::$func(channel.into(), $($param, )*)
         } else {
             let linkno = hop - 1 as u8;
-            remote_moninj::$func($routing_table, linkno, destination, channel, $($param, )*).await
+            remote_moninj::$func(linkno, destination, channel, $($param, )*).await
         }
     }}
 }
 
 #[cfg(not(has_drtio))]
 macro_rules! dispatch {
-    ($routing_table:ident, $channel:expr, $func:ident $(, $param:expr)*) => {{
+    ($channel:expr, $func:ident $(, $param:expr)*) => {{
         let channel = $channel as u16;
         local_moninj::$func(channel.into(), $($param, )*)
     }}
 }
 
-async fn handle_connection(stream: &TcpStream, _routing_table: &drtio_routing::RoutingTable) -> Result<()> {
+async fn handle_connection(stream: &TcpStream) -> Result<()> {
     if !expect(&stream, b"ARTIQ moninj\n").await? {
         return Err(Error::UnexpectedPattern);
     }
@@ -238,13 +216,13 @@ async fn handle_connection(stream: &TcpStream, _routing_table: &drtio_routing::R
                         let channel = read_i32(&stream).await?;
                         let overrd = read_i8(&stream).await?;
                         let value = read_i8(&stream).await?;
-                        dispatch!(_routing_table, channel, inject, overrd, value);
+                        dispatch!(channel, inject, overrd, value);
                         debug!("INJECT channel {}, overrd {}, value {}", channel, overrd, value);
                     },
                     HostMessage::GetInjectionStatus => {
                         let channel = read_i32(&stream).await?;
                         let overrd = read_i8(&stream).await?;
-                        let value = dispatch!(_routing_table, channel, read_injection_status, overrd);
+                        let value = dispatch!(channel, read_injection_status, overrd);
                         write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
                         write_i8(&stream, overrd).await?;
@@ -254,7 +232,7 @@ async fn handle_connection(stream: &TcpStream, _routing_table: &drtio_routing::R
             },
             _ = timeout_f => {
                 for (&(channel, probe), previous) in probe_watch_list.iter_mut() {
-                    let current = dispatch!(_routing_table, channel, read_probe, probe);
+                    let current = dispatch!(channel, read_probe, probe);
                     if previous.is_none() || previous.unwrap() != current {
                         write_i8(&stream, DeviceMessage::MonitorStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
@@ -264,7 +242,7 @@ async fn handle_connection(stream: &TcpStream, _routing_table: &drtio_routing::R
                     }
                 }
                 for (&(channel, overrd), previous) in inject_watch_list.iter_mut() {
-                    let current = dispatch!(_routing_table, channel, read_injection_status, overrd);
+                    let current = dispatch!(channel, read_injection_status, overrd);
                     if previous.is_none() || previous.unwrap() != current {
                         write_i8(&stream, DeviceMessage::InjectionStatus.to_i8().unwrap()).await?;
                         write_i32(&stream, channel).await?;
@@ -279,16 +257,13 @@ async fn handle_connection(stream: &TcpStream, _routing_table: &drtio_routing::R
     }
 }
 
-pub fn start(routing_table: &Rc<RefCell<drtio_routing::RoutingTable>>) {
-    let routing_table = routing_table.clone();
+pub fn start() {
     task::spawn(async move {
         loop {
-            let routing_table = routing_table.clone();
             let stream = TcpStream::accept(1383, 2048, 2048).await.unwrap();
             task::spawn(async move {
                 info!("received connection");
-                let routing_table = routing_table.borrow();
-                let result = handle_connection(&stream, &routing_table).await;
+                let result = handle_connection(&stream).await;
                 match result {
                     Err(Error::NetworkError(smoltcp::Error::Finished)) => info!("peer closed connection"),
                     Err(error) => warn!("connection terminated: {}", error),

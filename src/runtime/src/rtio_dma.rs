@@ -5,7 +5,6 @@ use core::mem;
 use ksupport::kernel::DmaRecorder;
 #[cfg(has_drtio)]
 use libasync::task;
-use libboard_artiq::drtio_routing::RoutingTable;
 use libcortex_a9::{cache::dcci_slice, mutex::Mutex};
 
 const ALIGNMENT: usize = 16 * 8;
@@ -105,11 +104,11 @@ pub mod remote_dma {
             Ok(playback_state)
         }
 
-        pub async fn upload_traces(&mut self, routing_table: &RoutingTable) {
+        pub async fn upload_traces(&mut self) {
             let mut lock = self.traces.async_lock().await;
             let trace_iter = lock.iter_mut();
             for (destination, trace) in trace_iter {
-                match drtio::ddma_upload_trace(routing_table, self.id, *destination, trace.get_trace()).await {
+                match drtio::ddma_upload_trace(self.id, *destination, trace.get_trace()).await {
                     Ok(_) => trace.state = RemoteState::Loaded,
                     Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e),
                 }
@@ -117,11 +116,11 @@ pub mod remote_dma {
             *(self.done_count.async_lock().await) = 0;
         }
 
-        pub async fn erase(&mut self, routing_table: &RoutingTable) {
+        pub async fn erase(&mut self) {
             let lock = self.traces.async_lock().await;
             let trace_iter = lock.keys();
             for destination in trace_iter {
-                match drtio::ddma_send_erase(routing_table, self.id, *destination).await {
+                match drtio::ddma_send_erase(self.id, *destination).await {
                     Ok(_) => (),
                     Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e),
                 }
@@ -139,7 +138,7 @@ pub mod remote_dma {
             *(self.done_count.async_lock().await) += 1;
         }
 
-        pub async fn playback(&self, routing_table: &RoutingTable, timestamp: u64) {
+        pub async fn playback(&self, timestamp: u64) {
             let mut dest_list: Vec<u8> = Vec::new();
             {
                 let lock = self.traces.async_lock().await;
@@ -155,18 +154,18 @@ pub mod remote_dma {
             // mutex lock must be dropped before sending a playback request to avoid a deadlock,
             // if PlaybackStatus is sent from another satellite and the state must be updated.
             for destination in dest_list {
-                match drtio::ddma_send_playback(routing_table, self.id, destination, timestamp).await {
+                match drtio::ddma_send_playback(self.id, destination, timestamp).await {
                     Ok(_) => (),
                     Err(e) => error!("Error during remote DMA playback: {}", e),
                 }
             }
         }
 
-        pub async fn destination_changed(&mut self, routing_table: &RoutingTable, destination: u8, up: bool) {
+        pub async fn destination_changed(&mut self, destination: u8, up: bool) {
             // update state of the destination, resend traces if it's up
             if let Some(trace) = self.traces.async_lock().await.get_mut(&destination) {
                 if up {
-                    match drtio::ddma_upload_trace(routing_table, self.id, destination, trace.get_trace()).await {
+                    match drtio::ddma_upload_trace(self.id, destination, trace.get_trace()).await {
                         Ok(_) => trace.state = RemoteState::Loaded,
                         Err(e) => error!("Error adding DMA trace on destination {}: {}", destination, e),
                     }
@@ -192,22 +191,22 @@ pub mod remote_dma {
         trace_set.await_done(timeout).await
     }
 
-    pub async fn erase(routing_table: &RoutingTable, id: u32) {
+    pub async fn erase(id: u32) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
-        trace_set.erase(routing_table).await;
+        trace_set.erase().await;
         unsafe {
             TRACES.remove(&id);
         }
     }
 
-    pub async fn upload_traces(routing_table: &RoutingTable, id: u32) {
+    pub async fn upload_traces(id: u32) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
-        trace_set.upload_traces(routing_table).await;
+        trace_set.upload_traces().await;
     }
 
-    pub async fn playback(routing_table: &RoutingTable, id: u32, timestamp: u64) {
+    pub async fn playback(id: u32, timestamp: u64) {
         let trace_set = unsafe { TRACES.get_mut(&id).unwrap() };
-        trace_set.playback(routing_table, timestamp).await;
+        trace_set.playback(timestamp).await;
     }
 
     pub async fn playback_done(id: u32, destination: u8, error: u8, channel: u32, timestamp: u64) {
@@ -215,10 +214,10 @@ pub mod remote_dma {
         trace_set.playback_done(destination, error, channel, timestamp).await;
     }
 
-    pub async fn destination_changed(routing_table: &RoutingTable, destination: u8, up: bool) {
+    pub async fn destination_changed(destination: u8, up: bool) {
         let trace_iter = unsafe { TRACES.values_mut() };
         for trace_set in trace_iter {
-            trace_set.destination_changed(routing_table, destination, up).await;
+            trace_set.destination_changed(destination, up).await;
         }
     }
 
@@ -228,7 +227,7 @@ pub mod remote_dma {
     }
 }
 
-pub async fn put_record(_routing_table: &RoutingTable, mut recorder: DmaRecorder) -> u32 {
+pub async fn put_record(mut recorder: DmaRecorder) -> u32 {
     #[cfg(has_drtio)]
     let mut remote_traces: BTreeMap<u8, Vec<u8>> = BTreeMap::new();
 
@@ -277,7 +276,7 @@ pub async fn put_record(_routing_table: &RoutingTable, mut recorder: DmaRecorder
     #[cfg(has_drtio)]
     {
         if let Some((old_id, _v, _d)) = _old_record {
-            remote_dma::erase(_routing_table, old_id).await;
+            remote_dma::erase(old_id).await;
         }
         remote_dma::add_traces(ptr, remote_traces);
     }
@@ -285,11 +284,11 @@ pub async fn put_record(_routing_table: &RoutingTable, mut recorder: DmaRecorder
     ptr
 }
 
-pub async fn erase(name: String, _routing_table: &RoutingTable) {
+pub async fn erase(name: String) {
     let _entry = DMA_RECORD_STORE.lock().remove(&name);
     #[cfg(has_drtio)]
     if let Some((id, _v, _d)) = _entry {
-        remote_dma::erase(_routing_table, id).await;
+        remote_dma::erase(id).await;
     }
 }
 

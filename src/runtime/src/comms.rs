@@ -14,7 +14,7 @@ use ksupport::rpc;
 use ksupport::{kernel, resolve_channel_name};
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
-use libboard_artiq::drtio_routing;
+use libboard_artiq::drtio_routing::{self, RoutingTable};
 #[cfg(has_drtio)]
 use libboard_artiq::drtioaux::Packet;
 #[cfg(feature = "target_kasli_soc")]
@@ -27,6 +27,7 @@ use libboard_zynq::{self as zynq,
                     timer};
 use libconfig::{self, net_settings};
 use libcortex_a9::{mutex::Mutex,
+                   once_lock::OnceLock,
                    semaphore::Semaphore,
                    sync_channel::{Receiver, Sender}};
 use log::{error, info, warn};
@@ -118,6 +119,8 @@ static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new
 
 pub static RESTART_IDLE: Semaphore = Semaphore::new(1, 1);
 
+pub static ROUTING_TABLE: OnceLock<RoutingTable> = OnceLock::new();
+
 async fn write_header(stream: &TcpStream, reply: Reply) -> Result<()> {
     stream
         .send_slice(&[0x5a, 0x5a, 0x5a, 0x5a, reply.to_u8().unwrap()])
@@ -194,7 +197,6 @@ async fn handle_run_kernel(
     stream: Option<&TcpStream>,
     control: &Rc<RefCell<kernel::Control>>,
     _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-    routing_table: &drtio_routing::RoutingTable,
 ) -> Result<()> {
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
@@ -357,13 +359,13 @@ async fn handle_run_kernel(
                     .await;
             }
             kernel::Message::DmaPutRequest(recorder) => {
-                let _id = rtio_dma::put_record(routing_table, recorder).await;
+                let _id = rtio_dma::put_record(recorder).await;
                 #[cfg(has_drtio)]
-                rtio_dma::remote_dma::upload_traces(routing_table, _id).await;
+                rtio_dma::remote_dma::upload_traces(_id).await;
             }
             kernel::Message::DmaEraseRequest(name) => {
                 // prevent possible OOM when we have large DMA record replacement.
-                rtio_dma::erase(name, routing_table).await;
+                rtio_dma::erase(name).await;
             }
             kernel::Message::DmaGetRequest(name) => {
                 let result = rtio_dma::retrieve(name).await;
@@ -375,7 +377,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::DmaStartRemoteRequest { id, timestamp } => {
-                rtio_dma::remote_dma::playback(routing_table, id as u32, timestamp as u64).await;
+                rtio_dma::remote_dma::playback(id as u32, timestamp as u64).await;
             }
             #[cfg(has_drtio)]
             kernel::Message::DmaAwaitRemoteRequest(id) => {
@@ -405,7 +407,7 @@ async fn handle_run_kernel(
             | kernel::Message::I2cRestartRequest(busno)
             | kernel::Message::I2cStopRequest(busno)
             | kernel::Message::I2cSwitchSelectRequest { busno, .. } => {
-                let result = rtio_mgt::drtio::i2c_send_basic(routing_table, &reply, busno).await;
+                let result = rtio_mgt::drtio::i2c_send_basic(&reply, busno).await;
                 let reply = match result {
                     Ok(succeeded) => kernel::Message::I2cBasicReply(succeeded),
                     Err(_) => kernel::Message::I2cBasicReply(false),
@@ -414,7 +416,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::I2cWriteRequest { busno, data } => {
-                let result = rtio_mgt::drtio::i2c_send_write(routing_table, busno, data).await;
+                let result = rtio_mgt::drtio::i2c_send_write(busno, data).await;
                 let reply = match result {
                     Ok((succeeded, ack)) => kernel::Message::I2cWriteReply { succeeded, ack },
                     Err(_) => kernel::Message::I2cWriteReply {
@@ -426,7 +428,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::I2cReadRequest { busno, ack } => {
-                let result = rtio_mgt::drtio::i2c_send_read(routing_table, busno, ack).await;
+                let result = rtio_mgt::drtio::i2c_send_read(busno, ack).await;
                 let reply = match result {
                     Ok((succeeded, data)) => kernel::Message::I2cReadReply { succeeded, data },
                     Err(_) => kernel::Message::I2cReadReply {
@@ -443,7 +445,7 @@ async fn handle_run_kernel(
                 run,
                 timestamp,
             } => {
-                let succeeded = match subkernel::load(routing_table, id, run, timestamp).await {
+                let succeeded = match subkernel::load(id, run, timestamp).await {
                     Ok(()) => true,
                     Err(e) => {
                         error!("Error loading subkernel: {:?}", e);
@@ -458,7 +460,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelAwaitFinishRequest { id, timeout } => {
-                let res = subkernel::await_finish(routing_table, id, timeout).await;
+                let res = subkernel::await_finish(id, timeout).await;
                 let response = match res {
                     Ok(res) => {
                         if res.status == subkernel::FinishStatus::CommLost {
@@ -479,7 +481,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelMsgSend { id, destination, data } => {
-                let res = subkernel::message_send(routing_table, id, destination.unwrap(), data).await;
+                let res = subkernel::message_send(id, destination.unwrap(), data).await;
                 match res {
                     Ok(_) => (),
                     Err(e) => {
@@ -504,9 +506,7 @@ async fn handle_run_kernel(
                     Err(SubkernelError::CommLost) => kernel::Message::SubkernelError(kernel::SubkernelStatus::CommLost),
                     Err(SubkernelError::SubkernelException) => {
                         // just retrieve the exception
-                        let status = subkernel::await_finish(routing_table, id as u32, timeout)
-                            .await
-                            .unwrap();
+                        let status = subkernel::await_finish(id as u32, timeout).await.unwrap();
                         kernel::Message::SubkernelError(kernel::SubkernelStatus::Exception(status.exception.unwrap()))
                     }
                     Err(_) => kernel::Message::SubkernelError(kernel::SubkernelStatus::OtherError),
@@ -562,7 +562,7 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::RtioInitRequest => {
-                rtio_mgt::drtio::reset(routing_table).await;
+                rtio_mgt::drtio::reset().await;
                 control.borrow_mut().tx.async_send(kernel::Message::RtioInitReply).await;
             }
             #[cfg(has_drtio)]
@@ -571,11 +571,10 @@ async fn handle_run_kernel(
                 address,
                 length,
             } => {
-                let linkno = routing_table.0[destination as usize][0] - 1;
+                let linkno = ROUTING_TABLE.get().unwrap().0[destination as usize][0] - 1;
                 let reply = loop {
                     let result = rtio_mgt::drtio::aux_transact(
                         linkno,
-                        routing_table,
                         &Packet::CXPReadRequest {
                             destination,
                             address,
@@ -612,11 +611,10 @@ async fn handle_run_kernel(
                 address,
                 value,
             } => {
-                let linkno = routing_table.0[destination as usize][0] - 1;
+                let linkno = ROUTING_TABLE.get().unwrap().0[destination as usize][0] - 1;
                 let reply = loop {
                     let drtioaux_packet = rtio_mgt::drtio::aux_transact(
                         linkno,
-                        routing_table,
                         &Packet::CXPWrite32Request {
                             destination,
                             address,
@@ -653,10 +651,9 @@ async fn handle_run_kernel(
                 x1,
                 y1,
             } => {
-                let linkno = routing_table.0[destination as usize][0] - 1;
+                let linkno = ROUTING_TABLE.get().unwrap().0[destination as usize][0] - 1;
                 let drtioaux_packet = rtio_mgt::drtio::aux_transact(
                     linkno,
-                    routing_table,
                     &Packet::CXPROIViewerSetupRequest {
                         destination,
                         x0,
@@ -682,14 +679,10 @@ async fn handle_run_kernel(
             }
             #[cfg(has_drtio)]
             kernel::Message::CXPROIViewerDataRequest { destination } => {
-                let linkno = routing_table.0[destination as usize][0] - 1;
+                let linkno = ROUTING_TABLE.get().unwrap().0[destination as usize][0] - 1;
                 let reply = loop {
-                    let drtioaux_packet = rtio_mgt::drtio::aux_transact(
-                        linkno,
-                        routing_table,
-                        &Packet::CXPROIViewerDataRequest { destination },
-                    )
-                    .await;
+                    let drtioaux_packet =
+                        rtio_mgt::drtio::aux_transact(linkno, &Packet::CXPROIViewerDataRequest { destination }).await;
 
                     match drtioaux_packet {
                         Ok(Packet::CXPWaitReply) => {}
@@ -731,7 +724,6 @@ async fn handle_flash_kernel(
     buffer: &Vec<u8>,
     control: &Rc<RefCell<kernel::Control>>,
     _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-    _routing_table: &drtio_routing::RoutingTable,
 ) -> Result<()> {
     if buffer[0] == elf::ELFMAG0 && buffer[1] == elf::ELFMAG1 && buffer[2] == elf::ELFMAG2 && buffer[3] == elf::ELFMAG3
     {
@@ -757,7 +749,7 @@ async fn handle_flash_kernel(
                     if up {
                         let subkernel_lib = entry.data().to_vec();
                         subkernel::add_subkernel(sid, dest, subkernel_lib).await;
-                        match subkernel::upload(_routing_table, sid).await {
+                        match subkernel::upload(sid).await {
                             Ok(_) => (),
                             Err(_) => return Err(Error::UnexpectedPattern),
                         }
@@ -818,7 +810,6 @@ async fn handle_connection(
     stream: &mut TcpStream,
     control: Rc<RefCell<kernel::Control>>,
     up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
-    routing_table: &drtio_routing::RoutingTable,
 ) -> Result<()> {
     stream.set_ack_delay(None);
 
@@ -846,7 +837,7 @@ async fn handle_connection(
                 load_kernel(&buffer, &control, Some(stream)).await?;
             }
             Request::RunKernel => {
-                handle_run_kernel(Some(stream), &control, &up_destinations, routing_table).await?;
+                handle_run_kernel(Some(stream), &control, &up_destinations).await?;
             }
             Request::UploadSubkernel => {
                 #[cfg(has_drtio)]
@@ -855,7 +846,7 @@ async fn handle_connection(
                     let destination = read_i8(stream).await? as u8;
                     let buffer = read_bytes(stream, 1024 * 1024).await?;
                     subkernel::add_subkernel(id, destination, buffer).await;
-                    match subkernel::upload(routing_table, id).await {
+                    match subkernel::upload(id).await {
                         Ok(_) => write_header(stream, Reply::LoadCompleted).await?,
                         Err(_) => {
                             write_header(stream, Reply::LoadFailed).await?;
@@ -921,33 +912,34 @@ pub fn main() {
     Sockets::init(32);
 
     #[cfg(has_drtio)]
-    let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::config_routing_table(pl::csr::DRTIO.len())));
+    let res = ROUTING_TABLE.set(drtio_routing::config_routing_table(pl::csr::DRTIO.len()));
     #[cfg(not(has_drtio))]
-    let drtio_routing_table = Rc::new(RefCell::new(drtio_routing::RoutingTable::default_empty()));
+    let res = ROUTING_TABLE.set(drtio_routing::RoutingTable::default_empty());
+    res.expect("routing_table can only be initialized once");
+
     let up_destinations = Rc::new(RefCell::new([false; drtio_routing::DEST_COUNT]));
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
-    rtio_mgt::startup(&drtio_routing_table, &up_destinations);
+    rtio_mgt::startup(&up_destinations);
     ksupport::setup_device_map();
 
-    analyzer::start(&drtio_routing_table, &up_destinations);
-    moninj::start(&drtio_routing_table);
+    analyzer::start(&up_destinations);
+    moninj::start();
 
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
     if let Ok(buffer) = libconfig::read("startup_kernel") {
         info!("Loading startup kernel...");
-        let routing_table = drtio_routing_table.borrow();
-        if let Ok(()) = task::block_on(handle_flash_kernel(&buffer, &control, &up_destinations, &routing_table)) {
+        if let Ok(()) = task::block_on(handle_flash_kernel(&buffer, &control, &up_destinations)) {
             info!("Starting startup kernel...");
-            let _ = task::block_on(handle_run_kernel(None, &control, &up_destinations, &routing_table));
+            let _ = task::block_on(handle_run_kernel(None, &control, &up_destinations));
             info!("Startup kernel finished!");
         } else {
             error!("Error loading startup kernel!");
         }
     }
 
-    mgmt::start(Some(drtio_routing_table.clone()));
+    mgmt::start();
 
     task::spawn(async move {
         let connection = Rc::new(Semaphore::new(1, 1));
@@ -981,17 +973,15 @@ pub fn main() {
             let terminate = terminate.clone();
             let can_restart_idle = can_restart_idle.clone();
             let up_destinations = up_destinations.clone();
-            let routing_table = drtio_routing_table.clone();
 
             // we make sure the value of terminate is 0 before we start
             let _ = terminate.try_wait();
             let _ = can_restart_idle.try_wait();
             task::spawn(async move {
-                let routing_table = routing_table.borrow();
                 select_biased! {
                     _ = (async {
                         if let Some(stream) = &mut maybe_stream {
-                            let _ = handle_connection(stream, control.clone(), &up_destinations, &routing_table)
+                            let _ = handle_connection(stream, control.clone(), &up_destinations)
                                 .await
                                 .map_err(|e| warn!("connection terminated: {}", e));
                         }
@@ -1000,10 +990,10 @@ pub fn main() {
                             Some(buffer) => {
                                 loop {
                                     info!("loading idle kernel");
-                                    match handle_flash_kernel(&buffer, &control, &up_destinations, &routing_table).await {
+                                    match handle_flash_kernel(&buffer, &control, &up_destinations).await {
                                         Ok(_) => {
                                             info!("running idle kernel");
-                                            match handle_run_kernel(None, &control, &up_destinations, &routing_table).await {
+                                            match handle_run_kernel(None, &control, &up_destinations).await {
                                                 Ok(_) => info!("idle kernel finished"),
                                                 Err(_) => warn!("idle kernel running error")
                                             }
@@ -1086,7 +1076,7 @@ pub fn soft_panic_main() -> ! {
 
     Sockets::init(32);
 
-    mgmt::start(None);
+    mgmt::start();
 
     // getting eth settings disables the LED as it resets GPIO
     // need to re-enable it here
