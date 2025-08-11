@@ -1168,6 +1168,7 @@ async fn process_aux_packet<'a, 'b>(
 
             drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await?;
             info!("reboot imminent");
+            log::logger().flush();
             slcr::reboot();
 
             unreachable!();
@@ -1253,6 +1254,7 @@ async fn process_aux_packet<'a, 'b>(
 
             core_manager.write_image();
             info!("reboot imminent");
+            log::logger().flush();
             slcr::reboot();
             Ok(())
         }
