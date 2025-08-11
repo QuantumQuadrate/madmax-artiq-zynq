@@ -702,6 +702,7 @@ mod local_coremgmt {
 
     pub async fn reboot(stream: &mut TcpStream) -> Result<()> {
         info!("rebooting");
+        log::logger().flush();
         write_i8(stream, Reply::RebootImminent as i8).await?;
         stream.flush().await?;
         slcr::reboot();
