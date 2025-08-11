@@ -1,6 +1,6 @@
 use core::{cell::Cell, fmt::Write};
 
-use libboard_zynq::{println, timer};
+use libboard_zynq::{println, stdio, timer};
 use libcortex_a9::{mutex::{Mutex, MutexGuard},
                    once_lock::OnceLock};
 use log::{LevelFilter, Log};
@@ -126,5 +126,8 @@ impl Log for BufferLogger {
         }
     }
 
-    fn flush(&self) {}
+    fn flush(&self) {
+        let uart = stdio::get_uart();
+        while !uart.tx_idle() {}
+    }
 }
