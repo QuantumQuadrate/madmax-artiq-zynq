@@ -5,7 +5,8 @@ use byteorder::{ByteOrder, NativeEndian};
 use crc::crc32;
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
-use libboard_artiq::logger::{BufferLogger, LogBufferRef};
+use libboard_artiq::{drtio_routing,
+                     logger::{BufferLogger, LogBufferRef}};
 use libboard_zynq::smoltcp;
 use libconfig;
 use log::{self, debug, error, info, warn};
@@ -20,6 +21,7 @@ use crate::{comms::{RESTART_IDLE, ROUTING_TABLE},
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     NetworkError(smoltcp::Error),
+    OvertakeError,
     UnknownLogLevel(u8),
     UnexpectedPattern,
     UnrecognizedPacket,
@@ -33,6 +35,7 @@ impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             &Error::NetworkError(error) => write!(f, "network error: {}", error),
+            &Error::OvertakeError => write!(f, "connection overtaken"),
             &Error::UnknownLogLevel(lvl) => write!(f, "unknown log level {}", lvl),
             &Error::UnexpectedPattern => write!(f, "unexpected pattern"),
             &Error::UnrecognizedPacket => write!(f, "unrecognized packet"),
@@ -201,7 +204,7 @@ mod remote_coremgmt {
         stream: &mut TcpStream,
         linkno: u8,
         destination: u8,
-        pull_id: &Rc<RefCell<u32>>,
+        pull_id: &RefCell<u32>,
     ) -> Result<()> {
         let id = {
             let mut guard = pull_id.borrow_mut();
@@ -214,7 +217,7 @@ mod remote_coremgmt {
             if id != *pull_id.borrow() {
                 // another connection attempts to pull the log...
                 // abort this connection...
-                break;
+                return Err(Error::OvertakeError);
             }
 
             let reply = drtio::aux_transact(
@@ -246,7 +249,6 @@ mod remote_coremgmt {
             }
         }
 
-        Ok(())
     }
 
     pub async fn set_log_filter(
@@ -607,7 +609,7 @@ mod local_coremgmt {
         Ok(())
     }
 
-    pub async fn pull_log(stream: &mut TcpStream, pull_id: &Rc<RefCell<u32>>) -> Result<()> {
+    pub async fn pull_log(stream: &mut TcpStream, pull_id: &RefCell<u32>) -> Result<()> {
         let id = {
             let mut guard = pull_id.borrow_mut();
             *guard += 1;
@@ -618,7 +620,7 @@ mod local_coremgmt {
             if id != *pull_id.borrow() {
                 // another connection attempts to pull the log...
                 // abort this connection...
-                break;
+                return Err(Error::OvertakeError);
             }
             let bytes = buffer.extract().as_bytes().to_vec();
             buffer.clear();
@@ -632,7 +634,6 @@ mod local_coremgmt {
                 logger.set_buffer_log_level(log::LevelFilter::Trace);
             }
         }
-        Ok(())
     }
 
     pub async fn set_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
@@ -746,15 +747,12 @@ mod local_coremgmt {
 #[cfg(has_drtio)]
 macro_rules! process {
     ($stream: ident, $destination:expr, $func:ident $(, $param:expr)*) => {{
-        if $destination == 0 {
+        let hop = ROUTING_TABLE.get().unwrap().0[$destination as usize][0];
+        let linkno = hop - 1 as u8;
+        if hop == 0 {
             local_coremgmt::$func($stream, $($param, )*).await
-        } else if let Some(routing_table) = ROUTING_TABLE.get() {
-            let linkno = routing_table.0[$destination as usize][0] - 1 as u8;
-            remote_coremgmt::$func($stream, linkno, $destination, $($param, )*).await
         } else {
-            error!("coremgmt-over-drtio not supported for panicked device, please reboot");
-            write_i8($stream, Reply::Error as i8).await?;
-            Err(drtio::Error::LinkDown.into())
+            remote_coremgmt::$func($stream, linkno, $destination, $($param, )*).await
         }
     }}
 }
@@ -766,13 +764,15 @@ macro_rules! process {
     }}
 }
 
-async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) -> Result<()> {
+async fn handle_connection(stream: &mut TcpStream, pull_ids: Rc<[RefCell<u32>]>) -> Result<()> {
     if !expect(&stream, b"ARTIQ management\n").await? {
         return Err(Error::UnexpectedPattern);
     }
 
     let _destination: u8 = read_i8(stream).await? as u8;
     stream.send_slice("e".as_bytes()).await?;
+
+    let pull_id = &pull_ids[_destination as usize];
 
     loop {
         let msg = read_i8(stream).await;
@@ -783,7 +783,7 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) ->
         match msg {
             Request::GetLog => process!(stream, _destination, get_log),
             Request::ClearLog => process!(stream, _destination, clear_log),
-            Request::PullLog => process!(stream, _destination, pull_log, &pull_id),
+            Request::PullLog => process!(stream, _destination, pull_log, pull_id),
             Request::SetLogFilter => {
                 let lvl = read_log_level_filter(stream).await?;
                 process!(stream, _destination, set_log_filter, lvl)
@@ -839,13 +839,16 @@ async fn handle_connection(stream: &mut TcpStream, pull_id: Rc<RefCell<u32>>) ->
 
 pub fn start() {
     task::spawn(async move {
-        let pull_id = Rc::new(RefCell::new(0u32));
+        #[cfg(has_drtio)]
+        let pull_ids = Rc::new([const { RefCell::new(0u32) }; drtio_routing::DEST_COUNT]);
+        #[cfg(not(has_drtio))]
+        let pull_ids = Rc::new([RefCell::new(0u32); 1]);
         loop {
             let mut stream = TcpStream::accept(1380, 2048, 2048).await.unwrap();
-            let pull_id = pull_id.clone();
+            let pull_ids = pull_ids.clone();
             task::spawn(async move {
                 info!("received connection");
-                let _ = handle_connection(&mut stream, pull_id)
+                let _ = handle_connection(&mut stream, pull_ids)
                     .await
                     .map_err(|e| warn!("connection terminated: {:?}", e));
                 let _ = stream.flush().await;
