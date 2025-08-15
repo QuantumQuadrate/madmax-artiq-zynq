@@ -200,12 +200,7 @@ mod remote_coremgmt {
         }
     }
 
-    pub async fn pull_log(
-        stream: &mut TcpStream,
-        linkno: u8,
-        destination: u8,
-        pull_id: &RefCell<u32>,
-    ) -> Result<()> {
+    pub async fn pull_log(stream: &mut TcpStream, linkno: u8, destination: u8, pull_id: &RefCell<u32>) -> Result<()> {
         let id = {
             let mut guard = pull_id.borrow_mut();
             *guard += 1;
@@ -248,7 +243,6 @@ mod remote_coremgmt {
                 }
             }
         }
-
     }
 
     pub async fn set_log_filter(
