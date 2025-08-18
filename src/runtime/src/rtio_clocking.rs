@@ -1,11 +1,9 @@
-#[cfg(has_si5324)]
-use ksupport::kernel::i2c;
 #[cfg(not(feature = "target_ebaz4205"))]
 use libboard_artiq::pl;
 #[cfg(has_si549)]
 use libboard_artiq::si549;
 #[cfg(has_si5324)]
-use libboard_artiq::si5324;
+use libboard_artiq::{i2c, si5324};
 #[cfg(has_si5324)]
 use libboard_zynq::i2c::I2c;
 use libboard_zynq::timer;

@@ -57,6 +57,25 @@ pub mod cxp_packet;
 #[cfg(has_cxp_grabber)]
 pub mod cxp_phys;
 
+#[allow(static_mut_refs)]
+pub mod i2c {
+    use core::mem::MaybeUninit;
+
+    use libboard_zynq::i2c::I2c;
+
+    static mut I2C_BUS: MaybeUninit<I2c> = MaybeUninit::uninit();
+
+    pub fn init() {
+        let mut i2c = I2c::i2c0();
+        i2c.init().expect("I2C bus initialization failed");
+        unsafe { I2C_BUS.write(i2c) };
+    }
+
+    pub fn get_bus() -> &'static mut I2c {
+        unsafe { I2C_BUS.assume_init_mut() }
+    }
+}
+
 pub fn identifier_read(buf: &mut [u8]) -> &str {
     unsafe {
         pl::csr::identifier::address_write(0);

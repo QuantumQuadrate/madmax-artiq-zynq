@@ -235,8 +235,8 @@ pub fn main_core0() {
 
     ram::init_alloc_core0();
 
-    ksupport::kernel::i2c::init();
-    let i2c = ksupport::kernel::i2c::get_bus();
+    libboard_artiq::i2c::init();
+    let i2c = libboard_artiq::i2c::get_bus();
 
     #[cfg(feature = "target_kasli_soc")]
     let (mut io_expander0, mut io_expander1);
@@ -324,7 +324,7 @@ pub fn main_core0() {
     #[cfg(has_cxp_grabber)]
     {
         cxp_phys::setup();
-        task::spawn(cxp_grabber::thread(ksupport::kernel::i2c::get_bus()));
+        task::spawn(cxp_grabber::thread(libboard_artiq::i2c::get_bus()));
     }
 
     #[cfg(has_drtio_routing)]

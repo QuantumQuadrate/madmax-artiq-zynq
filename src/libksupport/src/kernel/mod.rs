@@ -93,35 +93,26 @@ pub enum Message {
     #[cfg(has_drtio)]
     UpDestinationsReply(bool),
 
-    #[cfg(has_drtio)]
     I2cStartRequest(u32),
-    #[cfg(has_drtio)]
     I2cRestartRequest(u32),
-    #[cfg(has_drtio)]
     I2cStopRequest(u32),
-    #[cfg(has_drtio)]
     I2cWriteRequest {
         busno: u32,
         data: u8,
     },
-    #[cfg(has_drtio)]
     I2cWriteReply {
         succeeded: bool,
         ack: bool,
     },
-    #[cfg(has_drtio)]
     I2cReadRequest {
         busno: u32,
         ack: bool,
     },
-    #[cfg(has_drtio)]
     I2cReadReply {
         succeeded: bool,
         data: u8,
     },
-    #[cfg(has_drtio)]
     I2cBasicReply(bool),
-    #[cfg(has_drtio)]
     I2cSwitchSelectRequest {
         busno: u32,
         address: u8,

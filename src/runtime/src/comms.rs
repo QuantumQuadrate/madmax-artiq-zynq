@@ -20,6 +20,7 @@ use libboard_artiq::drtioaux::Packet;
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{self as zynq,
+                    i2c::Error as I2cError,
                     smoltcp::{self,
                               iface::{EthernetInterfaceBuilder, NeighborCache},
                               time::{Duration, Instant},
@@ -198,6 +199,7 @@ async fn handle_run_kernel(
     control: &Rc<RefCell<kernel::Control>>,
     _up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>,
 ) -> Result<()> {
+    let i2c_bus = libboard_artiq::i2c::get_bus();
     control.borrow_mut().tx.async_send(kernel::Message::StartRequest).await;
     loop {
         let reply = control.borrow_mut().rx.async_recv().await;
@@ -402,41 +404,110 @@ async fn handle_run_kernel(
                 };
                 control.borrow_mut().tx.async_send(reply).await;
             }
-            #[cfg(has_drtio)]
             kernel::Message::I2cStartRequest(busno)
             | kernel::Message::I2cRestartRequest(busno)
             | kernel::Message::I2cStopRequest(busno)
             | kernel::Message::I2cSwitchSelectRequest { busno, .. } => {
-                let result = rtio_mgt::drtio::i2c_send_basic(&reply, busno).await;
-                let reply = match result {
-                    Ok(succeeded) => kernel::Message::I2cBasicReply(succeeded),
-                    Err(_) => kernel::Message::I2cBasicReply(false),
-                };
-                control.borrow_mut().tx.async_send(reply).await;
+                let _destination = (busno >> 16) as u8;
+                #[cfg(has_drtio)]
+                if _destination != 0 {
+                    let result = rtio_mgt::drtio::i2c_send_basic(&reply, busno).await;
+                    let reply = match result {
+                        Ok(succeeded) => kernel::Message::I2cBasicReply(succeeded),
+                        Err(_) => kernel::Message::I2cBasicReply(false),
+                    };
+                    control.borrow_mut().tx.async_send(reply).await;
+                    continue;
+                }
+                let mut succeeded = busno == 0;
+                if succeeded {
+                    succeeded = match &reply {
+                        kernel::Message::I2cStartRequest(_) => i2c_bus.start().is_ok(),
+                        kernel::Message::I2cRestartRequest(_) => i2c_bus.restart().is_ok(),
+                        kernel::Message::I2cStopRequest(_) => i2c_bus.stop().is_ok(),
+                        kernel::Message::I2cSwitchSelectRequest { address, mask, .. } => {
+                            let ch = match mask {
+                                //decode from mainline, PCA9548-centric API
+                                0x00 => Some(None),
+                                0x01 => Some(Some(0)),
+                                0x02 => Some(Some(1)),
+                                0x04 => Some(Some(2)),
+                                0x08 => Some(Some(3)),
+                                0x10 => Some(Some(4)),
+                                0x20 => Some(Some(5)),
+                                0x40 => Some(Some(6)),
+                                0x80 => Some(Some(7)),
+                                _ => None,
+                            };
+                            ch.is_some_and(|c| i2c_bus.pca954x_select(*address as u8, c).is_ok())
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::I2cBasicReply(succeeded))
+                    .await;
             }
-            #[cfg(has_drtio)]
             kernel::Message::I2cWriteRequest { busno, data } => {
-                let result = rtio_mgt::drtio::i2c_send_write(busno, data).await;
-                let reply = match result {
-                    Ok((succeeded, ack)) => kernel::Message::I2cWriteReply { succeeded, ack },
-                    Err(_) => kernel::Message::I2cWriteReply {
-                        succeeded: false,
-                        ack: false,
-                    },
-                };
-                control.borrow_mut().tx.async_send(reply).await;
+                let _destination = (busno >> 16) as u8;
+                #[cfg(has_drtio)]
+                if _destination != 0 {
+                    let result = rtio_mgt::drtio::i2c_send_write(busno, data).await;
+                    let reply = match result {
+                        Ok((succeeded, ack)) => kernel::Message::I2cWriteReply { succeeded, ack },
+                        Err(_) => kernel::Message::I2cWriteReply {
+                            succeeded: false,
+                            ack: false,
+                        },
+                    };
+                    control.borrow_mut().tx.async_send(reply).await;
+                    continue;
+                }
+                let mut succeeded = busno == 0;
+                let mut ack = false;
+                if succeeded {
+                    (succeeded, ack) = match i2c_bus.write(data as u8) {
+                        Ok(()) => (true, true),
+                        Err(I2cError::Nack) => (true, false),
+                        Err(_) => (false, false),
+                    }
+                }
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::I2cWriteReply { succeeded, ack })
+                    .await;
             }
-            #[cfg(has_drtio)]
             kernel::Message::I2cReadRequest { busno, ack } => {
-                let result = rtio_mgt::drtio::i2c_send_read(busno, ack).await;
-                let reply = match result {
-                    Ok((succeeded, data)) => kernel::Message::I2cReadReply { succeeded, data },
-                    Err(_) => kernel::Message::I2cReadReply {
-                        succeeded: false,
-                        data: 0xFF,
-                    },
-                };
-                control.borrow_mut().tx.async_send(reply).await;
+                let _destination = (busno >> 16) as u8;
+                #[cfg(has_drtio)]
+                if _destination != 0 {
+                    let result = rtio_mgt::drtio::i2c_send_read(busno, ack).await;
+                    let reply = match result {
+                        Ok((succeeded, data)) => kernel::Message::I2cReadReply { succeeded, data },
+                        Err(_) => kernel::Message::I2cReadReply {
+                            succeeded: false,
+                            data: 0xFF,
+                        },
+                    };
+                    control.borrow_mut().tx.async_send(reply).await;
+                    continue;
+                }
+                let mut succeeded = busno == 0;
+                let mut data = 0xFF;
+                if succeeded {
+                    (succeeded, data) = match i2c_bus.read(ack) {
+                        Ok(r) => (true, r),
+                        Err(_) => (false, 0xFF),
+                    }
+                }
+                control
+                    .borrow_mut()
+                    .tx
+                    .async_send(kernel::Message::I2cReadReply { succeeded, data })
+                    .await;
             }
             #[cfg(has_drtio)]
             kernel::Message::SubkernelLoadRunRequest {

@@ -20,7 +20,7 @@ use libboard_artiq::drtio_eem;
 use libboard_artiq::io_expander;
 #[cfg(has_cxp_grabber)]
 use libboard_artiq::{cxp_grabber, cxp_phys};
-use libboard_artiq::{identifier_read, logger, pl};
+use libboard_artiq::{i2c, identifier_read, logger, pl};
 use libboard_zynq::{gic, mpcore, timer};
 use libconfig;
 use libcortex_a9::l2c::enable_l2_cache;
@@ -100,10 +100,10 @@ pub fn main_core0() {
 
     info!("gateware ident: {}", identifier_read(&mut [0; 64]));
 
-    ksupport::kernel::i2c::init();
+    i2c::init();
     #[cfg(feature = "target_kasli_soc")]
     {
-        let i2c_bus = ksupport::kernel::i2c::get_bus();
+        let i2c_bus = i2c::get_bus();
         let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
         let mut io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
         io_expander0
@@ -148,7 +148,7 @@ pub fn main_core0() {
     #[cfg(has_cxp_grabber)]
     {
         cxp_phys::setup();
-        task::spawn(cxp_grabber::thread(ksupport::kernel::i2c::get_bus()));
+        task::spawn(cxp_grabber::thread(i2c::get_bus()));
     }
 
     comms::main();
