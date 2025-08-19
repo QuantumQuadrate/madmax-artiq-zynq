@@ -3,7 +3,6 @@ use core::cell::RefCell;
 
 use libboard_artiq::{drtio_routing, pl::csr};
 use libconfig;
-use libcortex_a9::mutex::Mutex;
 use log::{info, warn};
 
 #[cfg(has_drtio)]
@@ -21,6 +20,7 @@ pub mod drtio {
                          drtioaux_async::Packet,
                          drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus}};
     use libboard_zynq::timer;
+    use libcortex_a9::mutex::Mutex;
     use log::{error, info, warn};
 
     use super::*;

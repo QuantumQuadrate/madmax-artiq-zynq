@@ -5,18 +5,18 @@ use byteorder::{ByteOrder, NativeEndian};
 use crc::crc32;
 use futures::{future::poll_fn, task::Poll};
 use libasync::{smoltcp::TcpStream, task};
-use libboard_artiq::{drtio_routing,
-                     logger::{BufferLogger, LogBufferRef}};
+#[cfg(has_drtio)]
+use libboard_artiq::drtio_routing;
+use libboard_artiq::logger::{BufferLogger, LogBufferRef};
 use libboard_zynq::smoltcp;
 use libconfig;
 use log::{self, debug, error, info, warn};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+use crate::{comms::RESTART_IDLE, proto_async::*};
 #[cfg(has_drtio)]
-use crate::rtio_mgt::drtio;
-use crate::{comms::{RESTART_IDLE, ROUTING_TABLE},
-            proto_async::*};
+use crate::{comms::ROUTING_TABLE, rtio_mgt::drtio};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {

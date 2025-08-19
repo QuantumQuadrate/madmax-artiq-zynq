@@ -8,7 +8,9 @@ use log::{debug, info, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 
-use crate::{comms::ROUTING_TABLE, proto_async::*};
+#[cfg(has_drtio)]
+use crate::comms::ROUTING_TABLE;
+use crate::proto_async::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -55,8 +57,7 @@ mod remote_moninj {
     use log::error;
 
     use super::*;
-    use crate::rtio_mgt::{drtio,
-                          drtio::{AUX_MUTEX, Error as DrtioError}};
+    use crate::rtio_mgt::drtio::{self, AUX_MUTEX, Error as DrtioError};
 
     pub async fn read_probe(linkno: u8, destination: u8, channel: i32, probe: i8) -> i64 {
         let reply = drtio::aux_transact(
