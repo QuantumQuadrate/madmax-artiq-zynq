@@ -465,7 +465,6 @@ impl<'a> Manager<'a> {
                 current_backtrace_size: 0,
             }],
             &[],
-            0,
         ) {
             Ok(_) => self.session.last_exception = Some(Sliceable::new(0, writer.into_inner())),
             Err(_) => error!("Error writing exception data"),
@@ -732,12 +731,12 @@ impl<'a> Manager<'a> {
     ) -> Result<bool, Error> {
         let reply = self.control.borrow_mut().rx.try_recv()?;
         match reply {
-            kernel::Message::KernelFinished(_async_errors) => {
+            kernel::Message::KernelFinished => {
                 self.kernel_stop();
                 dma_manager.cleanup(router, rank, self_destination, routing_table);
                 return Ok(true);
             }
-            kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors) => {
+            kernel::Message::KernelException(exceptions, stack_pointers, backtrace) => {
                 error!("exception in kernel");
                 for exception in exceptions {
                     error!("{:?}", exception.unwrap());
@@ -746,7 +745,7 @@ impl<'a> Manager<'a> {
                 error!("backtrace: {:?}", backtrace);
                 let buf: Vec<u8> = Vec::new();
                 let mut writer = Cursor::new(buf);
-                match write_exception(&mut writer, exceptions, stack_pointers, backtrace, async_errors) {
+                match write_exception(&mut writer, exceptions, stack_pointers, backtrace) {
                     Ok(()) => (),
                     Err(_) => error!("Error writing exception data"),
                 }
@@ -1008,10 +1007,10 @@ impl<'a> Manager<'a> {
                         .await;
                     match recv_w_timeout(&mut self.control.borrow_mut().rx, 100).await {
                         Ok(kernel::Message::RpcRecvRequest(slot)) => slot,
-                        Ok(kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors)) => {
+                        Ok(kernel::Message::KernelException(exceptions, stack_pointers, backtrace)) => {
                             let buf: Vec<u8> = Vec::new();
                             let mut writer = Cursor::new(buf);
-                            match write_exception(&mut writer, exceptions, stack_pointers, backtrace, async_errors) {
+                            match write_exception(&mut writer, exceptions, stack_pointers, backtrace) {
                                 Ok(()) => {
                                     exception = Some(Sliceable::new(0, writer.into_inner()));
                                 }
@@ -1057,7 +1056,6 @@ fn write_exception<W: ProtoWrite>(
     exceptions: &[Option<eh_artiq::Exception>],
     stack_pointers: &[eh_artiq::StackPointerBacktrace],
     backtrace: &[(usize, usize)],
-    async_errors: u8,
 ) -> Result<(), Error> {
     /* header */
     writer.write_bytes::<NativeEndian>(&[0x5a, 0x5a, 0x5a, 0x5a, /*Reply::KernelException*/ 9])?;
@@ -1103,7 +1101,7 @@ fn write_exception<W: ProtoWrite>(
         writer.write_u32::<NativeEndian>(addr as u32)?;
         writer.write_u32::<NativeEndian>(sp as u32)?;
     }
-    writer.write_u8(async_errors as u8)?;
+    writer.write_u8(0u8)?;
     Ok(())
 }
 
