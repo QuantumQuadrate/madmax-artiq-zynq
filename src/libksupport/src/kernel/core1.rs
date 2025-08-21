@@ -14,7 +14,7 @@ use log::{debug, error, info};
 
 use super::{CHANNEL_0TO1, CHANNEL_1TO0, CHANNEL_SEM, INIT_LOCK, KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0,
             KERNEL_IMAGE, Message, api::resolve, dma, rpc::rpc_send_async};
-use crate::{eh_artiq, get_async_errors};
+use crate::eh_artiq;
 
 // linker symbols
 extern "C" {
@@ -183,8 +183,7 @@ pub extern "C" fn main_core1() {
                     }
                 }
                 info!("kernel finished");
-                let async_errors = unsafe { get_async_errors() };
-                core1_tx.send(Message::KernelFinished(async_errors));
+                core1_tx.send(Message::KernelFinished);
             }
             _ => error!("Core1 received unexpected message: {:?}", message),
         }
@@ -199,8 +198,7 @@ pub fn terminate(
 ) -> ! {
     {
         let core1_tx = unsafe { KERNEL_CHANNEL_1TO0.as_mut().unwrap() };
-        let errors = unsafe { get_async_errors() };
-        core1_tx.send(Message::KernelException(exceptions, stack_pointers, backtrace, errors));
+        core1_tx.send(Message::KernelException(exceptions, stack_pointers, backtrace));
     }
     loop {}
 }

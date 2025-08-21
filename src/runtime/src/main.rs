@@ -143,8 +143,6 @@ pub fn main_core0() {
     #[cfg(has_grabber)]
     task::spawn(grabber::grabber_thread());
 
-    task::spawn(ksupport::report_async_rtio_errors());
-
     #[cfg(has_cxp_grabber)]
     {
         cxp_phys::setup();

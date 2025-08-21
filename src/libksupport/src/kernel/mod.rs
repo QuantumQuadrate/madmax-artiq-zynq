@@ -45,12 +45,11 @@ pub enum Message {
     LoadCompleted,
     LoadFailed,
     StartRequest,
-    KernelFinished(u8),
+    KernelFinished,
     KernelException(
         &'static [Option<eh_artiq::Exception<'static>>],
         &'static [eh_artiq::StackPointerBacktrace],
         &'static [(usize, usize)],
-        u8,
     ),
 
     #[cfg(has_drtio)]

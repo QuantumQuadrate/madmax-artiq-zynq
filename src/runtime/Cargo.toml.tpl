@@ -28,6 +28,7 @@ futures = { version = "0.3", default-features = false, features = ["async-await"
 async-recursion = "1.1"
 log_buffer = { version = "1.2" }
 vcell = "0.1"
+nb = "0.1"
 
 libboard_zynq = { path = "@@ZYNQ_RS@@/libboard_zynq", features = ["ipv6", "async"]}
 libsupport_zynq = { path = "@@ZYNQ_RS@@/libsupport_zynq", default-features = false, features = ["alloc_core"] }

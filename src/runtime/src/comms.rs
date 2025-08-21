@@ -12,7 +12,8 @@ use io::Cursor;
 use ksupport::kernel;
 #[cfg(has_drtio)]
 use ksupport::rpc;
-use libasync::{smoltcp::{Sockets, TcpStream},
+use libasync::{block_async,
+               smoltcp::{Sockets, TcpStream},
                task};
 #[cfg(has_drtio)]
 use libboard_artiq::drtioaux::Packet;
@@ -35,10 +36,15 @@ use libcortex_a9::{mutex::Mutex,
 use log::{error, info, warn};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+#[cfg(has_drtiosat)]
+use pl::csr::drtiosat as rtio_core;
+#[cfg(has_rtio_core)]
+use pl::csr::rtio_core;
 #[cfg(has_drtio)]
 use tar_no_std::TarArchiveRef;
+use void::Void;
 
-#[cfg(has_drtio)]
+#[cfg(any(has_rtio_core, has_drtiosat, has_drtio))]
 use crate::pl;
 use crate::{analyzer, mgmt, moninj, proto_async::*, rpc_async, rtio_dma, rtio_mgt};
 #[cfg(has_drtio)]
@@ -115,6 +121,73 @@ enum Reply {
     RPCRequest = 10,
     WatchdogExpired = 14,
     ClockFailure = 15,
+}
+
+pub static mut SEEN_ASYNC_ERRORS: u8 = 0;
+
+pub const ASYNC_ERROR_COLLISION: u8 = 1 << 0;
+pub const ASYNC_ERROR_BUSY: u8 = 1 << 1;
+pub const ASYNC_ERROR_SEQUENCE_ERROR: u8 = 1 << 2;
+
+pub unsafe fn get_async_errors() -> u8 {
+    let errors = SEEN_ASYNC_ERRORS;
+    SEEN_ASYNC_ERRORS = 0;
+    errors
+}
+
+fn wait_for_async_rtio_error() -> nb::Result<(), Void> {
+    unsafe {
+        #[cfg(has_rtio_core)]
+        let errors = rtio_core::async_error_read();
+        #[cfg(has_drtiosat)]
+        let errors = rtio_core::protocol_error_read();
+        if errors != 0 {
+            Ok(())
+        } else {
+            Err(nb::Error::WouldBlock)
+        }
+    }
+}
+
+pub async fn report_async_rtio_errors() {
+    loop {
+        let _ = block_async!(wait_for_async_rtio_error()).await;
+        unsafe {
+            #[cfg(has_rtio_core)]
+            let errors = rtio_core::async_error_read();
+            #[cfg(has_drtiosat)]
+            let errors = rtio_core::protocol_error_read();
+            if errors & ASYNC_ERROR_COLLISION != 0 {
+                let channel = rtio_core::collision_channel_read();
+                error!(
+                    "RTIO collision involving channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                );
+            }
+            if errors & ASYNC_ERROR_BUSY != 0 {
+                let channel = rtio_core::busy_channel_read();
+                error!(
+                    "RTIO busy error involving channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                );
+            }
+            if errors & ASYNC_ERROR_SEQUENCE_ERROR != 0 {
+                let channel = rtio_core::sequence_error_channel_read();
+                error!(
+                    "RTIO sequence error involving channel 0x{:04x}:{}",
+                    channel,
+                    resolve_channel_name(channel as u32)
+                );
+            }
+            SEEN_ASYNC_ERRORS = errors;
+            #[cfg(has_rtio_core)]
+            rtio_core::async_error_write(errors);
+            #[cfg(has_drtiosat)]
+            rtio_core::protocol_error_write(errors);
+        }
+    }
 }
 
 static CACHE_STORE: Mutex<BTreeMap<String, Vec<i32>>> = Mutex::new(BTreeMap::new());
@@ -286,14 +359,16 @@ async fn handle_run_kernel(
                     }
                 }
             }
-            kernel::Message::KernelFinished(async_errors) => {
+            kernel::Message::KernelFinished => {
+                let async_errors = unsafe { get_async_errors() };
                 if let Some(stream) = stream {
                     write_header(stream, Reply::KernelFinished).await?;
                     write_i8(stream, async_errors as i8).await?;
                 }
                 break;
             }
-            kernel::Message::KernelException(exceptions, stack_pointers, backtrace, async_errors) => {
+            kernel::Message::KernelException(exceptions, stack_pointers, backtrace) => {
+                let async_errors = unsafe { get_async_errors() };
                 match stream {
                     Some(stream) => {
                         // only send the exception data to host if there is host,
@@ -993,6 +1068,7 @@ pub fn main() {
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
+    task::spawn(report_async_rtio_errors());
     rtio_mgt::startup(&up_destinations);
     libboard_artiq::setup_device_map();
 

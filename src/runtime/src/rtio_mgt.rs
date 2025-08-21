@@ -10,8 +10,7 @@ pub mod drtio {
     use alloc::vec::Vec;
     use core::fmt;
 
-    use ksupport::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS,
-                   kernel::Message as KernelMessage};
+    use ksupport::kernel::Message as KernelMessage;
     use libasync::task;
     #[cfg(has_drtio_eem)]
     use libboard_artiq::drtio_eem;
@@ -25,7 +24,11 @@ pub mod drtio {
     use log::{error, info, warn};
 
     use super::*;
-    use crate::{analyzer::remote_analyzer::RemoteBuffer, comms::ROUTING_TABLE, rtio_dma::remote_dma, subkernel};
+    use crate::{analyzer::remote_analyzer::RemoteBuffer,
+                comms::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, ROUTING_TABLE,
+                        SEEN_ASYNC_ERRORS},
+                rtio_dma::remote_dma,
+                subkernel};
 
     #[cfg(has_drtio_eem)]
     const DRTIO_EEM_LINKNOS: core::ops::Range<usize> =
