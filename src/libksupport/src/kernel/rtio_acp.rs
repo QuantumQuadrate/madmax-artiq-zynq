@@ -6,7 +6,7 @@ use vcell::VolatileCell;
 
 #[cfg(has_drtio)]
 use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
-use crate::{artiq_raise, pl::csr, resolve_channel_name, rtio_core};
+use crate::{artiq_raise, pl::csr, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
 pub const RTIO_O_STATUS_UNDERFLOW: i32 = 2;
@@ -99,11 +99,7 @@ unsafe fn process_exceptional_status(channel: i32, status: i32) {
     if status & RTIO_O_STATUS_UNDERFLOW != 0 {
         artiq_raise!(
             "RTIOUnderflow",
-            format!(
-                "RTIO underflow at {{1}} mu, channel 0x{:04x}:{}, slack {{2}} mu",
-                channel,
-                resolve_channel_name(channel as u32)
-            ),
+            "RTIO underflow at {1} mu, channel {rtio_channel_info:0}, slack {2} mu",
             channel as i64,
             timestamp,
             timestamp - get_counter()
@@ -112,13 +108,9 @@ unsafe fn process_exceptional_status(channel: i32, status: i32) {
     if status & RTIO_O_STATUS_DESTINATION_UNREACHABLE != 0 {
         artiq_raise!(
             "RTIODestinationUnreachable",
-            format!(
-                "RTIO destination unreachable, output, at {{0}} mu, channel 0x{:04x}:{}",
-                channel,
-                resolve_channel_name(channel as u32)
-            ),
-            timestamp,
+            "RTIO destination unreachable, output, at {1} mu, channel {rtio_channel_info:0}",
             channel as i64,
+            timestamp,
             0
         );
     }
@@ -204,11 +196,7 @@ pub extern "C" fn input_timestamp(timeout: i64, channel: i32) -> i64 {
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!(
                 "RTIOOverflow",
-                format!(
-                    "RTIO input overflow on channel 0x{:04x}:{}",
-                    channel,
-                    resolve_channel_name(channel as u32)
-                ),
+                "RTIO input overflow on channel {rtio_channel_info:0}",
                 channel as i64,
                 0,
                 0
@@ -220,11 +208,7 @@ pub extern "C" fn input_timestamp(timeout: i64, channel: i32) -> i64 {
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
             artiq_raise!(
                 "RTIODestinationUnreachable",
-                format!(
-                    "RTIO destination unreachable, input, on channel 0x{:04x}:{}",
-                    channel,
-                    resolve_channel_name(channel as u32)
-                ),
+                "RTIO destination unreachable, input, on channel {rtio_channel_info:0}",
                 channel as i64,
                 0,
                 0
@@ -258,11 +242,7 @@ pub extern "C" fn input_data(channel: i32) -> i32 {
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!(
                 "RTIOOverflow",
-                format!(
-                    "RTIO input overflow on channel 0x{:04x}:{}",
-                    channel,
-                    resolve_channel_name(channel as u32)
-                ),
+                "RTIO input overflow on channel {rtio_channel_info:0}",
                 channel as i64,
                 0,
                 0
@@ -271,11 +251,7 @@ pub extern "C" fn input_data(channel: i32) -> i32 {
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
             artiq_raise!(
                 "RTIODestinationUnreachable",
-                format!(
-                    "RTIO destination unreachable, input, on channel 0x{:04x}:{}",
-                    channel,
-                    resolve_channel_name(channel as u32)
-                ),
+                "RTIO destination unreachable, input, on channel {rtio_channel_info:0}",
                 channel as i64,
                 0,
                 0
@@ -309,11 +285,7 @@ pub extern "C" fn input_timestamped_data(timeout: i64, channel: i32) -> Timestam
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!(
                 "RTIOOverflow",
-                format!(
-                    "RTIO input overflow on channel 0x{:04x}:{}",
-                    channel,
-                    resolve_channel_name(channel as u32)
-                ),
+                "RTIO input overflow on channel {rtio_channel_info:0}",
                 channel as i64,
                 0,
                 0
@@ -322,11 +294,7 @@ pub extern "C" fn input_timestamped_data(timeout: i64, channel: i32) -> Timestam
         if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
             artiq_raise!(
                 "RTIODestinationUnreachable",
-                format!(
-                    "RTIO destination unreachable, input, on channel 0x{:04x}:{}",
-                    channel,
-                    resolve_channel_name(channel as u32)
-                ),
+                "RTIO destination unreachable, input, on channel {rtio_channel_info:0}",
                 channel as i64,
                 0,
                 0

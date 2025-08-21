@@ -1079,7 +1079,7 @@ fn write_exception<W: ProtoWrite>(
                         &format!(
                             "0x{:04x}:{}",
                             exception.param[0],
-                            ksupport::resolve_channel_name(exception.param[0] as u32)
+                            libboard_artiq::resolve_channel_name(exception.param[0] as u32)
                         ),
                     );
             writer.write_string::<NativeEndian>(&msg)?;

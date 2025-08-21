@@ -3,7 +3,6 @@
 #![feature(naked_functions)]
 #![allow(unexpected_cfgs)]
 
-#[cfg(has_drtio_eem)]
 extern crate alloc;
 extern crate core_io;
 extern crate crc;
@@ -42,7 +41,13 @@ pub mod grabber;
 pub mod si5324;
 #[cfg(has_si549)]
 pub mod si549;
+use alloc::{collections::BTreeMap, string::String};
 use core::{cmp, str};
+
+use byteorder::NativeEndian;
+use io::{Cursor, ProtoRead};
+use libcortex_a9::once_lock::OnceLock;
+use log::warn;
 
 #[cfg(has_cxp_grabber)]
 pub mod cxp_camera_setup;
@@ -87,4 +92,51 @@ pub fn identifier_read(buf: &mut [u8]) -> &str {
         }
         str::from_utf8_unchecked(&buf[..len as usize])
     }
+}
+
+static RTIO_DEVICE_MAP: OnceLock<BTreeMap<u32, String>> = OnceLock::new();
+
+fn read_device_map() -> BTreeMap<u32, String> {
+    let mut device_map: BTreeMap<u32, String> = BTreeMap::new();
+    let _ = libconfig::read("device_map")
+        .and_then(|raw_bytes| {
+            let mut bytes_cr = Cursor::new(raw_bytes);
+            let size = bytes_cr.read_u32::<NativeEndian>().unwrap();
+            for _ in 0..size {
+                let channel = bytes_cr.read_u32::<NativeEndian>().unwrap();
+                let device_name = bytes_cr.read_string::<NativeEndian>().unwrap();
+                if let Some(old_entry) = device_map.insert(channel, device_name.clone()) {
+                    warn!(
+                        "conflicting device map entries for RTIO channel {}: '{}' and '{}'",
+                        channel, old_entry, device_name
+                    );
+                }
+            }
+            Ok(())
+        })
+        .or_else(|err| {
+            warn!(
+                "error reading device map ({}), device names will not be available in RTIO error messages",
+                err
+            );
+            Err(err)
+        });
+    device_map
+}
+
+pub fn resolve_channel_name(channel: u32) -> String {
+    match RTIO_DEVICE_MAP
+        .get()
+        .expect("cannot get device map before it is set up")
+        .get(&channel)
+    {
+        Some(val) => val.clone(),
+        None => String::from("unknown"),
+    }
+}
+
+pub fn setup_device_map() {
+    RTIO_DEVICE_MAP
+        .set(read_device_map())
+        .expect("device map can only be initialized once");
 }

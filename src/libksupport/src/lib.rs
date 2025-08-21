@@ -8,14 +8,8 @@
 #[macro_use]
 extern crate alloc;
 
-use alloc::{collections::BTreeMap, string::String};
-
-use byteorder::NativeEndian;
-use io::{Cursor, ProtoRead};
 use libasync::block_async;
-use libconfig;
-use libcortex_a9::once_lock::OnceLock;
-use log::{error, warn};
+use log::error;
 #[cfg(has_drtiosat)]
 pub use pl::csr::drtiosat as rtio_core;
 #[cfg(has_rtio_core)]

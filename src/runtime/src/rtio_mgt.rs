@@ -11,14 +11,15 @@ pub mod drtio {
     use core::fmt;
 
     use ksupport::{ASYNC_ERROR_BUSY, ASYNC_ERROR_COLLISION, ASYNC_ERROR_SEQUENCE_ERROR, SEEN_ASYNC_ERRORS,
-                   kernel::Message as KernelMessage, resolve_channel_name};
+                   kernel::Message as KernelMessage};
     use libasync::task;
     #[cfg(has_drtio_eem)]
     use libboard_artiq::drtio_eem;
     use libboard_artiq::{drtioaux::Error as DrtioError,
                          drtioaux_async,
                          drtioaux_async::Packet,
-                         drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus}};
+                         drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, PayloadStatus},
+                         resolve_channel_name};
     use libboard_zynq::timer;
     use libcortex_a9::mutex::Mutex;
     use log::{error, info, warn};

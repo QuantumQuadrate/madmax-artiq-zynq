@@ -9,14 +9,15 @@ use dyld::elf;
 use futures::{future::FutureExt, select_biased};
 #[cfg(has_drtio)]
 use io::Cursor;
+use ksupport::kernel;
 #[cfg(has_drtio)]
 use ksupport::rpc;
-use ksupport::{kernel, resolve_channel_name};
 use libasync::{smoltcp::{Sockets, TcpStream},
                task};
-use libboard_artiq::drtio_routing::{self, RoutingTable};
 #[cfg(has_drtio)]
 use libboard_artiq::drtioaux::Packet;
+use libboard_artiq::{drtio_routing::{self, RoutingTable},
+                     resolve_channel_name};
 #[cfg(feature = "target_kasli_soc")]
 use libboard_zynq::error_led::ErrorLED;
 use libboard_zynq::{self as zynq,
@@ -993,7 +994,7 @@ pub fn main() {
     drtio_routing::interconnect_disable_all();
 
     rtio_mgt::startup(&up_destinations);
-    ksupport::setup_device_map();
+    libboard_artiq::setup_device_map();
 
     analyzer::start(&up_destinations);
     moninj::start();
