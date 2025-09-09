@@ -260,6 +260,11 @@ pub fn main_core0() {
         io_expander1.set(0, 1, false);
         io_expander0.set(1, 1, false);
         io_expander1.set(1, 1, false);
+
+        // Enable EEM power
+        #[cfg(hw_rev = "v1.2")]
+        io_expander1.set(0, 7, true);
+
         io_expander0.service(i2c).unwrap();
         io_expander1.service(i2c).unwrap();
     }

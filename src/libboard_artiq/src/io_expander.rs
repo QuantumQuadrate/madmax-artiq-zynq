@@ -18,8 +18,10 @@ const IODIR_OUT_SFP_TX_DISABLE: u8 = 0x02;
 const IODIR_OUT_SFP_LED: u8 = 0x40;
 #[cfg(hw_rev = "v1.0")]
 const IODIR_OUT_SFP0_LED: u8 = 0x40;
-#[cfg(hw_rev = "v1.1")]
+#[cfg(any(hw_rev = "v1.1", hw_rev = "v1.2"))]
 const IODIR_OUT_SFP0_LED: u8 = 0x80;
+#[cfg(hw_rev = "v1.2")]
+const IODIR_OUT_EEM_PWR_EN: u8 = 0x80;
 #[cfg(has_si549)]
 const IODIR_CLK_SEL: u8 = 0x80; // out
 #[cfg(has_si5324)]
@@ -31,8 +33,14 @@ const IODIR0: [u8; 2] = [
     0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED & !IODIR_CLK_SEL,
 ];
 
+#[cfg(not(hw_rev = "v1.2"))]
 const IODIR1: [u8; 2] = [
     0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
+];
+#[cfg(hw_rev = "v1.2")]
+const IODIR1: [u8; 2] = [
+    0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED & !IODIR_OUT_EEM_PWR_EN,
     0xFF & !IODIR_OUT_SFP_TX_DISABLE & !IODIR_OUT_SFP_LED,
 ];
 
@@ -50,7 +58,7 @@ impl IoExpander {
     pub fn new(i2c: &mut i2c::I2c, index: u8) -> Result<Self, &'static str> {
         #[cfg(all(hw_rev = "v1.0", has_virtual_leds))]
         const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 6), (1, 1, 6)];
-        #[cfg(all(hw_rev = "v1.1", has_virtual_leds))]
+        #[cfg(all(any(hw_rev = "v1.1", hw_rev = "v1.2"), has_virtual_leds))]
         const VIRTUAL_LED_MAPPING0: [(u8, u8, u8); 2] = [(0, 0, 7), (1, 1, 6)];
         #[cfg(has_virtual_leds)]
         const VIRTUAL_LED_MAPPING1: [(u8, u8, u8); 2] = [(2, 0, 6), (3, 1, 6)];

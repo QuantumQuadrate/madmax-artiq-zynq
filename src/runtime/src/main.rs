@@ -122,8 +122,14 @@ pub fn main_core0() {
         io_expander1.set(0, 1, false);
         io_expander0.set(1, 1, false);
         io_expander1.set(1, 1, false);
+
+        // Enable EEM power
+        #[cfg(hw_rev = "v1.2")]
+        io_expander1.set(0, 7, true);
+
         io_expander0.service(i2c_bus).unwrap();
         io_expander1.service(i2c_bus).unwrap();
+
         #[cfg(has_virtual_leds)]
         task::spawn(io_expanders_service(
             RefCell::new(i2c_bus),
