@@ -49,8 +49,8 @@ impl BufferLogger {
     pub fn new(buffer: &'static mut [u8]) -> BufferLogger {
         BufferLogger {
             buffer: Mutex::new(LogBuffer::new(buffer)),
-            uart_filter: Cell::new(LevelFilter::Info),
-            buffer_filter: Cell::new(LevelFilter::Trace),
+            uart_filter: Cell::new(LevelFilter::Debug),
+            buffer_filter: Cell::new(LevelFilter::Debug),
         }
     }
 
@@ -72,7 +72,8 @@ impl BufferLogger {
     }
 
     pub fn set_uart_log_level(&self, max_level: LevelFilter) {
-        self.uart_filter.set(max_level)
+        self.uart_filter.set(max_level);
+        self.update_global_log_level()
     }
 
     pub fn buffer_log_level(&self) -> LevelFilter {
@@ -81,7 +82,16 @@ impl BufferLogger {
 
     /// this should be reserved for mgmt module
     pub fn set_buffer_log_level(&self, max_level: LevelFilter) {
-        self.buffer_filter.set(max_level)
+        self.buffer_filter.set(max_level);
+        self.update_global_log_level()
+    }
+
+    pub fn update_global_log_level(&self) {
+        let uart_level = self.uart_filter.get();
+        let buffer_level = self.buffer_filter.get();
+        let global_level = core::cmp::max(uart_level, buffer_level);
+
+        log::set_max_level(global_level);
     }
 }
 

@@ -12,21 +12,6 @@ use crate::routing::{SliceMeta, Sliceable};
 
 type Result<T> = core::result::Result<T, ()>;
 
-pub fn byte_to_level_filter(level_byte: u8) -> Result<LevelFilter> {
-    Ok(match level_byte {
-        0 => LevelFilter::Off,
-        1 => LevelFilter::Error,
-        2 => LevelFilter::Warn,
-        3 => LevelFilter::Info,
-        4 => LevelFilter::Debug,
-        5 => LevelFilter::Trace,
-        lv => {
-            error!("unknown log level: {}", lv);
-            return Err(());
-        }
-    })
-}
-
 fn get_logger_buffer() -> LogBufferRef<'static> {
     let logger = BufferLogger::get_logger();
     loop {
@@ -100,6 +85,21 @@ impl Manager {
         debug!("write key: {}", key);
         let value = payload.read_bytes::<NativeEndian>().unwrap();
 
+        if key == "log_level" || key == "uart_log_level" {
+            let value_str = core::str::from_utf8(&value)
+                .map_err(|err| error!("invalid UTF_8: {:?}", err))?;
+            let max_level = value_str.parse::<LevelFilter>()
+                .map_err(|err| error!("unknown log level: {:?}", err))?;
+
+            if key == "log_level" {
+                info!("Changing log level to {}", max_level);
+                BufferLogger::get_logger().set_buffer_log_level(max_level);
+            } else {
+                info!("Changing UART log level to {}", max_level);
+                BufferLogger::get_logger().set_uart_log_level(max_level);
+            }
+        };
+        
         libconfig::write(&key, value)
             .map(|()| debug!("write success"))
             .map_err(|err| error!("failed to write: {:?}", err))

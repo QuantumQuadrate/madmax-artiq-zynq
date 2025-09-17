@@ -1,5 +1,6 @@
 use alloc::{rc::Rc, string::String, vec::Vec};
 use core::cell::RefCell;
+use core::str::Utf8Error;
 
 use byteorder::{ByteOrder, NativeEndian};
 use crc::crc32;
@@ -22,7 +23,8 @@ use crate::{comms::ROUTING_TABLE, rtio_mgt::drtio};
 pub enum Error {
     NetworkError(smoltcp::Error),
     OvertakeError,
-    UnknownLogLevel(u8),
+    UnknownLogLevel(),
+    Utf8(Utf8Error),
     UnexpectedPattern,
     UnrecognizedPacket,
     #[cfg(has_drtio)]
@@ -36,7 +38,8 @@ impl core::fmt::Display for Error {
         match self {
             &Error::NetworkError(error) => write!(f, "network error: {}", error),
             &Error::OvertakeError => write!(f, "connection overtaken"),
-            &Error::UnknownLogLevel(lvl) => write!(f, "unknown log level {}", lvl),
+            &Error::UnknownLogLevel() => write!(f, "unknown log level"),
+            &Error::Utf8(error) => write!(f, "invalid UTF-8: {}", error),
             &Error::UnexpectedPattern => write!(f, "unexpected pattern"),
             &Error::UnrecognizedPacket => write!(f, "unrecognized packet"),
             #[cfg(has_drtio)]
@@ -48,6 +51,12 @@ impl core::fmt::Display for Error {
 impl From<smoltcp::Error> for Error {
     fn from(error: smoltcp::Error) -> Self {
         Error::NetworkError(error)
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(error: Utf8Error) -> Self {
+        Error::Utf8(error)
     }
 }
 
@@ -63,9 +72,7 @@ pub enum Request {
     GetLog = 1,
     ClearLog = 2,
     PullLog = 7,
-    SetLogFilter = 3,
     Reboot = 5,
-    SetUartLogFilter = 6,
 
     ConfigRead = 12,
     ConfigWrite = 13,
@@ -84,18 +91,6 @@ pub enum Reply {
     RebootImminent = 3,
     Error = 6,
     ConfigData = 7,
-}
-
-async fn read_log_level_filter(stream: &mut TcpStream) -> Result<log::LevelFilter> {
-    Ok(match read_i8(stream).await? {
-        0 => log::LevelFilter::Off,
-        1 => log::LevelFilter::Error,
-        2 => log::LevelFilter::Warn,
-        3 => log::LevelFilter::Info,
-        4 => log::LevelFilter::Debug,
-        5 => log::LevelFilter::Trace,
-        lv => return Err(Error::UnknownLogLevel(lv as u8)),
-    })
 }
 
 async fn get_logger_buffer_pred<F>(f: F) -> LogBufferRef<'static>
@@ -241,72 +236,6 @@ mod remote_coremgmt {
                     error!("aux packet error ({})", e);
                     return Err(e.into());
                 }
-            }
-        }
-    }
-
-    pub async fn set_log_filter(
-        stream: &mut TcpStream,
-        linkno: u8,
-        destination: u8,
-        level: log::LevelFilter,
-    ) -> Result<()> {
-        let reply = drtio::aux_transact(
-            linkno,
-            &Packet::CoreMgmtSetLogLevelRequest {
-                destination,
-                log_level: level as u8,
-            },
-        )
-        .await;
-
-        match reply {
-            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
-                write_i8(stream, Reply::Success as i8).await?;
-                Ok(())
-            }
-            Ok(packet) => {
-                error!("received unexpected aux packet: {:?}", packet);
-                write_i8(stream, Reply::Error as i8).await?;
-                Err(drtio::Error::UnexpectedReply.into())
-            }
-            Err(e) => {
-                error!("aux packet error ({})", e);
-                write_i8(stream, Reply::Error as i8).await?;
-                Err(e.into())
-            }
-        }
-    }
-
-    pub async fn set_uart_log_filter(
-        stream: &mut TcpStream,
-        linkno: u8,
-        destination: u8,
-        level: log::LevelFilter,
-    ) -> Result<()> {
-        let reply = drtio::aux_transact(
-            linkno,
-            &Packet::CoreMgmtSetUartLogLevelRequest {
-                destination,
-                log_level: level as u8,
-            },
-        )
-        .await;
-
-        match reply {
-            Ok(Packet::CoreMgmtReply { succeeded: true }) => {
-                write_i8(stream, Reply::Success as i8).await?;
-                Ok(())
-            }
-            Ok(packet) => {
-                error!("received unexpected aux packet: {:?}", packet);
-                write_i8(stream, Reply::Error as i8).await?;
-                Err(drtio::Error::UnexpectedReply.into())
-            }
-            Err(e) => {
-                error!("aux packet error ({})", e);
-                write_i8(stream, Reply::Error as i8).await?;
-                Err(e.into())
             }
         }
     }
@@ -629,20 +558,6 @@ mod local_coremgmt {
         }
     }
 
-    pub async fn set_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
-        info!("Changing log level to {}", lvl);
-        BufferLogger::get_logger().set_buffer_log_level(lvl);
-        write_i8(stream, Reply::Success as i8).await?;
-        Ok(())
-    }
-
-    pub async fn set_uart_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
-        info!("Changing UART log level to {}", lvl);
-        BufferLogger::get_logger().set_uart_log_level(lvl);
-        write_i8(stream, Reply::Success as i8).await?;
-        Ok(())
-    }
-
     pub async fn config_read(stream: &mut TcpStream, key: &String) -> Result<()> {
         let value = libconfig::read(&key);
         if let Ok(value) = value {
@@ -657,16 +572,30 @@ mod local_coremgmt {
     }
 
     pub async fn config_write(stream: &mut TcpStream, key: &String, value: Vec<u8>) -> Result<()> {
-        let value = libconfig::write(&key, value);
-        if value.is_ok() {
+        let res = libconfig::write(&key, value.clone());
+        if res.is_ok() {
             debug!("write success");
             if key == "idle_kernel" {
                 RESTART_IDLE.signal();
             }
+            if key == "log_level" || key == "uart_log_level" {
+                let value_str = core::str::from_utf8(&value)
+                    .map_err(Error::from)?;
+                let max_level = value_str.parse::<log::LevelFilter>()
+                    .map_err(|_| Error::UnknownLogLevel())?;
+
+                if key == "log_level" {
+                    BufferLogger::get_logger().set_buffer_log_level(max_level);
+                    info!("changing log level to {}", max_level);
+                } else {
+                    BufferLogger::get_logger().set_uart_log_level(max_level);
+                    info!("changing UART log level to {}", max_level);
+                }
+            }
             write_i8(stream, Reply::Success as i8).await?;
         } else {
             // this is an error because we do not expect write to fail
-            error!("failed to write: {:?}", value);
+            error!("failed to write: {:?}", res);
             write_i8(stream, Reply::Error as i8).await?;
         }
         Ok(())
@@ -777,14 +706,6 @@ async fn handle_connection(stream: &mut TcpStream, pull_ids: Rc<[RefCell<u32>]>)
             Request::GetLog => process!(stream, _destination, get_log),
             Request::ClearLog => process!(stream, _destination, clear_log),
             Request::PullLog => process!(stream, _destination, pull_log, pull_id),
-            Request::SetLogFilter => {
-                let lvl = read_log_level_filter(stream).await?;
-                process!(stream, _destination, set_log_filter, lvl)
-            }
-            Request::SetUartLogFilter => {
-                let lvl = read_log_level_filter(stream).await?;
-                process!(stream, _destination, set_uart_log_filter, lvl)
-            }
             Request::ConfigRead => {
                 let key = read_key(stream).await?;
                 process!(stream, _destination, config_read, &key)

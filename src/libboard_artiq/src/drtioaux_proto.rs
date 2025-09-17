@@ -303,14 +303,6 @@ pub enum Packet {
     CoreMgmtClearLogRequest {
         destination: u8,
     },
-    CoreMgmtSetLogLevelRequest {
-        destination: u8,
-        log_level: u8,
-    },
-    CoreMgmtSetUartLogLevelRequest {
-        destination: u8,
-        log_level: u8,
-    },
     CoreMgmtConfigReadRequest {
         destination: u8,
         length: u16,
@@ -689,15 +681,7 @@ impl Packet {
             0xd1 => Packet::CoreMgmtClearLogRequest {
                 destination: reader.read_u8()?,
             },
-            0xd2 => Packet::CoreMgmtSetLogLevelRequest {
-                destination: reader.read_u8()?,
-                log_level: reader.read_u8()?,
-            },
-            0xd3 => Packet::CoreMgmtSetUartLogLevelRequest {
-                destination: reader.read_u8()?,
-                log_level: reader.read_u8()?,
-            },
-            0xd4 => {
+            0xd2 => {
                 let destination = reader.read_u8()?;
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut key: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
@@ -708,10 +692,10 @@ impl Packet {
                     key: key,
                 }
             }
-            0xd5 => Packet::CoreMgmtConfigReadContinue {
+            0xd3 => Packet::CoreMgmtConfigReadContinue {
                 destination: reader.read_u8()?,
             },
-            0xd6 => {
+            0xd4 => {
                 let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
                 let length = reader.read_u16::<NativeEndian>()?;
@@ -724,7 +708,7 @@ impl Packet {
                     data: data,
                 }
             }
-            0xd7 => {
+            0xd5 => {
                 let destination = reader.read_u8()?;
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut key: [u8; MASTER_PAYLOAD_MAX_SIZE] = [0; MASTER_PAYLOAD_MAX_SIZE];
@@ -735,20 +719,20 @@ impl Packet {
                     key: key,
                 }
             }
-            0xd8 => Packet::CoreMgmtConfigEraseRequest {
+            0xd6 => Packet::CoreMgmtConfigEraseRequest {
                 destination: reader.read_u8()?,
             },
-            0xd9 => Packet::CoreMgmtRebootRequest {
+            0xd7 => Packet::CoreMgmtRebootRequest {
                 destination: reader.read_u8()?,
             },
-            0xda => Packet::CoreMgmtAllocatorDebugRequest {
+            0xd8 => Packet::CoreMgmtAllocatorDebugRequest {
                 destination: reader.read_u8()?,
             },
-            0xdb => Packet::CoreMgmtFlashRequest {
+            0xd9 => Packet::CoreMgmtFlashRequest {
                 destination: reader.read_u8()?,
                 payload_length: reader.read_u32::<NativeEndian>()?,
             },
-            0xdc => {
+            0xda => {
                 let destination = reader.read_u8()?;
                 let last = reader.read_bool()?;
                 let length = reader.read_u16::<NativeEndian>()?;
@@ -761,11 +745,11 @@ impl Packet {
                     data: data,
                 }
             }
-            0xdd => Packet::CoreMgmtDropLinkAck {
+            0xdb => Packet::CoreMgmtDropLinkAck {
                 destination: reader.read_u8()?,
             },
-            0xde => Packet::CoreMgmtDropLink,
-            0xdf => {
+            0xdc => Packet::CoreMgmtDropLink,
+            0xdd => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -1224,28 +1208,18 @@ impl Packet {
                 writer.write_u8(0xd1)?;
                 writer.write_u8(destination)?;
             }
-            Packet::CoreMgmtSetLogLevelRequest { destination, log_level } => {
-                writer.write_u8(0xd2)?;
-                writer.write_u8(destination)?;
-                writer.write_u8(log_level)?;
-            }
-            Packet::CoreMgmtSetUartLogLevelRequest { destination, log_level } => {
-                writer.write_u8(0xd3)?;
-                writer.write_u8(destination)?;
-                writer.write_u8(log_level)?;
-            }
             Packet::CoreMgmtConfigReadRequest {
                 destination,
                 length,
                 key,
             } => {
-                writer.write_u8(0xd4)?;
+                writer.write_u8(0xd2)?;
                 writer.write_u8(destination)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&key[0..length as usize])?;
             }
             Packet::CoreMgmtConfigReadContinue { destination } => {
-                writer.write_u8(0xd5)?;
+                writer.write_u8(0xd3)?;
                 writer.write_u8(destination)?;
             }
             Packet::CoreMgmtConfigWriteRequest {
@@ -1254,7 +1228,7 @@ impl Packet {
                 length,
                 data,
             } => {
-                writer.write_u8(0xd6)?;
+                writer.write_u8(0xd4)?;
                 writer.write_u8(destination)?;
                 writer.write_bool(last)?;
                 writer.write_u16::<NativeEndian>(length)?;
@@ -1265,28 +1239,28 @@ impl Packet {
                 length,
                 key,
             } => {
-                writer.write_u8(0xd7)?;
+                writer.write_u8(0xd5)?;
                 writer.write_u8(destination)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&key[0..length as usize])?;
             }
             Packet::CoreMgmtConfigEraseRequest { destination } => {
-                writer.write_u8(0xd8)?;
+                writer.write_u8(0xd6)?;
                 writer.write_u8(destination)?;
             }
             Packet::CoreMgmtRebootRequest { destination } => {
-                writer.write_u8(0xd9)?;
+                writer.write_u8(0xd7)?;
                 writer.write_u8(destination)?;
             }
             Packet::CoreMgmtAllocatorDebugRequest { destination } => {
-                writer.write_u8(0xda)?;
+                writer.write_u8(0xd8)?;
                 writer.write_u8(destination)?;
             }
             Packet::CoreMgmtFlashRequest {
                 destination,
                 payload_length,
             } => {
-                writer.write_u8(0xdb)?;
+                writer.write_u8(0xd9)?;
                 writer.write_u8(destination)?;
                 writer.write_u32::<NativeEndian>(payload_length)?;
             }
@@ -1296,19 +1270,19 @@ impl Packet {
                 length,
                 data,
             } => {
-                writer.write_u8(0xdc)?;
+                writer.write_u8(0xda)?;
                 writer.write_u8(destination)?;
                 writer.write_bool(last)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[..length as usize])?;
             }
             Packet::CoreMgmtDropLinkAck { destination } => {
-                writer.write_u8(0xdd)?;
+                writer.write_u8(0xdb)?;
                 writer.write_u8(destination)?;
             }
-            Packet::CoreMgmtDropLink => writer.write_u8(0xde)?,
+            Packet::CoreMgmtDropLink => writer.write_u8(0xdc)?,
             Packet::CoreMgmtGetLogReply { last, length, data } => {
-                writer.write_u8(0xdf)?;
+                writer.write_u8(0xdd)?;
                 writer.write_bool(last)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;

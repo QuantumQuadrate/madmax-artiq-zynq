@@ -1,6 +1,6 @@
 use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
-                     logger,
+                    //  logger,
                      pl::csr};
 use libboard_zynq::{i2c::{Error as I2cError, I2c},
                     slcr, timer};
@@ -976,50 +976,6 @@ async fn process_aux_packet<'a, 'b>(
             );
             mgmt::clear_log();
             drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
-        }
-        drtioaux::Packet::CoreMgmtSetLogLevelRequest {
-            destination: _destination,
-            log_level,
-        } => {
-            forward!(
-                router,
-                _routing_table,
-                _destination,
-                *rank,
-                *self_destination,
-                _repeaters,
-                &packet,
-            );
-
-            if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
-                info!("Changing log level to {}", level_filter);
-                logger::BufferLogger::get_logger().set_buffer_log_level(level_filter);
-                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
-            } else {
-                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
-            }
-        }
-        drtioaux::Packet::CoreMgmtSetUartLogLevelRequest {
-            destination: _destination,
-            log_level,
-        } => {
-            forward!(
-                router,
-                _routing_table,
-                _destination,
-                *rank,
-                *self_destination,
-                _repeaters,
-                &packet,
-            );
-
-            if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
-                info!("Changing UART log level to {}", level_filter);
-                logger::BufferLogger::get_logger().set_uart_log_level(level_filter);
-                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
-            } else {
-                drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await
-            }
         }
         drtioaux::Packet::CoreMgmtConfigReadRequest {
             destination: _destination,
