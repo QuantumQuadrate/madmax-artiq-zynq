@@ -1,6 +1,5 @@
 use libboard_artiq::{drtio_routing, drtioaux, drtioaux_async,
                      drtioaux_proto::{MASTER_PAYLOAD_MAX_SIZE, SAT_PAYLOAD_MAX_SIZE},
-                    //  logger,
                      pl::csr};
 use libboard_zynq::{i2c::{Error as I2cError, I2c},
                     slcr, timer};

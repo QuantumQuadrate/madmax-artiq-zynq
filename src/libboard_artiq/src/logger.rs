@@ -49,8 +49,8 @@ impl BufferLogger {
     pub fn new(buffer: &'static mut [u8]) -> BufferLogger {
         BufferLogger {
             buffer: Mutex::new(LogBuffer::new(buffer)),
-            uart_filter: Cell::new(LevelFilter::Debug),
-            buffer_filter: Cell::new(LevelFilter::Debug),
+            uart_filter: Cell::new(LevelFilter::Info),
+            buffer_filter: Cell::new(LevelFilter::Info),
         }
     }
 

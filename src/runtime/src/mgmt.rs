@@ -1,6 +1,5 @@
 use alloc::{rc::Rc, string::String, vec::Vec};
-use core::cell::RefCell;
-use core::str::Utf8Error;
+use core::{cell::RefCell, str::Utf8Error};
 
 use byteorder::{ByteOrder, NativeEndian};
 use crc::crc32;
@@ -575,22 +574,25 @@ mod local_coremgmt {
         let res = libconfig::write(&key, value.clone());
         if res.is_ok() {
             debug!("write success");
-            if key == "idle_kernel" {
-                RESTART_IDLE.signal();
-            }
-            if key == "log_level" || key == "uart_log_level" {
-                let value_str = core::str::from_utf8(&value)
-                    .map_err(Error::from)?;
-                let max_level = value_str.parse::<log::LevelFilter>()
-                    .map_err(|_| Error::UnknownLogLevel())?;
-
-                if key == "log_level" {
-                    BufferLogger::get_logger().set_buffer_log_level(max_level);
-                    info!("changing log level to {}", max_level);
-                } else {
-                    BufferLogger::get_logger().set_uart_log_level(max_level);
-                    info!("changing UART log level to {}", max_level);
+            match key.as_str() {
+                "idle_kernel" => {
+                    RESTART_IDLE.signal();
                 }
+                "log_level" | "uart_log_level" => {
+                    let value_str = core::str::from_utf8(&value).map_err(Error::from)?;
+                    let max_level = value_str
+                        .parse::<log::LevelFilter>()
+                        .map_err(|_| Error::UnknownLogLevel())?;
+
+                    if key == "log_level" {
+                        BufferLogger::get_logger().set_buffer_log_level(max_level);
+                        info!("changing log level to {}", max_level);
+                    } else {
+                        BufferLogger::get_logger().set_uart_log_level(max_level);
+                        info!("changing UART log level to {}", max_level);
+                    }
+                }
+                _ => {}
             }
             write_i8(stream, Reply::Success as i8).await?;
         } else {

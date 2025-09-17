@@ -760,7 +760,7 @@ impl Packet {
                     data: data,
                 }
             }
-            0xe0 => {
+            0xde => {
                 let last = reader.read_bool()?;
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut value: [u8; SAT_PAYLOAD_MAX_SIZE] = [0; SAT_PAYLOAD_MAX_SIZE];
@@ -771,45 +771,45 @@ impl Packet {
                     value: value,
                 }
             }
-            0xe1 => Packet::CoreMgmtReply {
+            0xdf => Packet::CoreMgmtReply {
                 succeeded: reader.read_bool()?,
             },
-            0xe2 => {
+            0xe0 => {
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut message: [u8; CXP_PAYLOAD_MAX_SIZE] = [0; CXP_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut message[0..length as usize])?;
                 Packet::CXPError { length, message }
             }
-            0xe3 => Self::CXPWaitReply,
-            0xe4 => Packet::CXPReadRequest {
+            0xe1 => Self::CXPWaitReply,
+            0xe2 => Packet::CXPReadRequest {
                 destination: reader.read_u8()?,
                 address: reader.read_u32::<NativeEndian>()?,
                 length: reader.read_u16::<NativeEndian>()?,
             },
-            0xe5 => {
+            0xe3 => {
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u8; CXP_PAYLOAD_MAX_SIZE] = [0; CXP_PAYLOAD_MAX_SIZE];
                 reader.read_exact(&mut data[0..length as usize])?;
                 Packet::CXPReadReply { length, data }
             }
-            0xe6 => Packet::CXPWrite32Request {
+            0xe4 => Packet::CXPWrite32Request {
                 destination: reader.read_u8()?,
                 address: reader.read_u32::<NativeEndian>()?,
                 value: reader.read_u32::<NativeEndian>()?,
             },
-            0xe7 => Packet::CXPWrite32Reply,
-            0xe8 => Packet::CXPROIViewerSetupRequest {
+            0xe5 => Packet::CXPWrite32Reply,
+            0xe6 => Packet::CXPROIViewerSetupRequest {
                 destination: reader.read_u8()?,
                 x0: reader.read_u16::<NativeEndian>()?,
                 y0: reader.read_u16::<NativeEndian>()?,
                 x1: reader.read_u16::<NativeEndian>()?,
                 y1: reader.read_u16::<NativeEndian>()?,
             },
-            0xe9 => Packet::CXPROIViewerSetupReply,
-            0xea => Packet::CXPROIViewerDataRequest {
+            0xe7 => Packet::CXPROIViewerSetupReply,
+            0xe8 => Packet::CXPROIViewerDataRequest {
                 destination: reader.read_u8()?,
             },
-            0xeb => {
+            0xe9 => {
                 let length = reader.read_u16::<NativeEndian>()?;
                 let mut data: [u64; CXP_PAYLOAD_MAX_SIZE / 8] = [0; CXP_PAYLOAD_MAX_SIZE / 8];
                 for i in 0..length as usize {
@@ -817,7 +817,7 @@ impl Packet {
                 }
                 Packet::CXPROIViewerPixelDataReply { length, data }
             }
-            0xec => Packet::CXPROIViewerFrameDataReply {
+            0xea => Packet::CXPROIViewerFrameDataReply {
                 width: reader.read_u16::<NativeEndian>()?,
                 height: reader.read_u16::<NativeEndian>()?,
                 pixel_code: reader.read_u16::<NativeEndian>()?,
@@ -1288,35 +1288,35 @@ impl Packet {
                 writer.write_all(&data[0..length as usize])?;
             }
             Packet::CoreMgmtConfigReadReply { last, length, value } => {
-                writer.write_u8(0xe0)?;
+                writer.write_u8(0xde)?;
                 writer.write_bool(last)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&value[0..length as usize])?;
             }
             Packet::CoreMgmtReply { succeeded } => {
-                writer.write_u8(0xe1)?;
+                writer.write_u8(0xdf)?;
                 writer.write_bool(succeeded)?;
             }
             Packet::CXPError { length, message } => {
-                writer.write_u8(0xe2)?;
+                writer.write_u8(0xe0)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&message[0..length as usize])?;
             }
             Packet::CXPWaitReply => {
-                writer.write_u8(0xe3)?;
+                writer.write_u8(0xe1)?;
             }
             Packet::CXPReadRequest {
                 destination,
                 address,
                 length,
             } => {
-                writer.write_u8(0xe4)?;
+                writer.write_u8(0xe2)?;
                 writer.write_u8(destination)?;
                 writer.write_u32::<NativeEndian>(address)?;
                 writer.write_u16::<NativeEndian>(length)?;
             }
             Packet::CXPReadReply { length, data } => {
-                writer.write_u8(0xe5)?;
+                writer.write_u8(0xe3)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 writer.write_all(&data[0..length as usize])?;
             }
@@ -1325,13 +1325,13 @@ impl Packet {
                 address,
                 value,
             } => {
-                writer.write_u8(0xe6)?;
+                writer.write_u8(0xe4)?;
                 writer.write_u8(destination)?;
                 writer.write_u32::<NativeEndian>(address)?;
                 writer.write_u32::<NativeEndian>(value)?;
             }
             Packet::CXPWrite32Reply => {
-                writer.write_u8(0xe7)?;
+                writer.write_u8(0xe5)?;
             }
             Packet::CXPROIViewerSetupRequest {
                 destination,
@@ -1340,7 +1340,7 @@ impl Packet {
                 x1,
                 y1,
             } => {
-                writer.write_u8(0xe8)?;
+                writer.write_u8(0xe6)?;
                 writer.write_u8(destination)?;
                 writer.write_u16::<NativeEndian>(x0)?;
                 writer.write_u16::<NativeEndian>(y0)?;
@@ -1348,14 +1348,14 @@ impl Packet {
                 writer.write_u16::<NativeEndian>(y1)?;
             }
             Packet::CXPROIViewerSetupReply => {
-                writer.write_u8(0xe9)?;
+                writer.write_u8(0xe7)?;
             }
             Packet::CXPROIViewerDataRequest { destination } => {
-                writer.write_u8(0xea)?;
+                writer.write_u8(0xe8)?;
                 writer.write_u8(destination)?;
             }
             Packet::CXPROIViewerPixelDataReply { length, data } => {
-                writer.write_u8(0xeb)?;
+                writer.write_u8(0xe9)?;
                 writer.write_u16::<NativeEndian>(length)?;
                 for i in 0..length as usize {
                     writer.write_u64::<NativeEndian>(data[i])?;
@@ -1366,7 +1366,7 @@ impl Packet {
                 height,
                 pixel_code,
             } => {
-                writer.write_u8(0xec)?;
+                writer.write_u8(0xea)?;
                 writer.write_u16::<NativeEndian>(width)?;
                 writer.write_u16::<NativeEndian>(height)?;
                 writer.write_u16::<NativeEndian>(pixel_code)?;

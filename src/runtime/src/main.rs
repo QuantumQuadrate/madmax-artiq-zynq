@@ -25,7 +25,7 @@ use libboard_zynq::{gic, mpcore, timer};
 use libconfig;
 use libcortex_a9::l2c::enable_l2_cache;
 use libsupport_zynq::{exception_vectors, ram};
-use log::{info, warn, LevelFilter};
+use log::{LevelFilter, info, warn};
 
 mod analyzer;
 mod comms;
@@ -81,8 +81,7 @@ mod grabber {
 fn setup_log_levels() {
     if let Ok(level_string) = libconfig::read_str("log_level") {
         if let Ok(level) = level_string.parse::<LevelFilter>() {
-            info!("log level set to {} by `log_level` config key",
-                level);
+            info!("log level set to {} by `log_level` config key", level);
             logger::BufferLogger::get_logger().set_buffer_log_level(level);
         } else {
             info!("log level set to INFO by default");
@@ -92,8 +91,7 @@ fn setup_log_levels() {
     }
     if let Ok(level_string) = libconfig::read_str("uart_log_level") {
         if let Ok(level) = level_string.parse::<LevelFilter>() {
-            info!("UART log level set to {} by `uart_log_level` config key",
-                level);
+            info!("UART log level set to {} by `uart_log_level` config key", level);
             logger::BufferLogger::get_logger().set_uart_log_level(level);
         } else {
             info!("UART log level set to INFO by default");
@@ -116,7 +114,7 @@ pub fn main_core0() {
     let buffer_logger = unsafe { libboard_artiq::logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.register();
     log::set_max_level(log::LevelFilter::Trace);
-    
+
     info!("NAR3/Zynq7000 starting...");
 
     ram::init_alloc_core0();
@@ -165,7 +163,7 @@ pub fn main_core0() {
     if let Err(err) = libconfig::init() {
         warn!("config initialization failed: {}", err);
     }
-    
+
     setup_log_levels();
 
     rtio_clocking::init();

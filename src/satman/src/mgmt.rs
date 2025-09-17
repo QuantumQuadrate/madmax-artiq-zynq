@@ -85,24 +85,36 @@ impl Manager {
         debug!("write key: {}", key);
         let value = payload.read_bytes::<NativeEndian>().unwrap();
 
+        let mut delay_set_flag = false;
         if key == "log_level" || key == "uart_log_level" {
-            let value_str = core::str::from_utf8(&value)
-                .map_err(|err| error!("invalid UTF_8: {:?}", err))?;
-            let max_level = value_str.parse::<LevelFilter>()
+            let value_str = core::str::from_utf8(&value).map_err(|err| error!("invalid UTF_8: {:?}", err))?;
+            let max_level = value_str
+                .parse::<LevelFilter>()
                 .map_err(|err| error!("unknown log level: {:?}", err))?;
 
             if key == "log_level" {
                 info!("Changing log level to {}", max_level);
                 BufferLogger::get_logger().set_buffer_log_level(max_level);
             } else {
-                info!("Changing UART log level to {}", max_level);
-                BufferLogger::get_logger().set_uart_log_level(max_level);
+                if max_level == LevelFilter::Trace {
+                    delay_set_flag = true;
+                    BufferLogger::get_logger().set_uart_log_level(LevelFilter::Debug);
+                } else {
+                    info!("Changing UART log level to {}", max_level);
+                    BufferLogger::get_logger().set_uart_log_level(max_level);
+                }
             }
         };
-        
+
         libconfig::write(&key, value)
             .map(|()| debug!("write success"))
-            .map_err(|err| error!("failed to write: {:?}", err))
+            .map_err(|err| error!("failed to write: {:?}", err))?;
+
+        if delay_set_flag {
+            info!("Changing UART log level to {}", LevelFilter::Trace);
+            BufferLogger::get_logger().set_uart_log_level(LevelFilter::Trace);
+        }
+        Ok(())
     }
 
     pub fn remove_config(&mut self, key: &str) -> Result<()> {
