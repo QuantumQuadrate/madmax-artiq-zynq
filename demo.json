@@ -2,7 +2,7 @@
     "target": "kasli_soc",
     "variant": "demo",
     "hw_rev": "v1.0",
-    "base": "standalone",
+    "drtio_role": "standalone",
     "peripherals": [
         {
             "type": "coaxpress_sfp"

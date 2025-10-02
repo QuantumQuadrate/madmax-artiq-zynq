@@ -2,7 +2,7 @@
     "target": "kasli_soc",
     "variant": "master",
     "hw_rev": "v1.0",
-    "base": "master",
+    "drtio_role": "master",
     "peripherals": [
         {
             "type": "coaxpress_sfp"

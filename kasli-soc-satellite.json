@@ -2,7 +2,7 @@
     "target": "kasli_soc",
     "variant": "satellite",
     "hw_rev": "v1.0",
-    "base": "satellite",
+    "drtio_role": "satellite",
     "peripherals": [
         {
             "type": "coaxpress_sfp"
