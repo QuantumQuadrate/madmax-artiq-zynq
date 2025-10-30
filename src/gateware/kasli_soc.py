@@ -148,8 +148,8 @@ def add_coaxpress_sfp(cls, clk_freq, roi_engine_count, refclk=None):
     cls.platform.add_false_path_constraints(cls.sys_crg.cd_sys.clk, rx.gtx.cd_cxp_gt_rx.clk)
 
 class GenericStandalone(SoCCore):
-    def __init__(self, description, acpki=False):
-        self.acpki = acpki
+    def __init__(self, description):
+        self.acpki = description["enable_acpki"]
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
 
@@ -268,12 +268,12 @@ class GenericStandalone(SoCCore):
 
 
 class GenericMaster(SoCCore):
-    def __init__(self, description, acpki=False):
+    def __init__(self, description):
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
 
-        has_drtio_over_eem = any(peripheral["type"] in DRTIO_EEM_PERIPHERALS for peripheral in description["peripherals"])
-        self.acpki = acpki
+        has_drtio_over_eem = any(peripheral["type"] == "shuttler" for peripheral in description["peripherals"])
+        self.acpki = description["enable_acpki"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -492,12 +492,12 @@ class GenericMaster(SoCCore):
 
 
 class GenericSatellite(SoCCore):
-    def __init__(self, description, acpki=False):
+    def __init__(self, description):
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
 
-        has_drtio_over_eem = any(peripheral["type"] in DRTIO_EEM_PERIPHERALS for peripheral in description["peripherals"])
-        self.acpki = acpki
+        has_drtio_over_eem = any(peripheral["type"] == "shuttler" for peripheral in description["peripherals"])
+        self.acpki = description["enable_acpki"]
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
@@ -762,8 +762,6 @@ def main():
         help="build Rust memory interface into the specified file")
     parser.add_argument("-g", default=None,
         help="build gateware into the specified directory")
-    parser.add_argument("--acpki", default=False, action="store_true",
-        help="enable ACPKI")
     parser.add_argument("description", metavar="DESCRIPTION",
                         help="JSON system description file")
     args = parser.parse_args()
