@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
 import argparse
-from operator import itemgetter
 
 from migen import *
 from migen.build.generic_platform import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import MultiReg
 from migen_axi.integration.soc_core import SoCCore
 from migen_axi.platforms import kasli_soc
