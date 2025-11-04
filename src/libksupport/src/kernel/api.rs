@@ -302,6 +302,12 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api_libm_f64f64!(exp2),
         api_libm_f64f64!(exp10),
         api_libm_f64f64!(expm1),
+        {
+            extern "C" fn ldexp(arg: f64, exp: i32) -> f64 {
+                libm::ldexp(arg, exp)
+            }
+            api!(ldexp = ldexp)
+        },
         api_libm_f64f64!(fabs),
         api_libm_f64f64!(floor),
         {
