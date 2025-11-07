@@ -11,11 +11,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1757645755,
-        "narHash": "sha256-8/gEuEs3chrFzGuehkMwtFJ5gJqH6SHABs6U7h8W0g0=",
+        "lastModified": 1762007969,
+        "narHash": "sha256-Dpmun1ZFUzZffRnYnEVF+n+dxSPLrAAj/WdKRtadbg0=",
         "ref": "release-8",
-        "rev": "270b7d53f2518184f35328084d51ee57810cb9b1",
-        "revCount": 9017,
+        "rev": "a1bf0e1d5f60dc483893b16c5ba89666e7e35462",
+        "revCount": 9024,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -87,11 +87,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1748162331,
-        "narHash": "sha256-rqc2RKYTxP3tbjA+PB3VMRQNnjesrT0pEofXQTrMsS8=",
+        "lastModified": 1761597516,
+        "narHash": "sha256-wxX7u6D2rpkJLWkZ2E932SIvDJW8+ON/0Yy8+a5vsDU=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "7c43f080a7f28b2774f3b3f43234ca11661bf334",
+        "rev": "daf6dc47aa4b44791372d6139ab7b25269184d55",
         "type": "github"
       },
       "original": {
@@ -153,11 +153,11 @@
     "src-migen": {
       "flake": false,
       "locked": {
-        "lastModified": 1746709999,
-        "narHash": "sha256-JwvxF/xwtQpy/JnG7WXhx0y5k+dHDSwNUcMjgQaegbg=",
+        "lastModified": 1759465137,
+        "narHash": "sha256-gRAvl5cUvrjq4t7htXsDBt4F8MEbHXFZoS0jbhrEs1I=",
         "owner": "m-labs",
         "repo": "migen",
-        "rev": "b92717a918c4d274d37f6eaff0c57ad689468173",
+        "rev": "147f003fb7076ac4c7cf76a9a5ce152dc10e0ca6",
         "type": "github"
       },
       "original": {
@@ -169,11 +169,11 @@
     "src-misoc": {
       "flake": false,
       "locked": {
-        "lastModified": 1747128843,
-        "narHash": "sha256-TCFPoaQFaFCg3my3wyl3Gkz4ZnyzWa/ZXbcZG/OEsCU=",
+        "lastModified": 1761903947,
+        "narHash": "sha256-cI5alXIU1bEpvZ2NTSbfYevz/UngtPLMU9f2XeYYTq4=",
         "ref": "refs/heads/master",
-        "rev": "9e07cf5f3b7d4949d3b775d4d946ca22900ab528",
-        "revCount": 2498,
+        "rev": "89051eeb63b7bee98432594f933de230eecf929d",
+        "revCount": 2507,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/m-labs/misoc.git"
