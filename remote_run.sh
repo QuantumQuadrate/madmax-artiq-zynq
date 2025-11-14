@@ -13,7 +13,7 @@ if [ -z "$SZL" ]; then
     exit 1
 fi
 
-target_host="rpi-4.m-labs.hk"
+target_host="rpi-4"
 impure=0
 pure_dir="result"
 impure_dir="build"
