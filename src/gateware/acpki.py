@@ -14,6 +14,7 @@ IN_BURST_LEN = 4
 class Engine(Module, AutoCSR):
     def __init__(self, bus, user):
         self.addr_base = CSRStorage(32)
+        # statistics (unused)
         self.trig_count = CSRStatus(32)
         self.write_count = CSRStatus(32)
 
@@ -53,8 +54,8 @@ class Engine(Module, AutoCSR):
             self.dout.eq(r.data),
             r.ready.eq(1),
             ar.burst.eq(axi.Burst.incr.value),
-            ar.len.eq(OUT_BURST_LEN-1), # Number of transfers in burst (0->1 transfer, 1->2 transfers...)
-            ar.size.eq(3), # Width of burst: 3 = 8 bytes = 64 bits
+            ar.len.eq(OUT_BURST_LEN-1),  # Number of transfers in burst (0->1 transfer, 1->2 transfers...)
+            ar.size.eq(3),  # Width of burst: 3 = 8 bytes = 64 bits
             ar.cache.eq(0xf),
         ]
 
@@ -86,9 +87,8 @@ class Engine(Module, AutoCSR):
         self.sync += [
             If(read_fsm.ongoing("IDLE"),
                 self.dout_index.eq(0)
-            ).Else(If(r.valid & read_fsm.ongoing("READ"),
-                    self.dout_index.eq(self.dout_index+1)
-                )
+            ).Elif(r.valid & read_fsm.ongoing("READ"),
+                self.dout_index.eq(self.dout_index+1)
             )
         ]
 
@@ -100,8 +100,8 @@ class Engine(Module, AutoCSR):
             aw.addr.eq(self.addr_base.storage+96),
             w.strb.eq(0xff),
             aw.burst.eq(axi.Burst.incr.value),
-            aw.len.eq(IN_BURST_LEN-1), # Number of transfers in burst minus 1
-            aw.size.eq(3), # Width of burst: 3 = 8 bytes = 64 bits
+            aw.len.eq(IN_BURST_LEN-1),  # Number of transfers in burst minus 1
+            aw.size.eq(3),  # Width of burst: 3 = 8 bytes = 64 bits
             aw.cache.eq(0xf),
             b.ready.eq(1),
         ]
@@ -113,7 +113,7 @@ class Engine(Module, AutoCSR):
             aw.valid.eq(0),
             If(self.trigger_stb,
                 aw.valid.eq(1),
-                If(aw.ready, # assumes aw.ready is not randomly deasserted
+                If(aw.ready,  # assumes aw.ready is not deasserted from now on
                     NextState("DATA_WAIT")
                 ).Else(
                     NextState("AW_READY_WAIT")
@@ -140,9 +140,9 @@ class Engine(Module, AutoCSR):
             )
         )
 
-        self.sync += If(w.ready & w.valid, self.write_count.status.eq(self.write_count.status+1))
-
         self.sync += [
+            If(w.ready & w.valid,
+                self.write_count.status.eq(self.write_count.status+1)),
             If(write_fsm.ongoing("IDLE"),
                 self.din_index.eq(0)
             ),
@@ -150,12 +150,9 @@ class Engine(Module, AutoCSR):
         ]
 
         self.comb += [
-            w.last.eq(0),
-            If(self.din_index==aw.len, w.last.eq(1))
+            w.last.eq(self.din_index==aw.len),
+            self.din_stb.eq(w.valid & w.ready)
         ]
-
-        self.comb += self.din_stb.eq(w.valid & w.ready)
-
 
 
 class KernelInitiator(Module, AutoCSR):
@@ -195,8 +192,8 @@ class KernelInitiator(Module, AutoCSR):
         dout_cases[0] = [
             cmd.eq(self.engine.dout[:8]),
             out_len.eq(self.engine.dout[8:16]),
+            cri.o_address.eq(self.engine.dout[32:40]),
             cri.chan_sel.eq(self.engine.dout[40:]),
-            cri.o_address.eq(self.engine.dout[32:40])
         ]
         for i in range(8):
             target = cri.o_data[i*64:(i+1)*64]

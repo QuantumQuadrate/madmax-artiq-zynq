@@ -1,7 +1,7 @@
 use core::sync::atomic::{Ordering, fence};
 
 use cslice::CSlice;
-use libcortex_a9::asm;
+use libcortex_a9::{asm, cache};
 use vcell::VolatileCell;
 
 #[cfg(has_drtio)]
@@ -116,6 +116,19 @@ unsafe fn process_exceptional_status(channel: i32, status: i32) {
     }
 }
 
+fn await_reply_status() -> i32 {
+    unsafe {
+        fence(Ordering::SeqCst);
+        asm::sev();
+        loop {
+            let status = TRANSACTION_BUFFER.reply_status.get();
+            if status != 0 {
+                return status
+            }
+        }
+    }
+}
+
 pub extern "C" fn output(target: i32, data: i32) {
     unsafe {
         // Clear status so we can observe response
@@ -127,17 +140,7 @@ pub extern "C" fn output(target: i32, data: i32) {
         TRANSACTION_BUFFER.request_timestamp = NOW;
         TRANSACTION_BUFFER.request_data[0] = data;
 
-        fence(Ordering::SeqCst);
-        asm::sev();
-        let mut status;
-        loop {
-            status = TRANSACTION_BUFFER.reply_status.get();
-            if status != 0 {
-                break;
-            }
-        }
-
-        let status = status & !0x10000;
+        let status = await_reply_status() & !0x10000;
         if status != 0 {
             process_exceptional_status(target >> 8, status);
         }
@@ -155,17 +158,7 @@ pub extern "C" fn output_wide(target: i32, data: CSlice<i32>) {
         TRANSACTION_BUFFER.request_timestamp = NOW;
         TRANSACTION_BUFFER.request_data[..data.len()].copy_from_slice(data.as_ref());
 
-        fence(Ordering::SeqCst);
-        asm::sev();
-        let mut status;
-        loop {
-            status = TRANSACTION_BUFFER.reply_status.get();
-            if status != 0 {
-                break;
-            }
-        }
-
-        let status = status & !0x10000;
+        let status = await_reply_status() & !0x10000;
         if status != 0 {
             process_exceptional_status(target >> 8, status);
         }
@@ -181,17 +174,7 @@ pub extern "C" fn input_timestamp(timeout: i64, channel: i32) -> i64 {
         TRANSACTION_BUFFER.request_timestamp = timeout;
         TRANSACTION_BUFFER.request_target = channel << 8;
         TRANSACTION_BUFFER.data_width = 0;
-
-        fence(Ordering::SeqCst);
-        asm::sev();
-
-        let mut status;
-        loop {
-            status = TRANSACTION_BUFFER.reply_status.get();
-            if status != 0 {
-                break;
-            }
-        }
+        let status = await_reply_status();
 
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!(
@@ -228,17 +211,15 @@ pub extern "C" fn input_data(channel: i32) -> i32 {
         TRANSACTION_BUFFER.request_target = channel << 8;
         TRANSACTION_BUFFER.data_width = 0;
 
-        fence(Ordering::SeqCst);
-        asm::sev();
+        let status = await_reply_status();
 
-        let mut status;
-        loop {
-            status = TRANSACTION_BUFFER.reply_status.get();
-            if status != 0 {
-                break;
-            }
-        }
+        process_exceptional_input_status(status, channel);
 
+        TRANSACTION_BUFFER.reply_data.get()
+    }
+}
+
+fn process_exceptional_input_status(status: i32, channel: i32) {
         if status & RTIO_I_STATUS_OVERFLOW != 0 {
             artiq_raise!(
                 "RTIOOverflow",
@@ -256,9 +237,6 @@ pub extern "C" fn input_data(channel: i32) -> i32 {
                 0,
                 0
             );
-        }
-
-        TRANSACTION_BUFFER.reply_data.get()
     }
 }
 
@@ -271,35 +249,8 @@ pub extern "C" fn input_timestamped_data(timeout: i64, channel: i32) -> Timestam
         TRANSACTION_BUFFER.request_target = channel << 8;
         TRANSACTION_BUFFER.data_width = 0;
 
-        fence(Ordering::SeqCst);
-        asm::sev();
-
-        let mut status;
-        loop {
-            status = TRANSACTION_BUFFER.reply_status.get();
-            if status != 0 {
-                break;
-            }
-        }
-
-        if status & RTIO_I_STATUS_OVERFLOW != 0 {
-            artiq_raise!(
-                "RTIOOverflow",
-                "RTIO input overflow on channel {rtio_channel_info:0}",
-                channel as i64,
-                0,
-                0
-            );
-        }
-        if status & RTIO_I_STATUS_DESTINATION_UNREACHABLE != 0 {
-            artiq_raise!(
-                "RTIODestinationUnreachable",
-                "RTIO destination unreachable, input, on channel {rtio_channel_info:0}",
-                channel as i64,
-                0,
-                0
-            );
-        }
+        let status = await_reply_status();
+        process_exceptional_input_status(status, channel);
 
         TimestampedData {
             timestamp: TRANSACTION_BUFFER.reply_timestamp.get(),
@@ -307,6 +258,7 @@ pub extern "C" fn input_timestamped_data(timeout: i64, channel: i32) -> Timestam
         }
     }
 }
+
 
 pub fn write_log(data: &[i8]) {
     let mut word: u32 = 0;
