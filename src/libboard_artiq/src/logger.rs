@@ -13,8 +13,8 @@ pub struct LogBufferRef<'a> {
 
 impl<'a> LogBufferRef<'a> {
     fn new(buffer: MutexGuard<'a, LogBuffer<&'static mut [u8]>>) -> LogBufferRef<'a> {
-        let old_log_level = log::max_level();
-        log::set_max_level(LevelFilter::Off);
+        let old_log_level = BufferLogger::get_logger().buffer_log_level();
+        BufferLogger::get_logger().set_buffer_log_level(LevelFilter::Off);
         LogBufferRef { buffer, old_log_level }
     }
 
@@ -33,7 +33,7 @@ impl<'a> LogBufferRef<'a> {
 
 impl<'a> Drop for LogBufferRef<'a> {
     fn drop(&mut self) {
-        log::set_max_level(self.old_log_level)
+        BufferLogger::get_logger().set_buffer_log_level(self.old_log_level);
     }
 }
 

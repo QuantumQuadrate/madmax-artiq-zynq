@@ -620,8 +620,7 @@ mod local_coremgmt {
             buffer.clear();
             core::mem::drop(buffer);
             write_chunk(stream, &bytes).await?;
-            if log::max_level() == log::LevelFilter::Trace {
-                // temporarily discard all trace level log
+            if BufferLogger::get_logger().buffer_log_level() == log::LevelFilter::Trace{
                 let logger = BufferLogger::get_logger();
                 logger.set_buffer_log_level(log::LevelFilter::Debug);
                 stream.flush().await?;
@@ -632,7 +631,7 @@ mod local_coremgmt {
 
     pub async fn set_log_filter(stream: &mut TcpStream, lvl: log::LevelFilter) -> Result<()> {
         info!("Changing log level to {}", lvl);
-        log::set_max_level(lvl);
+        BufferLogger::get_logger().set_buffer_log_level(lvl);
         write_i8(stream, Reply::Success as i8).await?;
         Ok(())
     }

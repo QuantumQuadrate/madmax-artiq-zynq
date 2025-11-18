@@ -227,8 +227,9 @@ pub fn main_core0() {
 
     let buffer_logger = unsafe { logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
+    buffer_logger.set_buffer_log_level(log::LevelFilter::Info);
     buffer_logger.register();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
 
     info!("ARTIQ satellite manager starting...");
     info!("gateware ident {}", identifier_read(&mut [0; 64]));

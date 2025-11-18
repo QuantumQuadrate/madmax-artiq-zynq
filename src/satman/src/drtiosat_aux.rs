@@ -993,7 +993,7 @@ async fn process_aux_packet<'a, 'b>(
 
             if let Ok(level_filter) = mgmt::byte_to_level_filter(log_level) {
                 info!("Changing log level to {}", level_filter);
-                log::set_max_level(level_filter);
+                logger::BufferLogger::get_logger().set_buffer_log_level(level_filter);
                 drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: true }).await
             } else {
                 drtioaux_async::send(0, &drtioaux::Packet::CoreMgmtReply { succeeded: false }).await

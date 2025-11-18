@@ -88,10 +88,11 @@ pub fn main_core0() {
     enable_l2_cache(0x8);
     timer::start();
 
-    let buffer_logger = unsafe { logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
+    let buffer_logger = unsafe { libboard_artiq::logger::BufferLogger::new(&mut LOG_BUFFER[..]) };
     buffer_logger.set_uart_log_level(log::LevelFilter::Info);
+    buffer_logger.set_buffer_log_level(log::LevelFilter::Info);
     buffer_logger.register();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Trace);
 
     info!("NAR3/Zynq7000 starting...");
 
