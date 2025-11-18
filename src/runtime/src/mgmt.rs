@@ -620,7 +620,7 @@ mod local_coremgmt {
             buffer.clear();
             core::mem::drop(buffer);
             write_chunk(stream, &bytes).await?;
-            if BufferLogger::get_logger().buffer_log_level() == log::LevelFilter::Trace{
+            if BufferLogger::get_logger().buffer_log_level() == log::LevelFilter::Trace {
                 let logger = BufferLogger::get_logger();
                 logger.set_buffer_log_level(log::LevelFilter::Debug);
                 stream.flush().await?;
