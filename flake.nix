@@ -5,9 +5,15 @@
   inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs;
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
-  outputs = { self, zynq-rs, artiq }:
-  let
-    pkgs = import artiq.inputs.nixpkgs { system = "x86_64-linux"; overlays = [ (import zynq-rs.inputs.rust-overlay) ]; };
+  outputs = {
+    self,
+    zynq-rs,
+    artiq,
+  }: let
+    pkgs = import artiq.inputs.nixpkgs {
+      system = "x86_64-linux";
+      overlays = [(import zynq-rs.inputs.rust-overlay)];
+    };
     zynqpkgs = zynq-rs.packages.x86_64-linux;
     artiqpkgs = artiq.packages.x86_64-linux;
     zynqRev = self.sourceInfo.rev or "unknown";
@@ -53,10 +59,10 @@
       pyproject = true;
       build-system = [pkgs.python3Packages.setuptools];
 
-      nativeBuildInputs = with pkgs.python3Packages; [ pbr ];
-      propagatedBuildInputs = with pkgs.python3Packages; [ fastnumbers ];
+      nativeBuildInputs = with pkgs.python3Packages; [pbr];
+      propagatedBuildInputs = with pkgs.python3Packages; [fastnumbers];
 
-      checkInputs = with pkgs.python3Packages; [ pytest ];
+      checkInputs = with pkgs.python3Packages; [pytest];
       checkPhase = "pytest";
       doCheck = false;
 
@@ -78,9 +84,9 @@
       pyproject = true;
       build-system = [pkgs.python3Packages.setuptools];
 
-      propagatedBuildInputs = with pkgs.python3Packages; [ setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc ];
+      propagatedBuildInputs = with pkgs.python3Packages; [setuptools click numpy toolz jinja2 ramda artiqpkgs.migen artiqpkgs.misoc];
 
-      checkInputs = with pkgs.python3Packages; [ pytestCheckHook pytest-timeout ];
+      checkInputs = with pkgs.python3Packages; [pytestCheckHook pytest-timeout];
 
       # migen/misoc version checks are broken with pyproject for some reason
       postPatch = ''
@@ -93,22 +99,29 @@
         substituteInPlace setup.cfg --replace '--flake8' ""
       '';
     };
-    binutils = { platform, target, zlib }: pkgs.stdenv.mkDerivation rec {
-      basename = "binutils";
-      version = "2.30";
-      name = "${basename}-${platform}-${version}";
-      src = pkgs.fetchurl {
-        url = "https://ftp.gnu.org/gnu/binutils/binutils-${version}.tar.bz2";
-        sha256 = "028cklfqaab24glva1ks2aqa1zxa6w6xmc8q34zs1sb7h22dxspg";
+    binutils = {
+      platform,
+      target,
+      zlib,
+    }:
+      pkgs.stdenv.mkDerivation rec {
+        basename = "binutils";
+        version = "2.30";
+        name = "${basename}-${platform}-${version}";
+        src = pkgs.fetchurl {
+          url = "https://ftp.gnu.org/gnu/binutils/binutils-${version}.tar.bz2";
+          sha256 = "028cklfqaab24glva1ks2aqa1zxa6w6xmc8q34zs1sb7h22dxspg";
+        };
+        configureFlags = ["--enable-shared" "--enable-deterministic-archives" "--target=${target}"];
+        outputs = ["out" "info" "man"];
+        depsBuildBuild = [pkgs.buildPackages.stdenv.cc];
+        buildInputs = [zlib];
+        enableParallelBuilding = true;
       };
-      configureFlags =
-        [ "--enable-shared" "--enable-deterministic-archives" "--target=${target}"];
-      outputs = [ "out" "info" "man" ];
-      depsBuildBuild = [ pkgs.buildPackages.stdenv.cc ];
-      buildInputs = [ zlib ];
-      enableParallelBuilding = true;
+    binutils-arm = pkgs.callPackage binutils {
+      platform = "arm";
+      target = "armv7-unknown-linux-gnueabihf";
     };
-    binutils-arm = pkgs.callPackage binutils { platform = "arm"; target = "armv7-unknown-linux-gnueabihf"; };
 
     # FSBL configuration supplied by Vivado 2020.1 for these boards:
     fsblTargets = ["zc702" "zc706" "zed"];
@@ -116,13 +129,26 @@
       # kasli-soc satellite variants
       "satellite"
       # zc706 satellite variants
-      "nist_clock_satellite" "nist_qc2_satellite" "acpki_nist_clock_satellite" "acpki_nist_qc2_satellite" 
-      "nist_clock_satellite_100mhz" "nist_qc2_satellite_100mhz" "acpki_nist_clock_satellite_100mhz" "acpki_nist_qc2_satellite_100mhz"
+      "nist_clock_satellite"
+      "nist_qc2_satellite"
+      "acpki_nist_clock_satellite"
+      "acpki_nist_qc2_satellite"
+      "nist_clock_satellite_100mhz"
+      "nist_qc2_satellite_100mhz"
+      "acpki_nist_clock_satellite_100mhz"
+      "acpki_nist_qc2_satellite_100mhz"
     ];
-    board-package-set = { target, variant, json ? null }: let
+    board-package-set = {
+      target,
+      variant,
+      json ? null,
+    }: let
       szl = zynqpkgs."${target}-szl";
       fsbl = zynqpkgs."${target}-fsbl";
-      fwtype = if builtins.elem variant sat_variants then "satman" else "runtime";
+      fwtype =
+        if builtins.elem variant sat_variants
+        then "satman"
+        else "runtime";
 
       firmware = naerskLib.buildPackage rec {
         name = "firmware";
@@ -132,7 +158,7 @@
 
         nativeBuildInputs = [
           pkgs.gnumake
-          (pkgs.python3.withPackages(ps: [ artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq-build ]))
+          (pkgs.python3.withPackages (ps: [artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq-build]))
           pkgs.llvmPackages_20.llvm
           pkgs.llvmPackages_20.clang-unwrapped
         ];
@@ -142,7 +168,11 @@
             export ZYNQ_REV=${zynqRev}
             export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include"
             export ZYNQ_RS=${zynq-rs}
-            make TARGET=${target} GWARGS="${if json == null then "-V ${variant}" else json}" ${fwtype}
+            make TARGET=${target} GWARGS="${
+              if json == null
+              then "-V ${variant}"
+              else json
+            }" ${fwtype}
           '';
 
           installPhase = ''
@@ -157,32 +187,39 @@
           dontFixup = true;
         };
       };
-      gateware = pkgs.runCommand "${target}-${variant}-gateware"
+      gateware =
+        pkgs.runCommand "${target}-${variant}-gateware"
         {
-          nativeBuildInputs = [ 
-            (pkgs.python3.withPackages(ps: [ artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq-build ]))
+          nativeBuildInputs = [
+            (pkgs.python3.withPackages (ps: [artiqpkgs.migen migen-axi artiqpkgs.misoc artiqpkgs.artiq-build]))
             artiqpkgs.vivado
           ];
         }
         ''
           export ZYNQ_REV=${zynqRev}
-          python ${./src/gateware}/${target}.py -g build ${if json == null then "-V ${variant}" else json}
+          python ${./src/gateware}/${target}.py -g build ${
+            if json == null
+            then "-V ${variant}"
+            else json
+          }
           mkdir -p $out $out/nix-support
           cp build/top.bit $out
           echo file binary-dist $out/top.bit >> $out/nix-support/hydra-build-products
         '';
 
       # SZL startup
-      jtag = pkgs.runCommand "${target}-${variant}-jtag" {}
+      jtag =
+        pkgs.runCommand "${target}-${variant}-jtag" {}
         ''
           mkdir $out
           ln -s ${szl}/szl.elf $out
           ln -s ${firmware}/${fwtype}.bin $out
           ln -s ${gateware}/top.bit $out
         '';
-      sd = pkgs.runCommand "${target}-${variant}-sd"
+      sd =
+        pkgs.runCommand "${target}-${variant}-sd"
         {
-          buildInputs = [ zynqpkgs.mkbootimage ];
+          buildInputs = [zynqpkgs.mkbootimage];
         }
         ''
           # Do not use "long" paths in boot.bif, because embedded developers
@@ -206,9 +243,10 @@
         '';
 
       # FSBL startup
-      fsbl-sd = pkgs.runCommand "${target}-${variant}-fsbl-sd"
+      fsbl-sd =
+        pkgs.runCommand "${target}-${variant}-fsbl-sd"
         {
-          buildInputs = [ zynqpkgs.mkbootimage ];
+          buildInputs = [zynqpkgs.mkbootimage];
         }
         ''
           bifdir=`mktemp -d`
@@ -228,33 +266,34 @@
           mkbootimage boot.bif $out/boot.bin
           echo file binary-dist $out/boot.bin >> $out/nix-support/hydra-build-products
         '';
-    in {
-      "${target}-${variant}-firmware" = firmware;
-      "${target}-${variant}-gateware" = gateware;
-      "${target}-${variant}-jtag" = jtag;
-      "${target}-${variant}-sd" = sd;
-    } // (
-      if builtins.elem target fsblTargets
-      then {
-        "${target}-${variant}-fsbl-sd" = fsbl-sd;
+    in
+      {
+        "${target}-${variant}-firmware" = firmware;
+        "${target}-${variant}-gateware" = gateware;
+        "${target}-${variant}-jtag" = jtag;
+        "${target}-${variant}-sd" = sd;
       }
-      else {}
-    );
+      // (
+        if builtins.elem target fsblTargets
+        then {
+          "${target}-${variant}-fsbl-sd" = fsbl-sd;
+        }
+        else {}
+      );
 
     gateware-sim = pkgs.stdenv.mkDerivation {
       name = "gateware-sim";
-      
-      nativeBuildInputs = [ 
-        (pkgs.python3.withPackages(ps: [ artiqpkgs.migen migen-axi artiqpkgs.artiq-build ]))
+
+      nativeBuildInputs = [
+        (pkgs.python3.withPackages (ps: [artiqpkgs.migen migen-axi artiqpkgs.artiq-build]))
       ];
 
-      phases = [ "buildPhase" ];
+      phases = ["buildPhase"];
 
-      buildPhase =
-        ''
+      buildPhase = ''
         python -m unittest discover ${self}/src/gateware -v
         touch $out
-        '';
+      '';
     };
 
     fmt-check = pkgs.stdenvNoCC.mkDerivation {
@@ -262,35 +301,41 @@
 
       src = ./src;
 
-      nativeBuildInputs = [ rust pkgs.gnumake ];
+      nativeBuildInputs = [rust pkgs.gnumake];
 
-      phases = [ "unpackPhase" "buildPhase" ];
+      phases = ["unpackPhase" "buildPhase"];
 
-      buildPhase =
-        ''
+      buildPhase = ''
         export ZYNQ_RS=${zynq-rs}
         make manifests
         cargo fmt -- --check
         touch $out
-        '';
+      '';
     };
 
     # for hitl-tests
-    zc706-nist_qc2 = (board-package-set { target = "zc706"; variant = "nist_qc2"; });
+    zc706-nist_qc2 = board-package-set {
+      target = "zc706";
+      variant = "nist_qc2";
+    };
     zc706-hitl-tests = pkgs.stdenv.mkDerivation {
       name = "zc706-hitl-tests";
 
-      __networked = true;  # compatibility with old patched Nix
+      __networked = true; # compatibility with old patched Nix
       # breaks hydra, https://github.com/NixOS/hydra/issues/1216
       #__impure = true;     # Nix 2.8+
 
       buildInputs = [
-        pkgs.netcat pkgs.openssh pkgs.rsync artiqpkgs.artiq artiq-netboot zynqpkgs.zc706-szl
+        pkgs.netcat
+        pkgs.openssh
+        pkgs.rsync
+        artiqpkgs.artiq
+        artiq-netboot
+        zynqpkgs.zc706-szl
       ];
-      phases = [ "buildPhase" ];
+      phases = ["buildPhase"];
 
-      buildPhase =
-        ''
+      buildPhase = ''
         export NIX_SSHOPTS="-F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i /opt/hydra_id_ed25519"
         LOCKCTL=$(mktemp -d)
         mkfifo $LOCKCTL/lockctl
@@ -336,40 +381,126 @@
           (echo b; sleep 5) | nc -N -w6 192.168.1.31 3131
           echo Board powered off
         )
-        '';
+      '';
     };
   in rec {
     packages.x86_64-linux =
       {
         inherit fastnumbers artiq-netboot ramda migen-axi binutils-arm;
-      } //
-      (board-package-set { target = "zc706"; variant = "cxp_4r_fmc"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_clock"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_clock_master"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_clock_master_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_clock_satellite"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_clock_satellite_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_qc2"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_qc2_master"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_qc2_master_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_qc2_satellite"; }) //
-      (board-package-set { target = "zc706"; variant = "nist_qc2_satellite_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_clock"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_master"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_master_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_satellite"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_clock_satellite_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_master"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_master_100mhz"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_satellite"; }) //
-      (board-package-set { target = "zc706"; variant = "acpki_nist_qc2_satellite_100mhz"; }) //
-      (board-package-set { target = "kasli_soc"; variant = "demo"; json = ./demo.json; }) //
-      (board-package-set { target = "kasli_soc"; variant = "master"; json = ./kasli-soc-master.json; }) //
-      (board-package-set { target = "kasli_soc"; variant = "satellite"; json = ./kasli-soc-satellite.json; }) //
-      (board-package-set { target = "ebaz4205"; variant = "base"; });
+      }
+      // (board-package-set {
+        target = "zc706";
+        variant = "cxp_4r_fmc";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_clock";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_clock_master";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_clock_master_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_clock_satellite";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_clock_satellite_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_qc2";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_qc2_master";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_qc2_master_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_qc2_satellite";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "nist_qc2_satellite_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_clock";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_clock_master";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_clock_master_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_clock_satellite";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_clock_satellite_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_qc2";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_qc2_master";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_qc2_master_100mhz";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_qc2_satellite";
+      })
+      // (board-package-set {
+        target = "zc706";
+        variant = "acpki_nist_qc2_satellite_100mhz";
+      })
+      // (board-package-set {
+        target = "kasli_soc";
+        variant = "demo";
+        json = ./demo.json;
+      })
+      // (board-package-set {
+        target = "kasli_soc";
+        variant = "master";
+        json = ./kasli-soc-master.json;
+      })
+      // (board-package-set {
+        target = "kasli_soc";
+        variant = "satellite";
+        json = ./kasli-soc-satellite.json;
+      })
+      // (board-package-set {
+        target = "ebaz4205";
+        variant = "base";
+      });
 
-    hydraJobs = packages.x86_64-linux // { inherit zc706-hitl-tests; inherit gateware-sim; inherit fmt-check; };
+    hydraJobs =
+      packages.x86_64-linux
+      // {
+        inherit zc706-hitl-tests;
+        inherit gateware-sim;
+        inherit fmt-check;
+      };
+
+    formatter.x86_64-linux = pkgs.alejandra;
 
     devShell.x86_64-linux = pkgs.mkShell {
       name = "artiq-zynq-dev-shell";
@@ -380,15 +511,16 @@
         gnumake
         cacert
         zynqpkgs.mkbootimage
-        openocd  
-        openssh rsync
-        (python3.withPackages(ps: (with artiqpkgs; [ migen migen-axi misoc artiq artiq-netboot ps.jsonschema ps.pyftdi ])))
+        openocd
+        openssh
+        rsync
+        (python3.withPackages (ps: (with artiqpkgs; [migen migen-axi misoc artiq artiq-netboot ps.jsonschema ps.pyftdi])))
         artiqpkgs.artiq
         artiqpkgs.vivado
         binutils-arm
         pre-commit
       ];
-      ZYNQ_REV="${zynqRev}";
+      ZYNQ_REV = "${zynqRev}";
       CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include";
       ZYNQ_RS = "${zynq-rs}";
       OPENOCD_ZYNQ = "${zynq-rs}/openocd";
@@ -396,6 +528,5 @@
     };
 
     makeArtiqZynqPackage = board-package-set;
-
   };
 }
