@@ -4,6 +4,8 @@ use cslice::CSlice;
 use libcortex_a9::asm;
 use vcell::VolatileCell;
 
+use log::info;
+
 #[cfg(has_drtio)]
 use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use crate::{artiq_raise, pl::csr, rtio_core};
@@ -17,8 +19,8 @@ pub const RTIO_I_STATUS_OVERFLOW: i32 = 2;
 pub const RTIO_I_STATUS_WAIT_STATUS: i32 = 4; // TODO
 pub const RTIO_I_STATUS_DESTINATION_UNREACHABLE: i32 = 8;
 
-const RTIO_CMD_OUTPUT = 0;
-const RTIO_CMD_INPUT = 1;
+const RTIO_CMD_OUTPUT: i8 = 0;
+const RTIO_CMD_INPUT: i8 = 1;
 
 #[repr(C)]
 pub struct TimestampedData {
@@ -99,10 +101,8 @@ pub extern "C" fn delay_mu(dt: i64) {
 #[inline(never)]
 unsafe fn process_exceptional_status(channel: i32, status: i32) {
     let timestamp = now_mu();
-    if status & RTIO_O_STATUS_WAIT != 0 {
-        // FIXME: this is a kludge and probably buggy (kernel interrupted?)
-        while csr::rtio::o_status_read() as i32 & RTIO_O_STATUS_WAIT != 0 {}
-    }
+    // The gateware should handle waiting
+    assert!(status & RTIO_O_STATUS_WAIT == 0);
     if status & RTIO_O_STATUS_UNDERFLOW != 0 {
         artiq_raise!(
             "RTIOUnderflow",

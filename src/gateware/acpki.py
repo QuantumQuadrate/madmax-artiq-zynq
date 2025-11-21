@@ -22,8 +22,8 @@ class Engine(Module, AutoCSR):
 
         # Dout : Data received from CPU, output by DMA module
         # Din : Data driven into DMA module, written into CPU
-        # When stb assert, index shows word being read/written, dout/din holds
-        # data
+        # When stb is asserted, index shows word being read/written, 
+        # dout/din holds data
         #
         # Cycle:
         # trigger_stb pulsed at start
@@ -158,6 +158,7 @@ class Engine(Module, AutoCSR):
 class KernelInitiator(Module, AutoCSR):
     def __init__(self, tsc, bus, user, evento):
         # Core is disabled upon reset to avoid spurious triggering if evento toggles from e.g. boot code.
+        # Should be also reset between kernels (?)
         self.enable = CSRStorage()
 
         self.counter = CSRStatus(64)
@@ -183,12 +184,16 @@ class KernelInitiator(Module, AutoCSR):
         cmd_write = Signal()
         cmd_read = Signal()
         self.comb += [
-            cmd_write.eq(cmd == 0),
-            cmd_read.eq(cmd == 1)
+            cmd_write.eq(cmd == 0),  # rtio output
+            cmd_read.eq(cmd == 1)  # rtio input
         ]
 
         out_len = Signal(8)
         dout_cases = {}
+        # request_cmd: i8
+        # data_width: i8
+        # padding0: [i8; 2]
+        # request_target: i32
         dout_cases[0] = [
             cmd.eq(self.engine.dout[:8]),
             out_len.eq(self.engine.dout[8:16]),
@@ -199,10 +204,13 @@ class KernelInitiator(Module, AutoCSR):
             target = cri.o_data[i*64:(i+1)*64]
             dout_cases[0] += [If(i >= self.engine.dout[8:16], target.eq(0))]
 
+        # request_timestamp: i64
         dout_cases[1] = [
             cri.o_timestamp.eq(self.engine.dout),
             cri.i_timeout.eq(self.engine.dout)
         ]
+        # request_data: [i32; 16]
+        # packed into 64 bit * 8 here?
         for i in range(8):
             target = cri.o_data[i*64:(i+1)*64]
             dout_cases[i+2] = [target.eq(self.engine.dout)]
@@ -218,8 +226,8 @@ class KernelInitiator(Module, AutoCSR):
             )
         ]
 
-        # If input event, wait for response before allow input data to be
-        # sampled
+        # If input event, wait for response before 
+        # allowing the input data to be sampled
         # TODO: If output, wait for wait flag clear
         RTIO_I_STATUS_WAIT_STATUS = 4
         RTIO_O_STATUS_WAIT = 1
@@ -227,24 +235,24 @@ class KernelInitiator(Module, AutoCSR):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
 
         fsm.act("IDLE",
-            If(self.engine.trigger_stb, NextState("WAIT_OUT_CYCLE"))
+            If(self.engine.trigger_stb, 
+                NextState("WAIT_OUT_CYCLE")),
         )
         fsm.act("WAIT_OUT_CYCLE",
             self.engine.din_ready.eq(0),
-            If(self.engine.dout_stb & cmd_write & (self.engine.dout_index == out_len + 2),
-               NextState("WAIT_READY")
+            If(self.engine.dout_stb & cmd_write & (self.engine.dout_index == out_len + 3),
+                NextState("WAIT_READY")
             ),
-            # for some reason read requires some delay until the next state
             If(self.engine.dout_stb & cmd_read & (self.engine.dout_index == out_len + 3),
                 NextState("WAIT_READY")
             )
         )
         fsm.act("WAIT_READY",
             If(cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0) \
-                | cmd_write & ~(cri.o_status & RTIO_O_STATUS_WAIT),
+               | cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0),
                 self.engine.din_ready.eq(1),
                 NextState("IDLE")
-            )
+            ),
         )
 
         din_cases_cmdwrite = {
@@ -252,7 +260,9 @@ class KernelInitiator(Module, AutoCSR):
             1: [self.engine.din.eq(0)],
         }
         din_cases_cmdread = {
+            # reply_status: VolatileCell<i32>, reply_data: VolatileCell<i32>
             0: [self.engine.din[:32].eq((1<<16) | cri.i_status), self.engine.din[32:].eq(cri.i_data)],
+            # reply_timestamp: VolatileCell<i64>,
             1: [self.engine.din.eq(cri.i_timestamp)]
         }
 
