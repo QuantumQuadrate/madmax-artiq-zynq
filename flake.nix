@@ -314,12 +314,16 @@
     };
 
     # for hitl-tests
-    zc706-nist_qc2 = board-package-set {
-      target = "zc706";
-      variant = "nist_qc2";
+    zc706-nist_qc2 = board-package-set { 
+      target = "zc706"; 
+      variant = "nist_qc2"; 
     };
-    zc706-hitl-tests = pkgs.stdenv.mkDerivation {
-      name = "zc706-hitl-tests";
+    zc706-acpki_nist_qc2 = board-package-set {
+      target = "zc706"; 
+      variant = "acpki_nist_qc2"; 
+    };
+    make-zc706-hitl-tests = { name, board-package }: pkgs.stdenv.mkDerivation {
+      name = "zc706-hitl-tests-${name}";
 
       __networked = true; # compatibility with old patched Nix
       # breaks hydra, https://github.com/NixOS/hydra/issues/1216
@@ -361,7 +365,7 @@
           export USER=hydra
           export OPENOCD_ZYNQ=${zynq-rs}/openocd
           export SZL=${zynqpkgs.szl}
-          bash ${self}/remote_run.sh -h rpi-4 -o "$NIX_SSHOPTS" -d ${zc706-nist_qc2.zc706-nist_qc2-jtag}
+          bash ${self}/remote_run.sh -h rpi-4 -o "$NIX_SSHOPTS" -d ${board-package}
 
           echo Waiting for the firmware to boot...
           sleep 15
@@ -383,6 +387,9 @@
         )
       '';
     };
+    zc706-hitl-tests = make-zc706-hitl-tests { name = "nist_qc2"; board-package = zc706-nist_qc2.zc706-nist_qc2-jtag; };
+    zc706-acpki-hitl-tests = make-zc706-hitl-tests { name = "acpki_nist_qc2"; board-package = zc706-acpki_nist_qc2.zc706-acpki_nist_qc2-jtag; };
+
   in rec {
     packages.x86_64-linux =
       {
@@ -496,6 +503,7 @@
       packages.x86_64-linux
       // {
         inherit zc706-hitl-tests;
+        inherit zc706-acpki-hitl-tests;
         inherit gateware-sim;
         inherit fmt-check;
       };
