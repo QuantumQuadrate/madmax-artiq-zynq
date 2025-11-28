@@ -4,8 +4,6 @@ use cslice::CSlice;
 use libcortex_a9::asm;
 use vcell::VolatileCell;
 
-use log::info;
-
 #[cfg(has_drtio)]
 use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use crate::{artiq_raise, pl::csr, rtio_core};
@@ -256,7 +254,6 @@ pub extern "C" fn input_timestamped_data(timeout: i64, channel: i32) -> Timestam
         }
     }
 }
-
 
 pub fn write_log(data: &[i8]) {
     let mut word: u32 = 0;
