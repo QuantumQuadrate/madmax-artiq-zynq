@@ -1,12 +1,15 @@
+use alloc::vec::Vec;
 use core::sync::atomic::{Ordering, fence};
+use core::mem::MaybeUninit;
+use core::ptr::copy_nonoverlapping;
 
 use cslice::CSlice;
 use libcortex_a9::asm;
 use vcell::VolatileCell;
 
 #[cfg(has_drtio)]
-use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
-use crate::{artiq_raise, pl::csr, rtio_core};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE, Message};
+use crate::{artiq_raise, pl::csr, rtio_core, kernel::KERNEL_IMAGE};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
 pub const RTIO_O_STATUS_UNDERFLOW: i32 = 2;
@@ -62,7 +65,8 @@ static mut TRANSACTION_BUFFER: Transaction = Transaction {
 pub extern "C" fn init() {
     unsafe {
         rtio_core::reset_write(1);
-        csr::rtio::engine_addr_base_write(&TRANSACTION_BUFFER as *const Transaction as u32);
+        csr::rtio::transaction_base_write(&TRANSACTION_BUFFER as *const Transaction as u32);
+        csr::rtio::batch_len_write(0);
         csr::rtio::enable_write(1);
     }
     #[cfg(has_drtio)]
@@ -97,7 +101,7 @@ pub extern "C" fn delay_mu(dt: i64) {
 }
 
 #[inline(never)]
-unsafe fn process_exceptional_status(channel: i32, status: i32) {
+pub unsafe fn process_exceptional_status(channel: i32, status: i32) {
     let timestamp = now_mu();
     // The gateware should handle waiting
     assert!(status & RTIO_O_STATUS_WAIT == 0);
@@ -268,5 +272,109 @@ pub fn write_log(data: &[i8]) {
 
     if word != 0 {
         output((csr::CONFIG_RTIO_LOG_CHANNEL << 8) as i32, word as i32);
+    }
+}
+
+static mut BATCH_RUNNING: bool = false;
+
+#[repr(C, align(64))]
+struct BufferedTransaction {
+    // same format as normal transaction to reuse the engine
+    // using MaybeUninit to avoid unnecessary zeroing and writes
+    request_cmd: MaybeUninit<i8>, // always assuming output (forced in gateware), input not supported
+    data_width: i8,
+    padding0: MaybeUninit<[i8; 2]>,
+    request_target: i32,
+    request_timestamp: i64,
+    request_data: [MaybeUninit<i32>; 16], // potentially todo: use only as much as needed to reduce memory usage
+}
+
+static mut BATCH_BUFFER: Vec<BufferedTransaction> = Vec::new();
+
+pub extern "C" fn batch_start() {
+    unsafe {
+        if BATCH_RUNNING {
+            artiq_raise!("RuntimeError", "Batched mode is already running.");
+        }
+        let library = KERNEL_IMAGE.as_ref().unwrap();
+        library.rebind(b"rtio_output", batch_output as *const ()).unwrap();
+        library
+            .rebind(b"rtio_output_wide", batch_output_wide as *const ())
+            .unwrap();
+        // pre-allocate the buffer to avoid early reallocations
+        BATCH_BUFFER = Vec::with_capacity(1024);
+        BATCH_RUNNING = true; 
+    }
+}
+
+pub extern "C" fn batch_end() {
+    // trigger the batch, and check the reply.
+    unsafe {
+        BATCH_RUNNING = false;
+        if BATCH_BUFFER.len() == 0 {
+            return;
+        }
+        csr::rtio::batch_len_write(BATCH_BUFFER.len() as u32);
+        csr::rtio::batch_base_write(BATCH_BUFFER.as_ptr() as u32);
+
+        // dmb and send event (commit the event to gateware)
+        fence(Ordering::SeqCst);
+        asm::sev();
+
+        // start cleaning up before reading status
+        let library = KERNEL_IMAGE.as_ref().unwrap();
+        library.rebind(b"rtio_output", output as *const ()).unwrap();
+        library
+            .rebind(b"rtio_output_wide", output_wide as *const ())
+            .unwrap();
+        
+        let status = loop {
+            let status = TRANSACTION_BUFFER.reply_status.get();
+            if status != 0 {
+                // Clear status so we can observe response on the next call
+                TRANSACTION_BUFFER.reply_status.set(0);
+                break status & !(1 << 16);
+            }
+        };
+        // free up memory
+        BATCH_BUFFER = Vec::new();
+        // len = 0 to indicate we are not in batch mode anymore
+        csr::rtio::batch_len_write(0);
+
+        if status != 0 {
+            process_exceptional_status(0, status);
+        }
+    }
+}
+
+pub extern "C" fn batch_output(target: i32, data: i32) {
+    unsafe {
+        BATCH_BUFFER.push(BufferedTransaction {
+            request_cmd: MaybeUninit::uninit(),
+            data_width: 1,
+            request_target: target,
+            request_timestamp: NOW,
+            request_data: [MaybeUninit::uninit(); 16],
+            padding0: MaybeUninit::uninit(),
+        });
+        BATCH_BUFFER[BATCH_BUFFER.len() - 1].request_data[0] = MaybeUninit::new(data);
+    }
+}
+
+pub extern "C" fn batch_output_wide(target: i32, data: CSlice<i32>) {
+    unsafe {
+        BATCH_BUFFER.push(BufferedTransaction {
+            request_cmd: MaybeUninit::uninit(),
+            data_width: data.len() as i8,
+            request_target: target,
+            request_timestamp: NOW,
+            request_data: [MaybeUninit::uninit(); 16],
+            padding0: MaybeUninit::uninit(),
+        });
+        copy_nonoverlapping(
+            data.as_ptr(), 
+            BATCH_BUFFER[BATCH_BUFFER.len() - 1].request_data.as_mut_ptr() as *mut i32,
+            data.len()
+        );
     }
 }

@@ -95,6 +95,12 @@ pub fn resolve(required: &[u8]) -> Option<u32> {
         api!(rtio_input_data = rtio::input_data),
         api!(rtio_input_timestamped_data = rtio::input_timestamped_data),
 
+        // acp rtio batching
+        #[cfg(ki_impl = "acp")]
+        api!(rtio_batch_start = rtio::batch_start),
+        #[cfg(ki_impl = "acp")]
+        api!(rtio_batch_end = rtio::batch_end),
+
         // log
         api!(core_log = core_log),
         api!(rtio_log = rtio_log),
