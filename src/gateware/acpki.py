@@ -10,13 +10,16 @@ from artiq.gateware import rtio
 OUT_BURST_LEN = 10
 IN_BURST_LEN = 4
 
+RTIO_I_STATUS_WAIT_STATUS = 4
+RTIO_O_STATUS_WAIT = 1
+
+BATCH_ENTRY_LEN = 80
+REPLY_ADDR_OFFSET = 96
 
 class Engine(Module, AutoCSR):
     def __init__(self, bus, user):
-        self.addr_base = CSRStorage(32)
-        # statistics (unused)
-        self.trig_count = CSRStatus(32)
-        self.write_count = CSRStatus(32)
+        self.addr_base = Signal(32)
+        self.write_addr = Signal(32)
 
         self.trigger_stb = Signal()
 
@@ -39,8 +42,6 @@ class Engine(Module, AutoCSR):
 
         ###
 
-        self.sync += If(self.trigger_stb, self.trig_count.status.eq(self.trig_count.status+1))
-
         self.comb += [
             user.aruser.eq(0x1f),
             user.awuser.eq(0x1f)
@@ -50,7 +51,7 @@ class Engine(Module, AutoCSR):
 
         ### Read
         self.comb += [
-            ar.addr.eq(self.addr_base.storage),
+            ar.addr.eq(self.addr_base),
             self.dout.eq(r.data),
             r.ready.eq(1),
             ar.burst.eq(axi.Burst.incr.value),
@@ -97,7 +98,7 @@ class Engine(Module, AutoCSR):
         ### Write
         self.comb += [
             w.data.eq(self.din),
-            aw.addr.eq(self.addr_base.storage+96),
+            aw.addr.eq(self.write_addr),
             w.strb.eq(0xff),
             aw.burst.eq(axi.Burst.incr.value),
             aw.len.eq(IN_BURST_LEN-1),  # Number of transfers in burst minus 1
@@ -141,8 +142,6 @@ class Engine(Module, AutoCSR):
         )
 
         self.sync += [
-            If(w.ready & w.valid,
-                self.write_count.status.eq(self.write_count.status+1)),
             If(write_fsm.ongoing("IDLE"),
                 self.din_index.eq(0)
             ),
@@ -154,12 +153,17 @@ class Engine(Module, AutoCSR):
             self.din_stb.eq(w.valid & w.ready)
         ]
 
+        self.write_idle = Signal()
+        self.comb += self.write_idle.eq(write_fsm.ongoing("IDLE"))
 
 class KernelInitiator(Module, AutoCSR):
     def __init__(self, tsc, bus, user, evento):
         # Core is disabled upon reset to avoid spurious triggering if evento toggles from e.g. boot code.
         # Should be also reset between kernels (?)
         self.enable = CSRStorage()
+        self.transaction_base = CSRStorage(32)  # single transaction
+        self.batch_base = CSRStorage(32)  # batch mode vec start
+        self.batch_len = CSRStorage(32)  
 
         self.counter = CSRStatus(64)
         self.counter_update = CSR()
@@ -171,12 +175,23 @@ class KernelInitiator(Module, AutoCSR):
 
         ###
 
+        batch_en = Signal()
+        self.comb += batch_en.eq(self.enable.storage & ~(self.batch_len.storage == 0))
+
+        batch_offset = Signal.like(self.batch_len.storage)
+        batch_counter = Signal.like(self.batch_len.storage)
+        batch_stb = Signal()
+        rtio_err = Signal.like(self.cri.o_status)
+
         evento_stb = Signal()
         evento_latched = Signal()
         evento_latched_d = Signal()
         self.specials += MultiReg(evento, evento_latched)
         self.sync += evento_latched_d.eq(evento_latched)
-        self.comb += self.engine.trigger_stb.eq(self.enable.storage & (evento_latched != evento_latched_d))
+        self.comb += [
+            self.engine.trigger_stb.eq(self.enable.storage & ((evento_latched != evento_latched_d) | batch_stb)),
+            self.engine.write_addr.eq(self.transaction_base.storage + REPLY_ADDR_OFFSET),
+        ]
 
         cri = self.cri
 
@@ -184,8 +199,8 @@ class KernelInitiator(Module, AutoCSR):
         cmd_write = Signal()
         cmd_read = Signal()
         self.comb += [
-            cmd_write.eq(cmd == 0),  # rtio output
-            cmd_read.eq(cmd == 1)  # rtio input
+            cmd_write.eq(cmd == 0 | batch_en),  # rtio output, forced in batch mode
+            cmd_read.eq(cmd == 1 & ~batch_en),  # rtio input
         ]
 
         out_len = Signal(8)
@@ -210,7 +225,7 @@ class KernelInitiator(Module, AutoCSR):
             cri.i_timeout.eq(self.engine.dout)
         ]
         # request_data: [i32; 16]
-        # packed into 64 bit * 8 here?
+        # packed into 64 bit * 8 here
         for i in range(8):
             target = cri.o_data[i*64:(i+1)*64]
             dout_cases[i+2] = [target.eq(self.engine.dout)]
@@ -226,33 +241,51 @@ class KernelInitiator(Module, AutoCSR):
             )
         ]
 
+        rtio_ready = Signal()
+        last_batch = Signal()
+        self.comb += [
+            rtio_ready.eq(cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0) \
+                        | (cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0))),
+            last_batch.eq(batch_en & (self.batch_len.storage == batch_counter))
+        ]
+
         # If input event, wait for response before 
         # allowing the input data to be sampled
-        # TODO: If output, wait for wait flag clear
-        RTIO_I_STATUS_WAIT_STATUS = 4
-        RTIO_O_STATUS_WAIT = 1
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
 
         fsm.act("IDLE",
+            NextValue(batch_counter, 0),
+            NextValue(batch_offset, 0),
+            NextValue(rtio_err, 0),
             If(self.engine.trigger_stb, 
                 NextState("WAIT_OUT_CYCLE")),
         )
         fsm.act("WAIT_OUT_CYCLE",
             self.engine.din_ready.eq(0),
-            If(self.engine.dout_stb & cmd_write & (self.engine.dout_index == out_len + 3),
-                NextState("WAIT_READY")
-            ),
-            If(self.engine.dout_stb & cmd_read & (self.engine.dout_index == out_len + 3),
-                NextState("WAIT_READY")
+            If(self.engine.dout_stb & (self.engine.dout_index == out_len + 3),
+                # update batch info for the next round
+                If(batch_en, 
+                    NextValue(batch_counter, batch_counter + 1),
+                    NextValue(batch_offset, batch_offset + BATCH_ENTRY_LEN)
+                ),
+                NextState("WAIT_READY"),
             )
         )
+
+
         fsm.act("WAIT_READY",
-            If(cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0) \
-               | cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0),
-                self.engine.din_ready.eq(1),
-                NextState("IDLE")
-            ),
+            If(rtio_ready,
+                # stop the batch in case of an error or when reaching the capacity
+                # when batch mode is not enabled, just when it's not busy anymore
+                If(~batch_en | last_batch,
+                    self.engine.din_ready.eq(1),
+                    NextState("IDLE")
+                ).Else(
+                    batch_stb.eq(1),
+                    NextState("WAIT_OUT_CYCLE")
+                )
+            )
         )
 
         din_cases_cmdwrite = {
@@ -269,6 +302,21 @@ class KernelInitiator(Module, AutoCSR):
         self.comb += [
             If(cmd_read, Case(self.engine.din_index, din_cases_cmdread)),
             If(cmd_write, Case(self.engine.din_index, din_cases_cmdwrite)),
+        ]
+
+        # batch-related
+        self.sync += [
+            If(~fsm.ongoing("IDLE") & batch_en,
+                # save the RTIO errors besides WAIT
+                rtio_err.eq(rtio_err | cri.o_status & ~(RTIO_O_STATUS_WAIT))),
+            # feed the engine the new address
+            If(self.engine.trigger_stb,
+                If(batch_en,
+                    self.engine.addr_base.eq(self.batch_base.storage + batch_offset)
+                ).Else(
+                    self.engine.addr_base.eq(self.transaction_base.storage)
+                )
+            )
         ]
 
         # CRI CSRs
