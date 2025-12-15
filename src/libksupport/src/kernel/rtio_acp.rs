@@ -43,7 +43,8 @@ struct Transaction {
     reply_status: VolatileCell<i32>,
     reply_data: VolatileCell<i32>,
     reply_timestamp: VolatileCell<i64>,
-    padding2: [i64; 2],
+    reply_target: VolatileCell<i32>,
+    padding2: [i32; 3],
 }
 
 static mut TRANSACTION_BUFFER: Transaction = Transaction {
@@ -57,9 +58,10 @@ static mut TRANSACTION_BUFFER: Transaction = Transaction {
     reply_status: VolatileCell::new(0),
     reply_data: VolatileCell::new(0),
     reply_timestamp: VolatileCell::new(0),
+    reply_target: VolatileCell::new(0),
     padding0: [0; 2],
     padding1: [0; 2],
-    padding2: [0; 2],
+    padding2: [0; 3],
 };
 
 pub extern "C" fn init() {
@@ -342,7 +344,8 @@ pub extern "C" fn batch_end() {
         csr::rtio::batch_len_write(0);
 
         if status != 0 {
-            process_exceptional_status(0, status);
+            let target = TRANSACTION_BUFFER.reply_target.get();
+            process_exceptional_status((target >> 8) as i32, status);
         }
     }
 }

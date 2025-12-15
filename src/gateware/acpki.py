@@ -163,7 +163,7 @@ class KernelInitiator(Module, AutoCSR):
         self.enable = CSRStorage()
         self.transaction_base = CSRStorage(32)  # single transaction
         self.batch_base = CSRStorage(32)  # batch mode vec start
-        self.batch_len = CSRStorage(32)  
+        self.batch_len = CSRStorage(32)
 
         self.counter = CSRStatus(64)
         self.counter_update = CSR()
@@ -202,6 +202,8 @@ class KernelInitiator(Module, AutoCSR):
             cmd_write.eq(cmd == 0 | batch_en),  # rtio output, forced in batch mode
             cmd_read.eq(cmd == 1 & ~batch_en),  # rtio input
         ]
+        # save the channel in case of an error in batch mode to help find the problematic one
+        target_latched = Signal(32)
 
         out_len = Signal(8)
         dout_cases = {}
@@ -212,6 +214,7 @@ class KernelInitiator(Module, AutoCSR):
         dout_cases[0] = [
             cmd.eq(self.engine.dout[:8]),
             out_len.eq(self.engine.dout[8:16]),
+            target_latched.eq(self.engine.dout[32:]),
             cri.o_address.eq(self.engine.dout[32:40]),
             cri.chan_sel.eq(self.engine.dout[40:]),
         ]
@@ -255,9 +258,6 @@ class KernelInitiator(Module, AutoCSR):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
 
         fsm.act("IDLE",
-            NextValue(batch_counter, 0),
-            NextValue(batch_offset, 0),
-            NextValue(rtio_err, 0),
             If(self.engine.trigger_stb, 
                 NextState("WAIT_OUT_CYCLE")),
         )
@@ -272,7 +272,6 @@ class KernelInitiator(Module, AutoCSR):
                 NextState("WAIT_READY"),
             )
         )
-
 
         fsm.act("WAIT_READY",
             If(rtio_ready,
@@ -291,12 +290,15 @@ class KernelInitiator(Module, AutoCSR):
         din_cases_cmdwrite = {
             0: [self.engine.din.eq((1<<16) | cri.o_status)],
             1: [self.engine.din.eq(0)],
+            2: [self.engine.din.eq(target_latched)]
         }
         din_cases_cmdread = {
             # reply_status: VolatileCell<i32>, reply_data: VolatileCell<i32>
             0: [self.engine.din[:32].eq((1<<16) | cri.i_status), self.engine.din[32:].eq(cri.i_data)],
             # reply_timestamp: VolatileCell<i64>,
-            1: [self.engine.din.eq(cri.i_timestamp)]
+            1: [self.engine.din.eq(cri.i_timestamp)],
+            # reply_target: VolatileCell<i32>
+            2: [self.engine.din[:32].eq(target_latched)]
         }
 
         self.comb += [
@@ -306,6 +308,11 @@ class KernelInitiator(Module, AutoCSR):
 
         # batch-related
         self.sync += [
+            If(self.batch_base.re,
+                batch_counter.eq(0),
+                batch_offset.eq(0),
+                rtio_err.eq(0)
+            ),
             If(~fsm.ongoing("IDLE") & batch_en,
                 # save the RTIO errors besides WAIT
                 rtio_err.eq(rtio_err | cri.o_status & ~(RTIO_O_STATUS_WAIT))),
