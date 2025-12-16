@@ -40,6 +40,8 @@ class Engine(Module, AutoCSR):
         self.dout = Signal(64)
         self.din = Signal(64)
 
+        self.addr_updateable = Signal()
+
         ###
 
         self.comb += [
@@ -58,6 +60,7 @@ class Engine(Module, AutoCSR):
             ar.len.eq(OUT_BURST_LEN-1),  # Number of transfers in burst (0->1 transfer, 1->2 transfers...)
             ar.size.eq(3),  # Width of burst: 3 = 8 bytes = 64 bits
             ar.cache.eq(0xf),
+            self.addr_updateable.eq(~ar.valid),
         ]
 
         # read control
@@ -161,8 +164,8 @@ class KernelInitiator(Module, AutoCSR):
         # Core is disabled upon reset to avoid spurious triggering if evento toggles from e.g. boot code.
         # Should be also reset between kernels (?)
         self.enable = CSRStorage()
-        self.transaction_base = CSRStorage(32)  # single transaction
-        self.batch_base = CSRStorage(32)  # batch mode vec start
+        self.out_base = CSRStorage(32)  # output data (to CRI)
+        self.in_base = CSRStorage(32)   # in data (RTIO reply)
         self.batch_len = CSRStorage(32)
 
         self.counter = CSRStatus(64)
@@ -180,7 +183,9 @@ class KernelInitiator(Module, AutoCSR):
 
         batch_offset = Signal.like(self.batch_len.storage)
         batch_counter = Signal.like(self.batch_len.storage)
-        batch_stb = Signal()
+        batch_stb = Signal()  # triggers the next round
+        # save the channel in case of an error in batch mode to help find the problematic one
+        target_latched = Signal(32)
         rtio_err = Signal.like(self.cri.o_status)
 
         evento_stb = Signal()
@@ -190,7 +195,7 @@ class KernelInitiator(Module, AutoCSR):
         self.sync += evento_latched_d.eq(evento_latched)
         self.comb += [
             self.engine.trigger_stb.eq(self.enable.storage & ((evento_latched != evento_latched_d) | batch_stb)),
-            self.engine.write_addr.eq(self.transaction_base.storage + REPLY_ADDR_OFFSET),
+            self.engine.write_addr.eq(self.in_base.storage),
         ]
 
         cri = self.cri
@@ -202,8 +207,6 @@ class KernelInitiator(Module, AutoCSR):
             cmd_write.eq(cmd == 0 | batch_en),  # rtio output, forced in batch mode
             cmd_read.eq(cmd == 1 & ~batch_en),  # rtio input
         ]
-        # save the channel in case of an error in batch mode to help find the problematic one
-        target_latched = Signal(32)
 
         out_len = Signal(8)
         dout_cases = {}
@@ -280,7 +283,8 @@ class KernelInitiator(Module, AutoCSR):
                 If(~batch_en | last_batch,
                     self.engine.din_ready.eq(1),
                     NextState("IDLE")
-                ).Else(
+                ).Elif(self.engine.dout_index == 0,  # read engine at idle
+                # todo: prefetch preamble to determine exact burst length to save cycles
                     batch_stb.eq(1),
                     NextState("WAIT_OUT_CYCLE")
                 )
@@ -308,7 +312,7 @@ class KernelInitiator(Module, AutoCSR):
 
         # batch-related
         self.sync += [
-            If(self.batch_base.re,
+            If(self.batch_len.re,
                 batch_counter.eq(0),
                 batch_offset.eq(0),
                 rtio_err.eq(0)
@@ -316,13 +320,10 @@ class KernelInitiator(Module, AutoCSR):
             If(~fsm.ongoing("IDLE") & batch_en,
                 # save the RTIO errors besides WAIT
                 rtio_err.eq(rtio_err | cri.o_status & ~(RTIO_O_STATUS_WAIT))),
-            # feed the engine the new address
-            If(self.engine.trigger_stb,
-                If(batch_en,
-                    self.engine.addr_base.eq(self.batch_base.storage + batch_offset)
-                ).Else(
-                    self.engine.addr_base.eq(self.transaction_base.storage)
-                )
+            # feed the engine the new address when in idle or in preparation for the next step
+            If(self.engine.addr_updateable,
+                # batch_offset = 0 when batch_len = 0
+                self.engine.addr_base.eq(self.out_base.storage + batch_offset)
             )
         ]
 
