@@ -7,7 +7,7 @@ from misoc.interconnect.csr import *
 
 from artiq.gateware import rtio
 
-OUT_BURST_LEN = 10
+OUT_BURST_LEN = 12
 IN_BURST_LEN = 4
 
 RTIO_I_STATUS_WAIT_STATUS = 4
