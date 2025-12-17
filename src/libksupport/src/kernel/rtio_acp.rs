@@ -54,7 +54,7 @@ static mut IN_BUFFER: InTransaction = InTransaction {
     padding: [0; 3]
 };
 
-const BUFFER_SIZE: usize = 1024;
+const BUFFER_SIZE: usize = csr::CONFIG_ACPKI_BATCH_SIZE as usize;
 
 struct BatchState {
     ptr: i32,

@@ -234,6 +234,7 @@ class GenericStandalone(SoCCore):
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
+            self.config["ACPKI_BUFFER_SIZE"] = int(description["acpki_buffer_size"])
             self.submodules.rtio = acpki_lib.KernelInitiator(self.rtio_tsc,
                                                              bus=self.ps7.s_axi_acp,
                                                              user=self.ps7.s_axi_acp_user,
@@ -413,6 +414,7 @@ class GenericMaster(SoCCore):
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
+            self.config["ACPKI_BUFFER_SIZE"] = int(description["acpki_buffer_size"])
             self.submodules.rtio = acpki_lib.KernelInitiator(self.rtio_tsc,
                                                              bus=self.ps7.s_axi_acp,
                                                              user=self.ps7.s_axi_acp_user,
@@ -626,6 +628,7 @@ class GenericSatellite(SoCCore):
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"
+            self.config["ACPKI_BUFFER_SIZE"] = int(description["acpki_buffer_size"])
             self.submodules.rtio = acpki_lib.KernelInitiator(self.rtio_tsc,
                                                              bus=self.ps7.s_axi_acp,
                                                              user=self.ps7.s_axi_acp_user,

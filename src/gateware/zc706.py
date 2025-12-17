@@ -125,7 +125,7 @@ def prepare_zc706_platform(platform):
     ])
 
 class ZC706(SoCCore):
-    def __init__(self, acpki=False):
+    def __init__(self, acpki=False, acpki_batch_size=1e5):
         self.acpki = acpki
 
         platform = zc706.Platform()
@@ -156,6 +156,7 @@ class ZC706(SoCCore):
         self.config["HAS_SI5324"] = None
         self.config["SI5324_AS_SYNTHESIZER"] = None
         self.config["SI5324_SOFT_RESET"] = None
+        self.config["ACPKI_BATCH_SIZE"] = int(acpki_batch_size)
         
         self.submodules.bootstrap = CLK200BootstrapClock(platform)
         self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, cdr_clk_buf)
@@ -197,7 +198,7 @@ class ZC706(SoCCore):
 
 
 class _MasterBase(SoCCore):
-    def __init__(self, acpki=False, drtio100mhz=False):
+    def __init__(self, acpki=False, drtio100mhz=False, acpki_batch_size=1e5):
         self.acpki = acpki
 
         clk_freq = 100e6 if drtio100mhz else 125e6
@@ -288,6 +289,8 @@ class _MasterBase(SoCCore):
         self.config["HAS_SI5324"] = None
         self.config["SI5324_AS_SYNTHESIZER"] = None
 
+        self.config["ACPKI_BATCH_SIZE"] = int(acpki_batch_size)
+
         # Constrain TX & RX timing for the first transceiver channel
         # (First channel acts as master for phase alignment for all channels' TX)
         platform.add_false_path_constraints(
@@ -338,7 +341,7 @@ class _MasterBase(SoCCore):
 
 
 class _SatelliteBase(SoCCore):
-    def __init__(self, acpki=False, drtio100mhz=False):
+    def __init__(self, acpki=False, drtio100mhz=False, acpki_batch_size=1e5):
         self.acpki = acpki
 
         clk_freq = 100e6 if drtio100mhz else 125e6
@@ -441,6 +444,7 @@ class _SatelliteBase(SoCCore):
         self.add_memory_group("drtioaux_mem", drtioaux_memory_group)
 
         self.config["RTIO_FREQUENCY"] = str(self.gt_drtio.rtio_clk_freq/1e6)
+        self.config["ACPKI_BATCH_SIZE"] = int(acpki_batch_size)
 
         # Si5324 Phaser
         self.submodules.siphaser = SiPhaser7Series(
@@ -704,40 +708,40 @@ class _CXP_4R_FMC_RTIO():
         self.add_rtio(rtio_channels)
 
 class NIST_CLOCK(ZC706, _NIST_CLOCK_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        ZC706.__init__(self, acpki)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        ZC706.__init__(self, acpki, acpki_batch_size)
         self.submodules += SMAClkinForward(self.platform)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_CLOCK_Master(_MasterBase, _NIST_CLOCK_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        _MasterBase.__init__(self, acpki, drtio100mhz)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        _MasterBase.__init__(self, acpki, drtio100mhz, acpki_batch_size)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_CLOCK_Satellite(_SatelliteBase, _NIST_CLOCK_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        _SatelliteBase.__init__(self, acpki, drtio100mhz)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        _SatelliteBase.__init__(self, acpki, drtio100mhz, acpki_batch_size)
         _NIST_CLOCK_RTIO.__init__(self)
 
 class NIST_QC2(ZC706, _NIST_QC2_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        ZC706.__init__(self, acpki)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        ZC706.__init__(self, acpki, acpki_batch_size)
         self.submodules += SMAClkinForward(self.platform)
         _NIST_QC2_RTIO.__init__(self)
 
 class NIST_QC2_Master(_MasterBase, _NIST_QC2_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        _MasterBase.__init__(self, acpki, drtio100mhz)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        _MasterBase.__init__(self, acpki, drtio100mhz, acpki_batch_size)
         _NIST_QC2_RTIO.__init__(self)
 
 class NIST_QC2_Satellite(_SatelliteBase, _NIST_QC2_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        _SatelliteBase.__init__(self, acpki, drtio100mhz)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        _SatelliteBase.__init__(self, acpki, drtio100mhz, acpki_batch_size)
         _NIST_QC2_RTIO.__init__(self)
 
 class CXP_4R_FMC(ZC706, _CXP_4R_FMC_RTIO):
-    def __init__(self, acpki, drtio100mhz):
-        ZC706.__init__(self, acpki)
+    def __init__(self, acpki, drtio100mhz, acpki_batch_size):
+        ZC706.__init__(self, acpki, acpki_batch_size)
         _CXP_4R_FMC_RTIO.__init__(self)
 
 VARIANTS = {cls.__name__.lower(): cls for cls in [NIST_CLOCK, NIST_CLOCK_Master, NIST_CLOCK_Satellite,
@@ -758,6 +762,7 @@ def main():
                         help="variant: "
                              "[acpki_]nist_clock/nist_qc2[_master/_satellite][_100mhz]"
                              "(default: %(default)s)")
+    parser.add_argument("--acpki-batch-size", default=10000, help="ACPKI batch buffer size")
     args = parser.parse_args()
 
     variant = args.variant.lower()
@@ -772,7 +777,7 @@ def main():
     except KeyError:
         raise SystemExit("Invalid variant (-V/--variant)")
 
-    soc = cls(acpki=acpki, drtio100mhz=drtio100mhz)
+    soc = cls(acpki=acpki, drtio100mhz=drtio100mhz, acpki_batch_size=args.acpki_batch_size)
     soc.finalize()
 
     if args.r is not None:

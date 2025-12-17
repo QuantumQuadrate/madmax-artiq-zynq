@@ -103,7 +103,7 @@ def _create_ttl():
 
 
 class EBAZ4205(SoCCore):
-    def __init__(self, rtio_clk=125e6, acpki=False):
+    def __init__(self, rtio_clk=125e6, acpki=False, acpki_batch_size=1e5):
         self.acpki = acpki
 
         platform = ebaz4205.Platform()
@@ -213,6 +213,7 @@ class EBAZ4205(SoCCore):
             import acpki
 
             self.config["KI_IMPL"] = "acp"
+            self.config["ACPKI_BATCH_SIZE"] = int(acpki_batch_size)
             self.submodules.rtio = acpki.KernelInitiator(
                 self.rtio_tsc,
                 bus=self.ps7.s_axi_acp,
@@ -271,6 +272,7 @@ def main():
         "-g", default=None, help="build gateware into the specified directory"
     )
     parser.add_argument("--rtio-clk", default=125e6, help="RTIO Clock Frequency (Hz)")
+    parser.add_argument("--acpki-batch-size", default=10000, help="ACPKI batch buffer size")
     parser.add_argument(
         "-V",
         "--variant",
@@ -290,7 +292,7 @@ def main():
     except KeyError:
         raise SystemExit("Invalid variant (-V/--variant)")
 
-    soc = cls(rtio_clk=rtio_clk, acpki=acpki)
+    soc = cls(rtio_clk=rtio_clk, acpki=acpki, acpki_batch_size=args.acpki_batch_size)
     soc.finalize()
 
     if args.r is not None:
