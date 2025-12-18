@@ -26,7 +26,7 @@ pub struct TimestampedData {
     data: i32,
 }
 
-#[repr(C, align(64))]
+#[repr(C, align(16))]
 #[derive(Copy, Clone)]
 struct OutTransaction {
     request_cmd: i8,
@@ -42,22 +42,22 @@ struct InTransaction {
     reply_status: VolatileCell<i32>,
     reply_data: VolatileCell<i32>,
     reply_timestamp: VolatileCell<i64>,
-    reply_target: VolatileCell<i32>,
-    padding: [i32; 3]
+    reply_batch_cnt: VolatileCell<i32>,
+    padding: i32,
 }
 
 static mut IN_BUFFER: InTransaction = InTransaction {
     reply_status: VolatileCell::new(0),
     reply_data: VolatileCell::new(0),
     reply_timestamp: VolatileCell::new(0),
-    reply_target: VolatileCell::new(0),
-    padding: [0; 3]
+    reply_batch_cnt: VolatileCell::new(0),
+    padding: 0
 };
 
 const BUFFER_SIZE: usize = csr::CONFIG_ACPKI_BATCH_SIZE as usize;
 
 struct BatchState {
-    ptr: i32,
+    ptr: i32,  // points to the next writeable position, and also serves as len
     running: bool,
     transactions: [OutTransaction; BUFFER_SIZE],
 }
@@ -115,10 +115,14 @@ pub extern "C" fn delay_mu(dt: i64) {
 }
 
 #[inline(never)]
-pub unsafe fn process_exceptional_status(channel: i32, status: i32) {
-    let timestamp = now_mu();
-    // The gateware should handle waiting
-    assert!(status & RTIO_O_STATUS_WAIT == 0);
+pub unsafe fn process_exceptional_status(channel: i32, status: i32, timestamp: i64) {
+    // The gateware should handle waiting, but sometimes it will slip through the cracks
+    let mut status = status;
+    if status & RTIO_O_STATUS_WAIT != 0 {
+        while status & RTIO_O_STATUS_WAIT != 0 {
+            status = csr::rtio::o_status_read() as i32;
+        }
+    }
     if status & RTIO_O_STATUS_UNDERFLOW != 0 {
         artiq_raise!(
             "RTIOUnderflow",
@@ -166,7 +170,7 @@ pub extern "C" fn output(target: i32, data: i32) {
 
         let status = await_reply_status() & !(1 << 16);
         if status != 0 {
-            process_exceptional_status(target >> 8, status);
+            process_exceptional_status(target >> 8, status, now_mu());
         }
     }
 }
@@ -181,7 +185,7 @@ pub extern "C" fn output_wide(target: i32, data: CSlice<i32>) {
 
         let status = await_reply_status() & !(1 << 16);
         if status != 0 {
-            process_exceptional_status(target >> 8, status);
+            process_exceptional_status(target >> 8, status, now_mu());
         }
     }
 }
@@ -311,7 +315,6 @@ pub extern "C" fn batch_end() {
             return;
         }
         csr::rtio::batch_len_write((BATCH_STATE.ptr) as u32);
-
         // dmb and send event (commit the event to gateware)
         fence(Ordering::SeqCst);
         asm::sev();
@@ -332,10 +335,11 @@ pub extern "C" fn batch_end() {
         };
         // len = 0 to indicate we are not in batch mode anymore
         csr::rtio::batch_len_write(0);
-
         if status != 0 {
-            let target = IN_BUFFER.reply_target.get();
-            process_exceptional_status((target >> 8) as i32, status);
+            let ptr = IN_BUFFER.reply_batch_cnt.get();
+            let target = BATCH_STATE.transactions[ptr as usize].request_target >> 8;
+            let timestamp = BATCH_STATE.transactions[ptr as usize].request_timestamp;
+            process_exceptional_status(target, status, timestamp);
         }
     }
 }

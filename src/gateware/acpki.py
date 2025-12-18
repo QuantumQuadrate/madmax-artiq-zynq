@@ -39,8 +39,6 @@ class Engine(Module, AutoCSR):
         self.dout = Signal(64)
         self.din = Signal(64)
 
-        self.addr_updateable = Signal()
-
         ###
 
         self.comb += [
@@ -59,7 +57,6 @@ class Engine(Module, AutoCSR):
             ar.len.eq(OUT_BURST_LEN-1),  # Number of transfers in burst (0->1 transfer, 1->2 transfers...)
             ar.size.eq(3),  # Width of burst: 3 = 8 bytes = 64 bits
             ar.cache.eq(0xf),
-            self.addr_updateable.eq(~ar.valid),
         ]
 
         # read control
@@ -96,6 +93,8 @@ class Engine(Module, AutoCSR):
         ]
 
         self.comb += self.dout_stb.eq(r.valid & r.ready)
+        self.read_idle = Signal()
+        self.comb += self.read_idle.eq(read_fsm.ongoing("IDLE"))
 
         ### Write
         self.comb += [
@@ -165,7 +164,7 @@ class KernelInitiator(Module, AutoCSR):
         self.enable = CSRStorage()
         self.out_base = CSRStorage(32)  # output data (to CRI)
         self.in_base = CSRStorage(32)   # in data (RTIO reply)
-        self.batch_len = CSRStorage(32)
+        self.batch_len = CSRStorage(32) # length of the batch, 0 for disabling the mode
 
         self.counter = CSRStatus(64)
         self.counter_update = CSR()
@@ -178,12 +177,11 @@ class KernelInitiator(Module, AutoCSR):
         ###
 
         batch_en = Signal()
-        self.comb += batch_en.eq(self.enable.storage & ~(self.batch_len.storage == 0))
+        self.comb += batch_en.eq(self.batch_len.storage != 0)
 
-        batch_offset = Signal.like(self.batch_len.storage)
-        batch_counter = Signal.like(self.batch_len.storage)
-        batch_stb = Signal()  # triggers the next round
-        rtio_err = Signal.like(self.cri.o_status)
+        batch_offset = Signal.like(self.out_base.storage)   # address offset
+        batch_ptr = Signal.like(self.batch_len.storage)
+        batch_stb = Signal()  # triggers the next event in the batch
 
         evento_stb = Signal()
         evento_latched = Signal()
@@ -201,35 +199,29 @@ class KernelInitiator(Module, AutoCSR):
         cmd_write = Signal()
         cmd_read = Signal()
         self.comb += [
-            cmd_write.eq(cmd == 0 | batch_en),  # rtio output, forced in batch mode
-            cmd_read.eq(cmd == 1 & ~batch_en),  # rtio input
+            cmd_write.eq(batch_en | (cmd == 0)),  # rtio output, forced in batch mode
+            cmd_read.eq(~batch_en & (cmd == 1)),  # rtio input, disallowed in batch mode
         ]
 
         out_len = Signal(8)
         dout_cases = {}
-        # request_cmd: i8
-        # data_width: i8
-        # padding0: [i8; 2]
-        # request_target: i32
         dout_cases[0] = [
-            cmd.eq(self.engine.dout[:8]),
-            out_len.eq(self.engine.dout[8:16]),
-            cri.o_address.eq(self.engine.dout[32:40]),
-            cri.chan_sel.eq(self.engine.dout[40:]),
+            cmd.eq(self.engine.dout[:8]),               # request_cmd: i8
+            out_len.eq(self.engine.dout[8:16]),         # data_width: i8
+            # padding (2 bytes)
+            cri.o_address.eq(self.engine.dout[32:40]),  # request_target: i32
+            cri.chan_sel.eq(self.engine.dout[40:]),     # request_target cont.
         ]
         for i in range(8):
             target = cri.o_data[i*64:(i+1)*64]
             dout_cases[0] += [If(i >= self.engine.dout[8:16], target.eq(0))]
 
-        # request_timestamp: i64
         dout_cases[1] = [
-            cri.o_timestamp.eq(self.engine.dout),
+            cri.o_timestamp.eq(self.engine.dout),  # request_timestamp: i64
             cri.i_timeout.eq(self.engine.dout),
         ]
-        # request_data: [i32; 16]
-        # packed into 64 bit * 8 here
         for i in range(8):
-            target = cri.o_data[i*64:(i+1)*64]
+            target = cri.o_data[i*64:(i+1)*64] # request_data: [i32; 16]
             dout_cases[i+2] = [target.eq(self.engine.dout)]
 
         self.sync += [
@@ -254,25 +246,26 @@ class KernelInitiator(Module, AutoCSR):
         )
         fsm.act("WAIT_OUT_CYCLE",
             self.engine.din_ready.eq(0),
+            batch_stb.eq(0),
             If(self.engine.dout_stb & (self.engine.dout_index == out_len + 3),
-                # update batch info for the next round
                 If(batch_en,
-                    NextValue(batch_counter, batch_counter + 1),
-                    NextValue(batch_offset, batch_offset + BATCH_ENTRY_LEN)
+                    NextValue(batch_ptr, batch_ptr + 1),
+                    NextValue(self.engine.addr_base, self.engine.addr_base + BATCH_ENTRY_LEN)
                 ),
-                NextState("WAIT_READY"),
+                NextState("WAIT_READY")
             )
         )
 
         fsm.act("WAIT_READY",
-            If(cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0) \
-                        | (cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0)),
+            batch_stb.eq(0),
+            If((cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0)) \
+                | (cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0)),
                 # stop the batch in case of an error or when reaching the capacity
-                If((self.batch_len.storage == batch_counter) | ~(rtio_err == 0),
+                If(~batch_en |
+                    (batch_en & (((self.batch_len.storage - 1) == batch_ptr) | (cri.o_status != 0))),
                     self.engine.din_ready.eq(1),
                     NextState("IDLE")
-                ).Elif(self.engine.dout_index == 0,  # read engine at idle
-                # todo: prefetch preamble to determine exact burst length to save cycles
+                ).Elif(self.engine.read_idle,
                     batch_stb.eq(1),
                     NextState("WAIT_OUT_CYCLE")
                 )
@@ -282,14 +275,13 @@ class KernelInitiator(Module, AutoCSR):
         din_cases_cmdwrite = {
             0: [self.engine.din.eq((1<<16) | cri.o_status)],
             1: [self.engine.din.eq(0)],
-            2: [self.engine.din.eq(batch_counter)]
+            2: [self.engine.din.eq(batch_ptr)]
         }
         din_cases_cmdread = {
             # reply_status: VolatileCell<i32>, reply_data: VolatileCell<i32>
             0: [self.engine.din[:32].eq((1<<16) | cri.i_status), self.engine.din[32:].eq(cri.i_data)],
-            # reply_timestamp: VolatileCell<i64>,
-            1: [self.engine.din.eq(cri.i_timestamp)],
-            2: [self.engine.din.eq(batch_counter)]
+            1: [self.engine.din.eq(cri.i_timestamp)],  # reply_timestamp: VolatileCell<i64>,
+            2: [self.engine.din.eq(batch_ptr)]     # reply_batch_count: VolatileCell<i32>
         }
 
         self.comb += [
@@ -299,16 +291,11 @@ class KernelInitiator(Module, AutoCSR):
 
         # batch-related
         self.sync += [
-            If(self.batch_len.re,
-                batch_counter.eq(0),
+            If(fsm.ongoing("IDLE"),
+                batch_ptr.eq(0),
                 batch_offset.eq(0),
+                self.engine.addr_base.eq(self.out_base.storage)
             ),
-            rtio_err.eq(cri.o_status & ~(RTIO_O_STATUS_WAIT)),
-            # feed the engine the new address when in idle or in preparation for the next step
-            If(self.engine.addr_updateable,
-                # batch_offset = 0 when batch_len = 0
-                self.engine.addr_base.eq(self.out_base.storage + batch_offset)
-            )
         ]
 
         # CRI CSRs
