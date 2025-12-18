@@ -7,14 +7,13 @@ from misoc.interconnect.csr import *
 
 from artiq.gateware import rtio
 
-OUT_BURST_LEN = 12
-IN_BURST_LEN = 4
+OUT_BURST_LEN = 10
+IN_BURST_LEN = 3
 
 RTIO_I_STATUS_WAIT_STATUS = 4
 RTIO_O_STATUS_WAIT = 1
 
 BATCH_ENTRY_LEN = 80
-REPLY_ADDR_OFFSET = 96
 
 class Engine(Module, AutoCSR):
     def __init__(self, bus, user):
@@ -184,8 +183,6 @@ class KernelInitiator(Module, AutoCSR):
         batch_offset = Signal.like(self.batch_len.storage)
         batch_counter = Signal.like(self.batch_len.storage)
         batch_stb = Signal()  # triggers the next round
-        # save the channel in case of an error in batch mode to help find the problematic one
-        target_latched = Signal(32)
         rtio_err = Signal.like(self.cri.o_status)
 
         evento_stb = Signal()
@@ -217,7 +214,6 @@ class KernelInitiator(Module, AutoCSR):
         dout_cases[0] = [
             cmd.eq(self.engine.dout[:8]),
             out_len.eq(self.engine.dout[8:16]),
-            target_latched.eq(self.engine.dout[32:]),
             cri.o_address.eq(self.engine.dout[32:40]),
             cri.chan_sel.eq(self.engine.dout[40:]),
         ]
@@ -228,7 +224,7 @@ class KernelInitiator(Module, AutoCSR):
         # request_timestamp: i64
         dout_cases[1] = [
             cri.o_timestamp.eq(self.engine.dout),
-            cri.i_timeout.eq(self.engine.dout)
+            cri.i_timeout.eq(self.engine.dout),
         ]
         # request_data: [i32; 16]
         # packed into 64 bit * 8 here
@@ -247,14 +243,6 @@ class KernelInitiator(Module, AutoCSR):
             )
         ]
 
-        rtio_ready = Signal()
-        last_batch = Signal()
-        self.comb += [
-            rtio_ready.eq(cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0) \
-                        | (cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0))),
-            last_batch.eq(batch_en & (self.batch_len.storage == batch_counter))
-        ]
-
         # If input event, wait for response before 
         # allowing the input data to be sampled
 
@@ -268,7 +256,7 @@ class KernelInitiator(Module, AutoCSR):
             self.engine.din_ready.eq(0),
             If(self.engine.dout_stb & (self.engine.dout_index == out_len + 3),
                 # update batch info for the next round
-                If(batch_en, 
+                If(batch_en,
                     NextValue(batch_counter, batch_counter + 1),
                     NextValue(batch_offset, batch_offset + BATCH_ENTRY_LEN)
                 ),
@@ -277,10 +265,10 @@ class KernelInitiator(Module, AutoCSR):
         )
 
         fsm.act("WAIT_READY",
-            If(rtio_ready,
+            If(cmd_read & (cri.i_status & RTIO_I_STATUS_WAIT_STATUS == 0) \
+                        | (cmd_write & (cri.o_status & RTIO_O_STATUS_WAIT == 0)),
                 # stop the batch in case of an error or when reaching the capacity
-                # when batch mode is not enabled, just when it's not busy anymore
-                If(~batch_en | last_batch,
+                If((self.batch_len.storage == batch_counter) | ~(rtio_err == 0),
                     self.engine.din_ready.eq(1),
                     NextState("IDLE")
                 ).Elif(self.engine.dout_index == 0,  # read engine at idle
@@ -294,15 +282,14 @@ class KernelInitiator(Module, AutoCSR):
         din_cases_cmdwrite = {
             0: [self.engine.din.eq((1<<16) | cri.o_status)],
             1: [self.engine.din.eq(0)],
-            2: [self.engine.din.eq(target_latched)]
+            2: [self.engine.din.eq(batch_counter)]
         }
         din_cases_cmdread = {
             # reply_status: VolatileCell<i32>, reply_data: VolatileCell<i32>
             0: [self.engine.din[:32].eq((1<<16) | cri.i_status), self.engine.din[32:].eq(cri.i_data)],
             # reply_timestamp: VolatileCell<i64>,
             1: [self.engine.din.eq(cri.i_timestamp)],
-            # reply_target: VolatileCell<i32>
-            2: [self.engine.din[:32].eq(target_latched)]
+            2: [self.engine.din.eq(batch_counter)]
         }
 
         self.comb += [
@@ -315,11 +302,8 @@ class KernelInitiator(Module, AutoCSR):
             If(self.batch_len.re,
                 batch_counter.eq(0),
                 batch_offset.eq(0),
-                rtio_err.eq(0)
             ),
-            If(~fsm.ongoing("IDLE") & batch_en,
-                # save the RTIO errors besides WAIT
-                rtio_err.eq(rtio_err | cri.o_status & ~(RTIO_O_STATUS_WAIT))),
+            rtio_err.eq(cri.o_status & ~(RTIO_O_STATUS_WAIT)),
             # feed the engine the new address when in idle or in preparation for the next step
             If(self.engine.addr_updateable,
                 # batch_offset = 0 when batch_len = 0
