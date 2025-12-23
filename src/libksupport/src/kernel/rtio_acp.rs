@@ -353,6 +353,7 @@ pub extern "C" fn batch_end() {
 pub extern "C" fn batch_output(target: i32, data: i32) {
     unsafe {
         if OUT_BUFFER.ptr as usize >= BUFFER_SIZE - 1 {
+            OUT_BUFFER.ptr = 0;
             artiq_raise!("RuntimeError", "Batch buffer is full");
         }
         OUT_BUFFER.transactions[OUT_BUFFER.ptr as usize].data_width = 1;
@@ -366,6 +367,7 @@ pub extern "C" fn batch_output(target: i32, data: i32) {
 pub extern "C" fn batch_output_wide(target: i32, data: CSlice<i32>) {
     unsafe {
         if OUT_BUFFER.ptr as usize >= BUFFER_SIZE - 1 {
+            OUT_BUFFER.ptr = 0;
             artiq_raise!("RuntimeError", "Batch buffer is full");
         }
         OUT_BUFFER.transactions[OUT_BUFFER.ptr as usize].data_width = data.len() as i8;
