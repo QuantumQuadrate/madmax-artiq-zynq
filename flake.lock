@@ -12,11 +12,11 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1763779050,
-        "narHash": "sha256-GOCiPuuPTR7KR0CT9H8zboUqk7J8Xdu9ud6djW7xNBQ=",
+        "lastModified": 1765867627,
+        "narHash": "sha256-NYmBPGKFdu1D6CjQmOB3SS1xowJvVzs7xHAXeH4ccQU=",
         "ref": "refs/heads/master",
-        "rev": "9aa0c7ec5b80e1bd6bf726c38c3dc5cc69b8cd49",
-        "revCount": 9556,
+        "rev": "3bda1201a54f9685af5893b0832f669e8eca3909",
+        "revCount": 9563,
         "type": "git",
         "url": "https://github.com/m-labs/artiq.git"
       },
@@ -161,16 +161,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1763421233,
-        "narHash": "sha256-Stk9ZYRkGrnnpyJ4eqt9eQtdFWRRIvMxpNRf4sIegnw=",
+        "lastModified": 1765762245,
+        "narHash": "sha256-3iXM/zTqEskWtmZs3gqNiVtRTsEjYAedIaLL0mSBsrk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "89c2b2330e733d6cdb5eae7b899326930c2c0648",
+        "rev": "c8cfcd6ccd422e41cc631a0b73ed4d5a925c393d",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-unstable",
+        "ref": "nixos-25.11",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -298,11 +298,11 @@
     "src-misoc": {
       "flake": false,
       "locked": {
-        "lastModified": 1761903947,
-        "narHash": "sha256-cI5alXIU1bEpvZ2NTSbfYevz/UngtPLMU9f2XeYYTq4=",
+        "lastModified": 1765867404,
+        "narHash": "sha256-YPYUHVIryXDp4W2hUtHUtBbRKIrbhInWImT0NKaacSY=",
         "ref": "refs/heads/master",
-        "rev": "89051eeb63b7bee98432594f933de230eecf929d",
-        "revCount": 2507,
+        "rev": "7ab412de11f6533cd68cd818924da5c28a484ccd",
+        "revCount": 2509,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/m-labs/misoc.git"
