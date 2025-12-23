@@ -6,7 +6,7 @@ use vcell::VolatileCell;
 
 #[cfg(has_drtio)]
 use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE, Message};
-use crate::{artiq_raise, pl::csr, rtio_core, kernel::KERNEL_IMAGE};
+use crate::{artiq_raise, kernel::KERNEL_IMAGE, pl::csr, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
 pub const RTIO_O_STATUS_UNDERFLOW: i32 = 2;
@@ -22,7 +22,6 @@ const RTIO_CMD_INPUT: i8 = 1;
 
 const BATCH_ENABLED: i8 = 1;
 const BATCH_DISABLED: i8 = 0;
-
 
 #[repr(C)]
 pub struct TimestampedData {
@@ -55,7 +54,7 @@ static mut IN_BUFFER: InTransaction = InTransaction {
     reply_data: VolatileCell::new(0),
     reply_timestamp: VolatileCell::new(0),
     reply_batch_cnt: VolatileCell::new(0),
-    padding: 0
+    padding: 0,
 };
 
 const BUFFER_SIZE: usize = csr::CONFIG_ACPKI_BATCH_SIZE as usize;
@@ -63,9 +62,9 @@ const BUFFER_SIZE: usize = csr::CONFIG_ACPKI_BATCH_SIZE as usize;
 #[repr(C, align(16))]
 struct OutBuffer {
     /* META */
-    ptr: i32,    // next writeable position in batch mode, also serves as len
-    running: i8, 
-    padding: [i8; 11],  // aligned to 16 bytes (per AXI alignment requirements)
+    ptr: i32, // next writeable position in batch mode, also serves as len
+    running: i8,
+    padding: [i8; 11], // aligned to 16 bytes (per AXI alignment requirements)
     /* Output transactions */
     transactions: [OutTransaction; BUFFER_SIZE],
 }
@@ -74,14 +73,14 @@ static mut OUT_BUFFER: OutBuffer = OutBuffer {
     ptr: 0,
     running: 0,
     padding: [0; 11],
-    transactions: [OutTransaction { 
-        request_cmd: 0, 
+    transactions: [OutTransaction {
+        request_cmd: 0,
         data_width: 0,
-        request_target: 0, 
-        request_timestamp: 0, 
+        request_target: 0,
+        request_timestamp: 0,
         request_data: [0; 16],
         padding: [0; 2],
-    }; BUFFER_SIZE]
+    }; BUFFER_SIZE],
 };
 
 pub extern "C" fn init() {
@@ -329,10 +328,8 @@ pub extern "C" fn batch_end() {
         // start cleaning up before reading status
         let library = KERNEL_IMAGE.as_ref().unwrap();
         library.rebind(b"rtio_output", output as *const ()).unwrap();
-        library
-            .rebind(b"rtio_output_wide", output_wide as *const ())
-            .unwrap();
-        
+        library.rebind(b"rtio_output_wide", output_wide as *const ()).unwrap();
+
         let status = loop {
             let status = IN_BUFFER.reply_status.get();
             if status != 0 {
