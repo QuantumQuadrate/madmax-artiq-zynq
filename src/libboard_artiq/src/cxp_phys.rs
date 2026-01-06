@@ -72,6 +72,7 @@ pub mod rx {
         change_qpll_fb_divider(speed);
         change_gtx_divider(speed);
         change_cdr_cfg(speed);
+        change_eq_cfg(speed);
 
         unsafe {
             csr::cxp_grabber::phy_rx_qpll_reset_write(1);
@@ -151,6 +152,15 @@ pub mod rx {
         gtx_write(0x0AA, cdr_cfg.cfg_reg2);
         gtx_write(0x0AB, cdr_cfg.cfg_reg3);
         gtx_write(0x0AC, cdr_cfg.cfg_reg4);
+    }
+
+    fn change_eq_cfg(speed: CXPSpeed) {
+        let eq_cfg = match speed {
+            CXPSpeed::CXP1 | CXPSpeed::CXP2 | CXPSpeed::CXP3 | CXPSpeed::CXP5 | CXPSpeed::CXP6 => 0x0904,
+            CXPSpeed::CXP10 | CXPSpeed::CXP12 => 0x0104,
+        };
+
+        gtx_write(0x029, eq_cfg);
     }
 
     #[allow(dead_code)]
