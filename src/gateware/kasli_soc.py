@@ -786,7 +786,7 @@ def main():
         if peripheral["type"] in DRTIO_EEM_PERIPHERALS and description["drtio_role"] == "standalone":
             raise ValueError("{} requires DRTIO, please switch role to master or satellite".format(peripheral["type"]))
 
-    soc = cls(description, acpki=args.acpki)
+    soc = cls(description)
     soc.finalize()
 
     if args.r is not None:

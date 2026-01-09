@@ -246,8 +246,8 @@ class EBAZ4205(SoCCore):
 
 
 class BASE(EBAZ4205):
-    def __init__(self, rtio_clk, acpki):
-        EBAZ4205.__init__(self, rtio_clk, acpki)
+    def __init__(self, rtio_clk, acpki, acpki_batch_size):
+        EBAZ4205.__init__(self, rtio_clk, acpki, acpki_batch_size)
 
 
 VARIANTS = {cls.__name__.lower(): cls for cls in [BASE]}

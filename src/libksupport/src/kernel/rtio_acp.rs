@@ -5,7 +5,7 @@ use libcortex_a9::asm;
 use vcell::VolatileCell;
 
 #[cfg(has_drtio)]
-use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, KERNEL_IMAGE, Message};
+use super::{KERNEL_CHANNEL_0TO1, KERNEL_CHANNEL_1TO0, Message};
 use crate::{artiq_raise, kernel::KERNEL_IMAGE, pl::csr, rtio_core};
 
 pub const RTIO_O_STATUS_WAIT: i32 = 1;
