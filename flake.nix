@@ -322,7 +322,7 @@
       target = "zc706"; 
       variant = "acpki_nist_qc2"; 
     };
-    make-zc706-hitl-tests = { name, board-package, ddb_extra_step ? "" }: pkgs.stdenv.mkDerivation {
+    make-zc706-hitl-tests = { name, board-package, ddb_folder ? "examples" }: pkgs.stdenv.mkDerivation {
       name = "zc706-hitl-tests-${name}";
 
       __networked = true; # compatibility with old patched Nix
@@ -371,11 +371,10 @@
           sleep 15
 
           echo Running test kernel...
-          ${ddb_extra_step}
-          artiq_run --device-db ${self}/examples/device_db.py ${self}/examples/mandelbrot.py
+          artiq_run --device-db ${self}/${ddb_folder}/device_db.py ${self}/examples/mandelbrot.py
 
           echo Running ARTIQ unit tests...
-          export ARTIQ_ROOT=${self}/examples
+          export ARTIQ_ROOT=${self}/${ddb_folder}
           export ARTIQ_LOW_LATENCY=1
           python -m unittest discover artiq.test.coredevice -v
 
@@ -392,7 +391,7 @@
     zc706-acpki-hitl-tests = make-zc706-hitl-tests { 
       name = "acpki_nist_qc2";
       board-package = zc706-acpki_nist_qc2.zc706-acpki_nist_qc2-jtag;
-      ddb_extra_step = "cat examples/acpki_ddb_extra.py >> examples/device_db.py";
+      ddb_folder = "examples/acpki";
     };
 
   in rec {
