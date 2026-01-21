@@ -1,7 +1,7 @@
 {
   description = "ARTIQ port to the Zynq-7000 platform";
 
-  inputs.artiq.url = git+https://github.com/m-labs/artiq.git;
+  inputs.artiq.url = git+https://github.com/QuantumQuadrate/madmax-artiq.git;
   inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs;
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
