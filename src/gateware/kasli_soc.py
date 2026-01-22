@@ -26,6 +26,7 @@ import acpki as acpki_lib
 import drtio_aux_controller
 import zynq_clocking
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
+import entangler
 
 eem_iostandard_dict = {
      0: "LVDS_25",

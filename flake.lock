@@ -12,17 +12,17 @@
         "src-pythonparser": "src-pythonparser"
       },
       "locked": {
-        "lastModified": 1767585749,
-        "narHash": "sha256-RrY6/4puANPjUeyqD/TCYGIloxdHyBwcsPdunqPDUpU=",
+        "lastModified": 1768211958,
+        "narHash": "sha256-JbpVytCXmbJxvNtOMCWiH+TF9siYkX0GaoixwqsGts8=",
         "ref": "refs/heads/master",
-        "rev": "993a68d2f8cd9b9c9132add068ca4354248b6ab5",
-        "revCount": 9594,
+        "rev": "fd66e127503b3db5947c7722faf16dc11aacafd3",
+        "revCount": 9599,
         "type": "git",
-        "url": "https://github.com/m-labs/artiq.git"
+        "url": "https://github.com/QuantumQuadrate/madmax-artiq.git"
       },
       "original": {
         "type": "git",
-        "url": "https://github.com/m-labs/artiq.git"
+        "url": "https://github.com/QuantumQuadrate/madmax-artiq.git"
       }
     },
     "artiq-comtools": {
@@ -49,6 +49,50 @@
       "original": {
         "type": "git",
         "url": "https://git.m-labs.hk/M-Labs/artiq-comtools.git"
+      }
+    },
+    "entangler-core": {
+      "inputs": {
+        "artiqpkgs": [
+          "artiq"
+        ],
+        "nixpkgs": [
+          "artiq",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "dir": "nix",
+        "lastModified": 1743109322,
+        "narHash": "sha256-H8QEdxJ7498sm/cvfO0Fl0C5HMf90D1Z27qT9IY1ea0=",
+        "ref": "refs/tags/v1.4.1",
+        "rev": "daf79820dcbb73d87185c39367508887092f0bce",
+        "revCount": 297,
+        "type": "git",
+        "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
+      },
+      "original": {
+        "dir": "nix",
+        "ref": "refs/tags/v1.4.1",
+        "type": "git",
+        "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
+      }
+    },
+    "entangler-core-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1743109322,
+        "narHash": "sha256-H8QEdxJ7498sm/cvfO0Fl0C5HMf90D1Z27qT9IY1ea0=",
+        "ref": "refs/tags/v1.4.1",
+        "rev": "daf79820dcbb73d87185c39367508887092f0bce",
+        "revCount": 297,
+        "type": "git",
+        "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
+      },
+      "original": {
+        "ref": "refs/tags/v1.4.1",
+        "type": "git",
+        "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
       }
     },
     "fenix": {
@@ -175,9 +219,28 @@
         "type": "github"
       }
     },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1751274312,
+        "narHash": "sha256-/bVBlRpECLVzjV19t5KMdMFWSwKLtb5RyXdjz3LJT+g=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "50ab793786d9de88ee30ec4e4c24fb4236fc2674",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-24.11",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "artiq": "artiq",
+        "entangler-core": "entangler-core",
+        "entangler-core-src": "entangler-core-src",
+        "nixpkgs": "nixpkgs_2",
         "zynq-rs": "zynq-rs"
       }
     },
@@ -354,11 +417,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1763461295,
-        "narHash": "sha256-LDLrz81hlcSjQUS5mSwoMV4ZEol5wOtJ0xhsjAGJQEc=",
+        "lastModified": 1768378482,
+        "narHash": "sha256-2DJayg3GrhLfO0hAmdQW6rn6L9cfBHwcJxDaMOJ0YSs=",
         "ref": "refs/heads/master",
-        "rev": "20975fc812d6b4e28b9fe6011344373054581c94",
-        "revCount": 734,
+        "rev": "3b5359297c570b7c03e82aaa76e23459d8c6fde8",
+        "revCount": 738,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },

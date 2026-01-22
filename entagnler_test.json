@@ -1,0 +1,21 @@
+{
+    "target": "kasli_soc",
+    "variant": "SNAQ-Node-1",
+    "hw_rev": "v1.0",
+    "base": "standalone",
+    "rtio_frequency":125e6,
+    "peripherals": [
+    	{
+            "type": "entangler",
+            "ports": [0, 1]
+        }
+        {
+            "type": "dio",
+            "ports": [2],
+            "bank_direction_low": "input",
+            "bank_direction_high": "output",
+            "edge_counter": true
+        },
+
+    ]
+}
