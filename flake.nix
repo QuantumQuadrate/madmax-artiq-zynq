@@ -8,14 +8,14 @@
 
   # Entangler Core: Nix packaging (dir=nix)
   inputs.entangler-core = {
-    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git?dir=nix&ref=refs/tags/v1.4.1";
+    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git";
     inputs.artiqpkgs.follows = "artiq";
     inputs.nixpkgs.follows = "artiq/nixpkgs";
   };
 
   # Entangler Core: raw source tree (needed for PYTHONPATH)
   inputs.entangler-core-src = {
-    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git?ref=refs/tags/v1.4.1";
+    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git";
     flake = false;
   };
 
