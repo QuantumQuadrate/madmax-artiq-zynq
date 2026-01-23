@@ -3,7 +3,6 @@
 
   inputs.artiq.url = git+https://github.com/QuantumQuadrate/madmax-artiq.git;
   inputs.zynq-rs.url = git+https://git.m-labs.hk/m-labs/zynq-rs;
-  inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
   outputs = {
     self,
