@@ -27,7 +27,8 @@ import drtio_aux_controller
 import zynq_clocking
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 
-import entangler.gateware.eem
+import entangler.gateware.eem_7series
+import entangler.gateware.jsondesc
 
 
 
@@ -805,8 +806,8 @@ def main():
 
 if __name__ == "__main__":
 
-    # Inject custom peripheral types
-    dax_gateware.eem_7series.inject()
-    # Inject JSON description
-    dax_gateware.jsondesc.inject()
+    # making this to work with entangler
+    entangler.gateware.eem_7series.inject()
+    entangler.gateware.jsondesc.inject()
+    
     main()
