@@ -45,8 +45,9 @@
       pythonDev = pkgs.python3.withPackages (ps:
         (with artiqpkgs; [
           migen
+          migen-axi
           misoc
-#          artiq
+          artiq
           artiq-netboot
           ps.jsonschema
           ps.pyftdi
