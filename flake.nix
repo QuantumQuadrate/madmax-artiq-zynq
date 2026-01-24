@@ -46,7 +46,7 @@
         (with artiqpkgs; [
           migen
           misoc
-          artiq
+#          artiq
           artiq-netboot
           ps.jsonschema
           ps.pyftdi
