@@ -27,8 +27,9 @@ import drtio_aux_controller
 import zynq_clocking
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 
+import entangler.gateware.eem
 
-print(entangl)
+
 
 eem_iostandard_dict = {
      0: "LVDS_25",
@@ -803,4 +804,9 @@ def main():
 
 
 if __name__ == "__main__":
+
+    # Inject custom peripheral types
+    dax_gateware.eem_7series.inject()
+    # Inject JSON description
+    dax_gateware.jsondesc.inject()
     main()
