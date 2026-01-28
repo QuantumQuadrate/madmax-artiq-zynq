@@ -1,6 +1,42 @@
 ARTIQ on Zynq
 =============
 
+How to build the gateware. 
+
+```bash
+git clone https://github.com/QuantumQuadrate/madmax-artiq-zynq.git
+cd madmax-artiq-zynq
+nix develop
+cd src
+gateware/kasli_soc.py -g ../build/gateware '/home/jrydberg/Documents/Projects/Artiq_envs/madmax-artiq-zynq/kasli-soc-standalone_node1_with_edgecounters_en.json'
+```
+
+for standalone run
+``` bash
+make TARGET=kasli_soc GWARGS=json runtime 
+```
+for master satelite run
+``` bash
+make TARGET=kasli_soc GWARGS=json staman 
+```
+
+next run this
+```bash
+cd ../build
+nix build git+https://git.m-labs.hk/m-labs/zynq-rs#kasli_soc-szl
+```
+
+Then run 
+```bash
+```
+
+
+to get the device_db.py use the entangler_device_db_maker.py as follows
+
+``` bash
+python -m entangler_device_db_maker <description_file.json>
+```
+
 How to use
 ----------
 
