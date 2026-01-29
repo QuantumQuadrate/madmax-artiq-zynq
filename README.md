@@ -13,7 +13,7 @@ gateware/kasli_soc.py -g ../build/gateware '/home/jrydberg/Documents/Projects/Ar
 
 for standalone run
 ``` bash
-make TARGET=kasli_soc GWARGS=json runtime 
+make TARGET=kasli_soc GWARGS="/home/jrydberg/Documents/Projects/Artiq_envs/madmax-artiq-zynq/entagnler_test.json" entime
 ```
 for master satelite run
 ``` bash
@@ -28,6 +28,14 @@ nix build git+https://git.m-labs.hk/m-labs/zynq-rs#kasli_soc-szl
 
 Then run 
 ```bash
+ echo "the_ROM_image:
+    {
+        [bootloader]result/szl.elf
+        gateware/top.bit
+        firmware/armv7-none-eabihf/release/<runtime/satman>
+    }
+    EOF" >> boot.bif
+mkbootimage boot.bif boot.bin
 ```
 
 
