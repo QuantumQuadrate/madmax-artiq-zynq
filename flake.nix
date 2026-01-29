@@ -38,6 +38,15 @@
       rust = zynq-rs.rust;
       naerskLib = zynq-rs.naerskLib;
 
+      regenCargoTomls = ''
+        echo "Regenerating Cargo.toml from templates using ZYNQ_RS=$ZYNQ_RS"
+        find ./src -name Cargo.toml.tpl -print0 | while IFS= read -r -d "" tpl; do
+          toml="''${tpl%.tpl}"
+          cp -f "$tpl" "$toml"
+          sed -i "s|@@ZYNQ_RS@@|$ZYNQ_RS|g" "$toml"
+        done
+      '';
+
       # --- Use the entangler flake's *built package*, not its source tree ---
       entanglerPkg = entangler-core.packages.${system}.default;
 
@@ -201,6 +210,9 @@
                 export ZYNQ_REV=${zynqRev}
                 export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include"
                 export ZYNQ_RS=${zynq-rs}
+
+                ${regenCargoTomls}
+
                 make TARGET=${target} GWARGS="${
                   if json == null then "-V ${variant}" else json
                 }" ${fwtype}
@@ -364,6 +376,11 @@
 
         # Auto-load Vivado every time you run `nix develop`
         shellHook = ''
+          # Auto-fix stale Cargo.toml paths on shell entry
+          if find ./src -name Cargo.toml -maxdepth 2 -print0 2>/dev/null | xargs -0 grep -q '/nix/store'; then
+            ${regenCargoTomls}
+          fi
+
           if [ -f /opt/Xilinx/Vivado/2022.2/settings64.sh ]; then
             # shellcheck disable=SC1091
             source /opt/Xilinx/Vivado/2022.2/settings64.sh

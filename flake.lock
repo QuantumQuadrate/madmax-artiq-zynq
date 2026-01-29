@@ -189,11 +189,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1763384566,
-        "narHash": "sha256-r+wgI+WvNaSdxQmqaM58lVNvJYJ16zoq+tKN20cLst4=",
+        "lastModified": 1768908532,
+        "narHash": "sha256-HIdLXEFaUVE8FiaCPJbCfBMsnF+mVtDub8Jwj2BD+mk=",
         "owner": "nix-community",
         "repo": "naersk",
-        "rev": "d4155d6ebb70fbe2314959842f744aa7cabbbf6a",
+        "rev": "8d97452673640eb7fabe428e8b6a425bc355008b",
         "type": "github"
       },
       "original": {
@@ -306,11 +306,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1763433504,
-        "narHash": "sha256-cVid5UNpk88sPYHkLAA5aZEHOFQXSB/2L1vl18Aq7IM=",
+        "lastModified": 1769136478,
+        "narHash": "sha256-8UNd5lmGf8phCr/aKxagJ4kNsF0pCHLish2G4ZKCFFY=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "42ce16c6d8318a654d53f047c9400b7d902d6e61",
+        "rev": "470ee44393bb19887056b557ea2c03fc5230bd5a",
         "type": "github"
       },
       "original": {
@@ -430,11 +430,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1768378482,
-        "narHash": "sha256-2DJayg3GrhLfO0hAmdQW6rn6L9cfBHwcJxDaMOJ0YSs=",
+        "lastModified": 1769164212,
+        "narHash": "sha256-NPZ7bV+bJbqZT2EV4YJUZrzKcAt7gV3HzTm2COrz8ps=",
         "ref": "refs/heads/master",
-        "rev": "3b5359297c570b7c03e82aaa76e23459d8c6fde8",
-        "revCount": 738,
+        "rev": "6cfb6fd1fc44b9be73872ab362afe7f1b0926c2c",
+        "revCount": 739,
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
