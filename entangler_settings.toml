@@ -1,0 +1,15 @@
+# Local overrides for entangler gateware settings.
+# These shadow the settings.toml bundled in the entangler-core package
+# via DYNACONF_* environment variables set in the nix devShell shellHook.
+# Edit this file freely — no need to touch the upstream repo or run nix flake update.
+
+NUM_OUTPUT_CHANNELS = 2
+NUM_ENTANGLER_INPUT_SIGNALS = 2
+NUM_GENERIC_INPUT_SIGNALS = 2
+NUM_PATTERNS_ALLOWED = 2
+
+# Probably don't need to change these:
+COARSE_COUNTER_WIDTH = 11
+FULL_COUNTER_WIDTH = 14
+MAX_CYCLES_PER_RUN = 16383
+MAX_TRIGGER_COUNTS = 16383

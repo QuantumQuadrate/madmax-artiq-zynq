@@ -7,15 +7,7 @@
     "peripherals": [
     	{
             "type": "entangler",
-            "ports": [0, 1]
-        },
-        {
-            "type": "dio",
-            "ports": [2],
-            "bank_direction_low": "input",
-            "bank_direction_high": "output",
-            "edge_counter": true
+            "ports": [0]
         }
-
     ]
 }

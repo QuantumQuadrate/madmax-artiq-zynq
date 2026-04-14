@@ -3,15 +3,13 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
   inputs.artiq.url = "git+https://github.com/QuantumQuadrate/madmax-artiq.git";
-  inputs.zynq-rs.url = "git+https://git.m-labs.hk/m-labs/zynq-rs";
+
+  # Pinned to last known working revision (Rust 2025-03-28 nightly, compatible with rs-core_io)
+  inputs.zynq-rs.url = "git+https://git.m-labs.hk/m-labs/zynq-rs?rev=6cfb6fd1fc44b9be73872ab362afe7f1b0926c2c";
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
-  # --- Entangler core flake (use your fork URL if you want) ---
   inputs.entangler-core = {
-    # Example: your fork
     url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git";
-    # Or upstream tag (works if that flake exists in that repo):
-    # url = "git+https://gitlab.com/duke-artiq/entangler-core.git?ref=refs/tags/v1.4.1";
     inputs.artiqpkgs.follows = "artiq";
     inputs.nixpkgs.follows = "artiq/nixpkgs";
   };
@@ -47,10 +45,8 @@
         done
       '';
 
-      # --- Use the entangler flake's *built package*, not its source tree ---
       entanglerPkg = entangler-core.packages.${system}.default;
 
-      # Convenience: the Python env we want in nix develop
       pythonDev = pkgs.python3.withPackages (ps:
         (with artiqpkgs; [
           migen
@@ -191,8 +187,6 @@
 
             nativeBuildInputs = [
               pkgs.gnumake
-
-              # IMPORTANT: use the python env that includes entanglerPkg
               (pkgs.python3.withPackages (ps: [
                 artiqpkgs.migen
                 migen-axi
@@ -200,7 +194,6 @@
                 artiqpkgs.artiq-build
                 entanglerPkg
               ]))
-
               pkgs.llvmPackages_20.llvm
               pkgs.llvmPackages_20.clang-unwrapped
             ];
@@ -346,9 +339,6 @@
 
       formatter.${system} = pkgs.alejandra;
 
-      # ---------------------------
-      # DEFAULT nix develop shell
-      # ---------------------------
       devShell.${system} = pkgs.mkShell {
         name = "artiq-zynq-dev-shell";
 
@@ -372,20 +362,28 @@
         CLANG_EXTRA_INCLUDE_DIR = "${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include";
         ZYNQ_RS = "${zynq-rs}";
         OPENOCD_ZYNQ = "${zynq-rs}/openocd";
-        SZL = "${zynqpkgs.szl}";
+        SZL = "${zynqpkgs."kasli_soc-szl"}";
+        CARGO_UNSTABLE_JSON_TARGET_SPEC = "true";
 
-        # Auto-load Vivado every time you run `nix develop`
         shellHook = ''
-          # Auto-fix stale Cargo.toml paths on shell entry
-          if find ./src -name Cargo.toml -maxdepth 2 -print0 2>/dev/null | xargs -0 grep -q '/nix/store'; then
+          if find ./src -maxdepth 2 -name Cargo.toml -print0 2>/dev/null | xargs -0 grep -q '/nix/store'; then
             ${regenCargoTomls}
           fi
 
           if [ -f /opt/Xilinx/Vivado/2022.2/settings64.sh ]; then
-            # shellcheck disable=SC1091
             source /opt/Xilinx/Vivado/2022.2/settings64.sh
           else
             echo "NOTE: Vivado 2022.2 not found at /opt/Xilinx/Vivado/2022.2/settings64.sh"
+          fi
+
+          if [ -f ./entangler_settings.toml ]; then
+            eval "$(python3 -c "
+import tomllib
+with open('entangler_settings.toml', 'rb') as f:
+    cfg = tomllib.load(f)
+for k, v in cfg.items():
+    print('export DYNACONF_' + k + '=' + str(v))
+")"
           fi
         '';
       };

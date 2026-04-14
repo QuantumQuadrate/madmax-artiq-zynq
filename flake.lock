@@ -63,11 +63,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1769550889,
-        "narHash": "sha256-+ggDnqTZojc5GntpBkPPA72S68sniFAaiUHfRKE4S24=",
+        "lastModified": 1776100195,
+        "narHash": "sha256-FgTzZHVWz6klQ31ddPbk30jh3rHHDlZi6FRR5dvlv+U=",
         "ref": "refs/heads/master",
-        "rev": "70f3bc684dad33e2ed90123ac6a51091888d4940",
-        "revCount": 305,
+        "rev": "b7ab9f92a82697265c07f8961b3c1ea334beb4d1",
+        "revCount": 306,
         "type": "git",
         "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
       },
@@ -439,6 +439,7 @@
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       },
       "original": {
+        "rev": "6cfb6fd1fc44b9be73872ab362afe7f1b0926c2c",
         "type": "git",
         "url": "https://git.m-labs.hk/m-labs/zynq-rs"
       }
