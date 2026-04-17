@@ -9,7 +9,7 @@
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
   inputs.entangler-core = {
-    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git";
+    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git?ref=artiq-integration";
     inputs.artiqpkgs.follows = "artiq";
     inputs.nixpkgs.follows = "artiq/nixpkgs";
   };
@@ -28,6 +28,7 @@
         inherit system;
         overlays = [ (import zynq-rs.inputs.rust-overlay) ];
       };
+      lib = pkgs.lib;
 
       zynqpkgs = zynq-rs.packages.${system};
       artiqpkgs = artiq.packages.${system};
@@ -44,6 +45,31 @@
           sed -i "s|@@ZYNQ_RS@@|$ZYNQ_RS|g" "$toml"
         done
       '';
+
+      entanglerSettings =
+        if builtins.pathExists ./entangler_settings.toml
+        then builtins.fromTOML (builtins.readFile ./entangler_settings.toml)
+        else { };
+
+      renderDynaconfValue = value:
+        if builtins.isBool value then
+          if value then "true" else "false"
+        else
+          builtins.toString value;
+
+      entanglerSettingNames = builtins.attrNames entanglerSettings;
+
+      entanglerDynaconfEnv = builtins.listToAttrs (builtins.map
+        (settingName: {
+          name = "DYNACONF_${settingName}";
+          value = renderDynaconfValue entanglerSettings.${settingName};
+        })
+        entanglerSettingNames);
+
+      entanglerDynaconfExports = builtins.concatStringsSep "\n" (builtins.map
+        (settingName:
+          "export DYNACONF_${settingName}=${lib.escapeShellArg (renderDynaconfValue entanglerSettings.${settingName})}")
+        entanglerSettingNames);
 
       entanglerPkg = entangler-core.packages.${system}.default;
 
@@ -203,6 +229,7 @@
                 export ZYNQ_REV=${zynqRev}
                 export CLANG_EXTRA_INCLUDE_DIR="${pkgs.llvmPackages_20.clang-unwrapped.lib}/lib/clang/20/include"
                 export ZYNQ_RS=${zynq-rs}
+                ${entanglerDynaconfExports}
 
                 ${regenCargoTomls}
 
@@ -239,6 +266,7 @@
             }
             ''
               export ZYNQ_REV=${zynqRev}
+              ${entanglerDynaconfExports}
               python ${./src/gateware}/${target}.py -g build ${
                 if json == null then "-V ${variant}" else json
               }
@@ -339,7 +367,7 @@
 
       formatter.${system} = pkgs.alejandra;
 
-      devShell.${system} = pkgs.mkShell {
+      devShell.${system} = pkgs.mkShell ({
         name = "artiq-zynq-dev-shell";
 
         buildInputs = with pkgs; [
@@ -375,18 +403,8 @@
           else
             echo "NOTE: Vivado 2022.2 not found at /opt/Xilinx/Vivado/2022.2/settings64.sh"
           fi
-
-          if [ -f ./entangler_settings.toml ]; then
-            eval "$(python3 -c "
-import tomllib
-with open('entangler_settings.toml', 'rb') as f:
-    cfg = tomllib.load(f)
-for k, v in cfg.items():
-    print('export DYNACONF_' + k + '=' + str(v))
-")"
-          fi
         '';
-      };
+      } // entanglerDynaconfEnv);
 
       makeArtiqZynqPackage = board-package-set;
     };

@@ -1,49 +1,101 @@
 ARTIQ on Zynq
 =============
 
-How to build the gateware. 
+Entangler Gateware Build
+------------------------
+
+This repo can build Kasli-SoC gateware with the Entangler integrated through the flake-based environment.
+
+The flake input for the Entangler is pinned to:
+
+- repo: `QuantumQuadrate/madmax-entangler-core`
+- branch: `artiq-integration`
+
+The current standalone example in this repo is [entagnler_test.json](entagnler_test.json). It is configured for:
+
+- one DIO EEM on port `0`
+- `NUM_ENTANGLER_INPUT_SIGNALS = 2`
+- `NUM_OUTPUT_CHANNELS = 2`
+- `NUM_GENERIC_INPUT_SIGNALS = 0`
+- `uses_reference = false`
+- `running_output = false`
+
+The Entangler gateware settings are taken from [entangler_settings.toml](entangler_settings.toml). Those settings are exported into both the `nix develop` shell and the flake-driven build commands, so changing that file changes the Entangler build configuration for this repo.
+
+For the current single-card example, the intended DIO usage is:
+
+- lower-bank DIO lines are inputs
+- upper-bank DIO lines are outputs
+- the active Entangler channels are the first two inputs and first two outputs on that split
+
+Build the standalone Entangler gateware
+---------------------------------------
+
+From the repo root:
 
 ```bash
-git clone https://github.com/QuantumQuadrate/madmax-artiq-zynq.git
-cd madmax-artiq-zynq
-nix develop
 cd src
-gateware/kasli_soc.py -g ../build/gateware '/home/jrydberg/Documents/Projects/Artiq_envs/madmax-artiq-zynq/kasli-soc-standalone_node1_with_edgecounters_en.json'
+nix develop --command python gateware/kasli_soc.py -g ../build/gateware ../entagnler_test.json
 ```
 
-for standalone run
-``` bash
-make TARGET=kasli_soc GWARGS="/home/jrydberg/Documents/Projects/Artiq_envs/madmax-artiq-zynq/entagnler_test.json" entime
-```
-for master satelite run
-``` bash
-make TARGET=kasli_soc GWARGS=json staman 
-```
+This produces:
 
-next run this
+- `build/gateware/top.bit`
+
+Build the standalone firmware
+-----------------------------
+
+For a standalone Kasli-SoC build, use `runtime`:
+
 ```bash
-cd ../build
+cd src
+nix develop --command make TARGET=kasli_soc GWARGS="../entagnler_test.json" runtime
+```
+
+This produces:
+
+- `build/firmware/armv7-none-eabihf/release/runtime`
+- `build/runtime.bin`
+
+Notes:
+
+- `runtime` is the correct firmware target for standalone and DRTIO-master builds.
+- `satman` is used for DRTIO satellite builds.
+
+Build `boot.bin`
+----------------
+
+Build the Kasli-SoC second-stage bootloader:
+
+```bash
+cd build
 nix build git+https://git.m-labs.hk/m-labs/zynq-rs#kasli_soc-szl
 ```
 
-Then run 
+Then create `boot.bif` and `boot.bin`:
+
 ```bash
- echo "the_ROM_image:
-    {
-        [bootloader]result/szl.elf
-        gateware/top.bit
-        firmware/armv7-none-eabihf/release/<runtime/satman>
-    }
-    EOF" >> boot.bif
-mkbootimage boot.bif boot.bin
+cd build
+printf '%s\n' 'the_ROM_image:' '{' '  [bootloader]result/szl.elf' '  gateware/top.bit' '  firmware/armv7-none-eabihf/release/runtime' '}' > boot.bif
+nix develop --command mkbootimage boot.bif boot.bin
 ```
 
+This produces:
 
-to get the device_db.py use the entangler_device_db_maker.py as follows
+- `build/result/szl.elf`
+- `build/boot.bif`
+- `build/boot.bin`
 
-``` bash
-python -m entangler_device_db_maker <description_file.json>
+Generate the device DB
+----------------------
+
+To generate a device DB for the Entangler description file:
+
+```bash
+nix develop --command python entangler_device_db_maker.py entagnler_test.json
 ```
+
+The current `entangler_device_db_maker.py` supports the single-DIO standalone Entangler configuration used by `entagnler_test.json`.
 
 How to use
 ----------

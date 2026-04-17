@@ -63,15 +63,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1776100195,
-        "narHash": "sha256-FgTzZHVWz6klQ31ddPbk30jh3rHHDlZi6FRR5dvlv+U=",
-        "ref": "refs/heads/master",
-        "rev": "b7ab9f92a82697265c07f8961b3c1ea334beb4d1",
-        "revCount": 306,
+        "lastModified": 1776463259,
+        "narHash": "sha256-E7oVCHyqMqJb+UQCWMKAde4QXVCjAKv1Qg8JNoPD6yw=",
+        "ref": "artiq-integration",
+        "rev": "60ab96af0ef7df25facf401f83f2d1654113bda2",
+        "revCount": 310,
         "type": "git",
         "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
       },
       "original": {
+        "ref": "artiq-integration",
         "type": "git",
         "url": "https://github.com/QuantumQuadrate/madmax-entangler-core.git"
       }

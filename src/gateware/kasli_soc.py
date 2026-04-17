@@ -24,10 +24,10 @@ import dma
 import analyzer
 import acpki as acpki_lib
 import drtio_aux_controller
+import entangler_integration
 import zynq_clocking
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 
-import entangler.gateware.eem_7series
 import entangler.gateware.jsondesc
 
 
@@ -807,7 +807,7 @@ def main():
 if __name__ == "__main__":
 
     # making this to work with entangler
-    entangler.gateware.eem_7series.inject()
+    entangler_integration.inject()
     entangler.gateware.jsondesc.inject()
     
     main()
