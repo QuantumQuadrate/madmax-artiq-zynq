@@ -28,56 +28,93 @@ For the current single-card example, the intended DIO usage is:
 - upper-bank DIO lines are outputs
 - the active Entangler channels are the first two inputs and first two outputs on that split
 
-Build the standalone Entangler gateware
----------------------------------------
+End-to-end build from JSON
+--------------------------
+
+Use this flow when you want to go from a Kasli-SoC JSON description file to:
+
+- `build/gateware/top.bit`
+- `build/runtime.bin` or `build/satman.bin`
+- `build/boot.bin`
+- `device_db.py`
+
+There are two inputs:
+
+- `DESC`: the JSON description file, for example `entagnler_test.json`.
+- `ROLE`: the RTIO role, one of `standalone`, `master`, or `satellite`.
+
+The JSON file should also contain a matching `drtio_role`. The `ROLE` variable is used by these commands to choose the correct firmware program:
+
+- `standalone` uses `runtime`.
+- `master` uses `runtime`.
+- `satellite` uses `satman`.
 
 From the repo root:
 
 ```bash
-cd src
-nix develop --command python gateware/kasli_soc.py -g ../build/gateware ../entagnler_test.json
+export DESC=entagnler_test.json
+export ROLE=standalone
+
+case "$ROLE" in
+  standalone|master)
+    export FIRMWARE=runtime
+    ;;
+  satellite)
+    export FIRMWARE=satman
+    ;;
+  *)
+    echo "ROLE must be standalone, master, or satellite" >&2
+    exit 1
+    ;;
+esac
 ```
 
-This produces:
-
-- `build/gateware/top.bit`
-
-Build the standalone firmware
------------------------------
-
-For a standalone Kasli-SoC build, use `runtime`:
+Build the gateware:
 
 ```bash
 cd src
-nix develop --command make TARGET=kasli_soc GWARGS="../entagnler_test.json" runtime
+nix develop --command python gateware/kasli_soc.py -g ../build/gateware ../"$DESC"
+cd ..
+```
+
+This produces `build/gateware/top.bit`.
+
+Build the matching firmware:
+
+```bash
+cd src
+nix develop --command make TARGET=kasli_soc GWARGS=../"$DESC" "$FIRMWARE"
+cd ..
 ```
 
 This produces:
 
-- `build/firmware/armv7-none-eabihf/release/runtime`
-- `build/runtime.bin`
-
-Notes:
-
-- `runtime` is the correct firmware target for standalone and DRTIO-master builds.
-- `satman` is used for DRTIO satellite builds.
-
-Build `boot.bin`
-----------------
+- `build/firmware/armv7-none-eabihf/release/runtime` and `build/runtime.bin` for `standalone` or `master`.
+- `build/firmware/armv7-none-eabihf/release/satman` and `build/satman.bin` for `satellite`.
 
 Build the Kasli-SoC second-stage bootloader:
 
 ```bash
+mkdir -p build
 cd build
 nix build git+https://git.m-labs.hk/m-labs/zynq-rs#kasli_soc-szl
+cd ..
 ```
 
-Then create `boot.bif` and `boot.bin`:
+Create `boot.bif` and package `boot.bin`:
 
 ```bash
 cd build
-printf '%s\n' 'the_ROM_image:' '{' '  [bootloader]result/szl.elf' '  gateware/top.bit' '  firmware/armv7-none-eabihf/release/runtime' '}' > boot.bif
-nix develop --command mkbootimage boot.bif boot.bin
+printf '%s\n' \
+  'the_ROM_image:' \
+  '{' \
+  '  [bootloader]result/szl.elf' \
+  '  gateware/top.bit' \
+  "  firmware/armv7-none-eabihf/release/$FIRMWARE" \
+  '}' > boot.bif
+
+nix develop .. --command mkbootimage boot.bif boot.bin
+cd ..
 ```
 
 This produces:
@@ -86,16 +123,13 @@ This produces:
 - `build/boot.bif`
 - `build/boot.bin`
 
-Generate the device DB
-----------------------
-
-To generate a device DB for the Entangler description file:
+Generate the ARTIQ device database from the same JSON description:
 
 ```bash
-nix develop --command python entangler_device_db_maker.py entagnler_test.json
+nix develop --command python entangler_device_db_maker.py "$DESC" > device_db.py
 ```
 
-The current `entangler_device_db_maker.py` supports the single-DIO standalone Entangler configuration used by `entagnler_test.json`.
+Check the generated `core_addr` in `device_db.py` before running experiments. The generator gets the RTIO channel layout from the JSON description and the Entangler settings exported from [entangler_settings.toml](entangler_settings.toml).
 
 How to use
 ----------
