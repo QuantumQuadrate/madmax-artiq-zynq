@@ -1,0 +1,17 @@
+{
+    "target": "kasli_soc",
+    "variant": "atom-photon",
+    "hw_rev": "v1.0",
+    "drtio_role": "standalone",
+    "rtio_frequency": 125e6,
+    "peripherals": [
+        {
+            "type": "entangler",
+            "mode": "atom_photon_parity",
+            "ports": [0, 1],
+            "uses_reference": false,
+            "running_output": false,
+            "edge_counter": true
+        }
+    ]
+}

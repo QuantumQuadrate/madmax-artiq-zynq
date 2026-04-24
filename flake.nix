@@ -9,7 +9,7 @@
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
   inputs.entangler-core = {
-    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git?ref=artiq-integration";
+    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git?ref=feature/atom-photon-parity-gateware-redesign";
     inputs.artiqpkgs.follows = "artiq";
     inputs.nixpkgs.follows = "artiq/nixpkgs";
   };
@@ -71,7 +71,12 @@
           "export DYNACONF_${settingName}=${lib.escapeShellArg (renderDynaconfValue entanglerSettings.${settingName})}")
         entanglerSettingNames);
 
-      entanglerPkg = entangler-core.packages.${system}.default;
+      entanglerPkg = entangler-core.packages.${system}.default.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace entangler/atom_photon_core.py entangler/atom_photon_phy.py \
+            --replace 'from migen import Const' 'from migen import Constant as Const'
+        '';
+      });
 
       pythonDev = pkgs.python3.withPackages (ps:
         (with artiqpkgs; [
