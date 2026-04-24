@@ -1,6 +1,6 @@
 {
     "target": "kasli_soc",
-    "variant": "entangler_1dio_2in_2out",
+    "variant": "entangler_1dio_4in_4out",
     "hw_rev": "v1.0",
     "drtio_role": "standalone",
     "rtio_frequency": 125e6,

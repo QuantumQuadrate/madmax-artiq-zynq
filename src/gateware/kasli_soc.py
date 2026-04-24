@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import argparse
+import logging
+
 
 from migen import *
 from migen.build.generic_platform import *
@@ -807,6 +809,7 @@ def main():
 if __name__ == "__main__":
 
     # making this to work with entangler
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     entangler_integration.inject()
     entangler.gateware.jsondesc.inject()
     

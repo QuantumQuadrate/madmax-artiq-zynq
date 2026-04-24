@@ -14,8 +14,8 @@ The flake input for the Entangler is pinned to:
 The current standalone example in this repo is [entagnler_test.json](entagnler_test.json). It is configured for:
 
 - one DIO EEM on port `0`
-- `NUM_ENTANGLER_INPUT_SIGNALS = 2`
-- `NUM_OUTPUT_CHANNELS = 2`
+- `NUM_ENTANGLER_INPUT_SIGNALS = 4`
+- `NUM_OUTPUT_CHANNELS = 4`
 - `NUM_GENERIC_INPUT_SIGNALS = 0`
 - `uses_reference = false`
 - `running_output = false`
@@ -26,7 +26,28 @@ For the current single-card example, the intended DIO usage is:
 
 - lower-bank DIO lines are inputs
 - upper-bank DIO lines are outputs
-- the active Entangler channels are the first two inputs and first two outputs on that split
+- the active Entangler channels use all four inputs and all four outputs on that split
+
+Do not add a separate `dio` peripheral entry for the same EEM port as the
+Entangler. The Entangler peripheral owns that DIO card in gateware. When the
+Entangler is disabled in software with `entangler.set_config(enable=False)`, the
+output lines pass through to their normal `TTLOut` devices. When it is enabled
+with `entangler.set_config(enable=True, standalone=True)`, the Entangler core
+drives those same output lines.
+
+For the current 4-input/4-output DIO-card layout:
+
+| Physical line | Entangler role | RTIO channel | `device_db.py` device |
+|---|---|---:|---|
+| `dio0[4]` | output 0 | `0x000000` | `ttl0` |
+| `dio0[5]` | output 1 | `0x000001` | `ttl1` |
+| `dio0[6]` | output 2 | `0x000002` | `ttl2` |
+| `dio0[7]` | output 3 | `0x000003` | `ttl3` |
+| `dio0[0]` | input 0 | `0x000004` | `ttl4` |
+| `dio0[1]` | input 1 | `0x000005` | `ttl5` |
+| `dio0[2]` | input 2 | `0x000006` | `ttl6` |
+| `dio0[3]` | input 3 | `0x000007` | `ttl7` |
+| Entangler PHY | driver device | `0x000008` | `entangler0` |
 
 End-to-end build from JSON
 --------------------------
@@ -37,6 +58,12 @@ Use this flow when you want to go from a Kasli-SoC JSON description file to:
 - `build/runtime.bin` or `build/satman.bin`
 - `build/boot.bin`
 - `device_db.py`
+
+Operational convention for this repo: when asking for "new gateware" for the
+Kasli-SoC hardware, the expected final artifact is a fresh `build/boot.bin`.
+The raw `build/gateware/top.bit` is only an intermediate bitstream. It must be
+packaged together with the Kasli-SoC second-stage bootloader and matching
+firmware before it is useful as the SD-card boot image.
 
 There are two inputs:
 
@@ -69,7 +96,7 @@ case "$ROLE" in
 esac
 ```
 
-Build the gateware:
+Build the raw FPGA bitstream:
 
 ```bash
 cd src
@@ -77,7 +104,24 @@ nix develop --command python gateware/kasli_soc.py -g ../build/gateware ../"$DES
 cd ..
 ```
 
-This produces `build/gateware/top.bit`.
+This produces `build/gateware/top.bit`. Keep going through the firmware and
+`boot.bin` packaging steps below before copying anything to the SD card.
+
+To inspect the Entangler RTIO/DIO mapping without compiling the bitstream, omit
+`-g`:
+
+```bash
+cd src
+nix develop --command python gateware/kasli_soc.py ../"$DESC"
+cd ..
+```
+
+Use that output to find the right TTL channel after changing
+[entangler_settings.toml](entangler_settings.toml), `running_output`, or the EEM
+port number. The generated [device_db.py](device_db.py) then gives the matching
+ARTIQ device names. For the current `entagnler_test.json`, the active split-bank
+mapping is reported as outputs on `dio0[4, 5, 6, 7]` at RTIO channels `0 -> 3`
+and inputs on `dio0[0, 1, 2, 3]` at RTIO channels `4 -> 7`.
 
 Build the matching firmware:
 
@@ -101,7 +145,7 @@ nix build git+https://git.m-labs.hk/m-labs/zynq-rs#kasli_soc-szl
 cd ..
 ```
 
-Create `boot.bif` and package `boot.bin`:
+Create `boot.bif` and package the SD-card boot image:
 
 ```bash
 cd build
@@ -121,12 +165,12 @@ This produces:
 
 - `build/result/szl.elf`
 - `build/boot.bif`
-- `build/boot.bin`
+- `build/boot.bin`, the final file to copy to the SD card
 
 Generate the ARTIQ device database from the same JSON description:
 
 ```bash
-nix develop --command python entangler_device_db_maker.py "$DESC" > device_db.py
+nix develop --command bash -lc 'python entangler_device_db_maker.py "$DESC" > device_db.py'
 ```
 
 Check the generated `core_addr` in `device_db.py` before running experiments. The generator gets the RTIO channel layout from the JSON description and the Entangler settings exported from [entangler_settings.toml](entangler_settings.toml).
