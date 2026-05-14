@@ -9,7 +9,7 @@
   inputs.zynq-rs.inputs.nixpkgs.follows = "artiq/nixpkgs";
 
   inputs.entangler-core = {
-    url = "git+https://github.com/QuantumQuadrate/madmax-entangler-core.git?ref=artiq-integration";
+    url = "path:../madmax-entangler-core";
     inputs.artiqpkgs.follows = "artiq";
     inputs.nixpkgs.follows = "artiq/nixpkgs";
   };

@@ -12,10 +12,12 @@
             "ports": [0]
         },
         {
-            "type": "dio",
+            "type": "entangler",
             "ports": [1],
-            "bank_direction_low": "input",
-            "bank_direction_high": "output"
+            "uses_reference": false,
+            "running_output": false,
+            "edge_counter": true,
+            "logic_mode": "atom_photon_parity"
         },
         {
             "type": "dio",
