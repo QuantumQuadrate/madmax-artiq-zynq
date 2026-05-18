@@ -120,33 +120,25 @@ class PeripheralManager(artiq.frontend.artiq_ddb_template.PeripheralManager):
 
         driver_module = "entangler.driver"
         driver_class = "Entangler"
-        driver_args = """
-                    "channel": 0x{channel:06x},
-                    "is_master": True,
-        """
+        driver_args = '        "channel": 0x{channel:06x},\n        "is_master": True,'
         if logic_mode == "and_nand_test":
             driver_module = "entangler.and_nand_test_driver"
             driver_class = "AndNandTestEntangler"
-            driver_args = """
-                    "channel": 0x{channel:06x},
-        """
+            driver_args = '        "channel": 0x{channel:06x},'
         elif logic_mode == "atom_photon_parity":
             driver_module = "entangler.atom_photon_parity_driver"
             driver_class = "AtomPhotonParityEntangler"
-            driver_args = """
-                    "channel": 0x{channel:06x},
-        """
+            driver_args = '        "channel": 0x{channel:06x},'
 
         entangler_channel = rtio_offset + len(ttl_exports)
-        self.gen("""
-            device_db["{name}"] = {{
-                "type": "local",
-                "module": "{module}",
-                "class": "{class_name}",
-                "arguments": {{
+        self.gen("""device_db["{name}"] = {{
+    "type": "local",
+    "module": "{module}",
+    "class": "{class_name}",
+    "arguments": {{
 {arguments}
-                }},
-            }}""",
+    }},
+}}""",
                  name=self.get_name("entangler"),
                  module=driver_module,
                  class_name=driver_class,

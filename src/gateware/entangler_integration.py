@@ -14,6 +14,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _split_single_dio_entangler(peripheral):
+    if peripheral.get("logic_mode", "legacy") != "legacy":
+        return False
     if peripheral.get("link_eem") is not None:
         return False
     if peripheral.get("uses_reference", False):
