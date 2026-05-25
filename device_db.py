@@ -163,28 +163,28 @@ device_db["entangler0"] = {
 device_db["ttl8"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
-    "class": "TTLInOut",
+    "class": "TTLOut",
     "arguments": {"channel": 0x00000d},
 }
 
 device_db["ttl9"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
-    "class": "TTLInOut",
+    "class": "TTLOut",
     "arguments": {"channel": 0x00000e},
 }
 
 device_db["ttl10"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
-    "class": "TTLInOut",
+    "class": "TTLOut",
     "arguments": {"channel": 0x00000f},
 }
 
 device_db["ttl11"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
-    "class": "TTLInOut",
+    "class": "TTLOut",
     "arguments": {"channel": 0x000010},
 }
 
@@ -216,51 +216,23 @@ device_db["ttl15"] = {
     "arguments": {"channel": 0x000014},
 }
 
-device_db["ttl8_counter"] = {
-    "type": "local",
-    "module": "artiq.coredevice.edge_counter",
-    "class": "EdgeCounter",
-    "arguments": {"channel": 0x000015},
-}
-
-device_db["ttl9_counter"] = {
-    "type": "local",
-    "module": "artiq.coredevice.edge_counter",
-    "class": "EdgeCounter",
-    "arguments": {"channel": 0x000016},
-}
-
-device_db["ttl10_counter"] = {
-    "type": "local",
-    "module": "artiq.coredevice.edge_counter",
-    "class": "EdgeCounter",
-    "arguments": {"channel": 0x000017},
-}
-
-device_db["ttl11_counter"] = {
-    "type": "local",
-    "module": "artiq.coredevice.edge_counter",
-    "class": "EdgeCounter",
-    "arguments": {"channel": 0x000018},
-}
-
 device_db["spi_sampler0_adc"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x000019}
+    "arguments": {"channel": 0x000015}
 }
 device_db["spi_sampler0_pgia"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x00001a}
+    "arguments": {"channel": 0x000016}
 }
 device_db["ttl_sampler0_cnv"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00001b},
+    "arguments": {"channel": 0x000017},
 }
 device_db["sampler0"] = {
     "type": "local",
@@ -278,19 +250,19 @@ device_db["spi_sampler1_adc"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x00001c}
+    "arguments": {"channel": 0x000018}
 }
 device_db["spi_sampler1_pgia"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x00001d}
+    "arguments": {"channel": 0x000019}
 }
 device_db["ttl_sampler1_cnv"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00001e},
+    "arguments": {"channel": 0x00001a},
 }
 device_db["sampler1"] = {
     "type": "local",
@@ -308,19 +280,19 @@ device_db["spi_sampler2_adc"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x00001f}
+    "arguments": {"channel": 0x00001b}
 }
 device_db["spi_sampler2_pgia"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x000020}
+    "arguments": {"channel": 0x00001c}
 }
 device_db["ttl_sampler2_cnv"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000021},
+    "arguments": {"channel": 0x00001d},
 }
 device_db["sampler2"] = {
     "type": "local",
@@ -338,19 +310,19 @@ device_db["spi_zotino0"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x000022}
+    "arguments": {"channel": 0x00001e}
 }
 device_db["ttl_zotino0_ldac"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000023}
+    "arguments": {"channel": 0x00001f}
 }
 device_db["ttl_zotino0_clr"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000024}
+    "arguments": {"channel": 0x000020}
 }
 device_db["zotino0"] = {
     "type": "local",
@@ -377,49 +349,49 @@ device_db["spi_urukul0"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x000025}
+    "arguments": {"channel": 0x000021}
 }
 
 device_db["ttl_urukul0_sync"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLClockGen",
-    "arguments": {"channel": 0x000026, "acc_width": 4}
+    "arguments": {"channel": 0x000022, "acc_width": 4}
 }
 
 device_db["ttl_urukul0_io_update"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000027}
+    "arguments": {"channel": 0x000023}
 }
 
 device_db["ttl_urukul0_sw0"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000028}
+    "arguments": {"channel": 0x000024}
 }
 
 device_db["ttl_urukul0_sw1"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000029}
+    "arguments": {"channel": 0x000025}
 }
 
 device_db["ttl_urukul0_sw2"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00002a}
+    "arguments": {"channel": 0x000026}
 }
 
 device_db["ttl_urukul0_sw3"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00002b}
+    "arguments": {"channel": 0x000027}
 }
 
 device_db["urukul0_cpld"] = {
@@ -511,49 +483,49 @@ device_db["spi_urukul1"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x00002c}
+    "arguments": {"channel": 0x000028}
 }
 
 device_db["ttl_urukul1_sync"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLClockGen",
-    "arguments": {"channel": 0x00002d, "acc_width": 4}
+    "arguments": {"channel": 0x000029, "acc_width": 4}
 }
 
 device_db["ttl_urukul1_io_update"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00002e}
+    "arguments": {"channel": 0x00002a}
 }
 
 device_db["ttl_urukul1_sw0"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00002f}
+    "arguments": {"channel": 0x00002b}
 }
 
 device_db["ttl_urukul1_sw1"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000030}
+    "arguments": {"channel": 0x00002c}
 }
 
 device_db["ttl_urukul1_sw2"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000031}
+    "arguments": {"channel": 0x00002d}
 }
 
 device_db["ttl_urukul1_sw3"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000032}
+    "arguments": {"channel": 0x00002e}
 }
 
 device_db["urukul1_cpld"] = {
@@ -645,49 +617,49 @@ device_db["spi_urukul2"] = {
     "type": "local",
     "module": "artiq.coredevice.spi2",
     "class": "SPIMaster",
-    "arguments": {"channel": 0x000033}
+    "arguments": {"channel": 0x00002f}
 }
 
 device_db["ttl_urukul2_sync"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLClockGen",
-    "arguments": {"channel": 0x000034, "acc_width": 4}
+    "arguments": {"channel": 0x000030, "acc_width": 4}
 }
 
 device_db["ttl_urukul2_io_update"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000035}
+    "arguments": {"channel": 0x000031}
 }
 
 device_db["ttl_urukul2_sw0"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000036}
+    "arguments": {"channel": 0x000032}
 }
 
 device_db["ttl_urukul2_sw1"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000037}
+    "arguments": {"channel": 0x000033}
 }
 
 device_db["ttl_urukul2_sw2"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000038}
+    "arguments": {"channel": 0x000034}
 }
 
 device_db["ttl_urukul2_sw3"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x000039}
+    "arguments": {"channel": 0x000035}
 }
 
 device_db["urukul2_cpld"] = {
@@ -769,12 +741,12 @@ device_db["led0"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00003a}
+    "arguments": {"channel": 0x000036}
 }
 
 device_db["led1"] = {
     "type": "local",
     "module": "artiq.coredevice.ttl",
     "class": "TTLOut",
-    "arguments": {"channel": 0x00003b}
+    "arguments": {"channel": 0x000037}
 }

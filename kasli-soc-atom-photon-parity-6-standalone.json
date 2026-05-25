@@ -27,9 +27,9 @@
             "type": "dio",
             "hw_rev": "v1.6",
             "ports": [1],
-            "bank_direction_low": "input",
+            "bank_direction_low": "output",
             "bank_direction_high": "output",
-            "edge_counter": true
+            "edge_counter": false
         },
         {
             "type": "sampler",
