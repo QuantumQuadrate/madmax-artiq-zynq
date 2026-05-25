@@ -6,13 +6,22 @@
     "rtio_frequency": 125e6,
     "peripherals": [
         {
+            "type": "dio",
+            "hw_rev": "v1.6",
+            "ports": [0],
+            "bank_direction_low": "input",
+            "bank_direction_high": "output",
+            "edge_counter": true
+        },
+        {
             "type": "entangler",
             "hw_rev": "v1.6",
             "ports": [0],
             "uses_reference": false,
             "running_output": false,
             "edge_counter": true,
-            "logic_mode": "atom_photon_parity"
+            "logic_mode": "atom_photon_parity",
+            "overlay": true
         },
         {
             "type": "dio",
