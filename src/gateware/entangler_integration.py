@@ -109,9 +109,9 @@ def _phy_cls_for_logic_mode(peripheral):
 
         return AndNandTestEntangler
     if logic_mode == "atom_photon_parity":
-        from entangler.atom_photon_parity_phy import AtomPhotonParityEntangler
+        from entangler.atom_photon_phy import AtomPhotonParity
 
-        return AtomPhotonParityEntangler
+        return AtomPhotonParity
     if logic_mode == "legacy":
         return entangler.phy.Entangler
     raise ValueError(f"Unsupported entangler logic_mode {logic_mode!r}")
@@ -234,6 +234,7 @@ def _add_overlay_entangler(target, peripheral):
         )
     elif logic_mode == "atom_photon_parity":
         phy = phy_cls(
+            core_link_pads=None,
             output_pads=None,
             passthrough_sigs=None,
             input_phys=input_phys,
