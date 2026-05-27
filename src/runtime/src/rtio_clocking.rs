@@ -439,6 +439,15 @@ fn set_fclk0_freq(clk: RtioClock) {
 }
 
 pub fn init() {
+    #[cfg(all(feature = "target_kasli_soc", not(has_drtio)))]
+    {
+        warn!(
+            "Node 1 network bring-up build: leaving SYS/RTIO on bootstrap clock and skipping RTIO clock switch"
+        );
+    }
+
+    #[cfg(not(all(feature = "target_kasli_soc", not(has_drtio))))]
+    {
     let clk = get_rtio_clock_cfg();
     #[cfg(has_si5324)]
     {
@@ -486,5 +495,6 @@ pub fn init() {
             }
             _ => {}
         }
+    }
     }
 }

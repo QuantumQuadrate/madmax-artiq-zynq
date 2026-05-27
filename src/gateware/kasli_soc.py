@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import json
 import logging
 
 
@@ -30,8 +31,6 @@ import entangler_integration
 import zynq_clocking
 from config import generate_ident, write_csr_file, write_mem_file, write_rustc_cfg_file
 
-import entangler.gateware.jsondesc
-
 
 
 eem_iostandard_dict = {
@@ -50,6 +49,14 @@ eem_iostandard_dict = {
 }
 
 DRTIO_EEM_PERIPHERALS = ["shuttler", "phaser_drtio"]
+
+def description_uses_entangler(description_path):
+    with open(description_path, "r", encoding="utf-8") as description_file:
+        description = json.load(description_file)
+    return any(
+        peripheral.get("type") == "entangler"
+        for peripheral in description.get("peripherals", [])
+    )
 
 def eem_iostandard(eem):
     return IOStandard(eem_iostandard_dict[eem])
@@ -775,6 +782,14 @@ def main():
     parser.add_argument("description", metavar="DESCRIPTION",
                         help="JSON system description file")
     args = parser.parse_args()
+
+    entangler_integration.inject()
+
+    if description_uses_entangler(args.description):
+        from entangler.gateware import jsondesc as entangler_jsondesc
+
+        entangler_jsondesc.inject()
+
     description = jsondesc.load(args.description)
 
     if description["target"] != "kasli_soc":
@@ -807,10 +822,5 @@ def main():
 
 
 if __name__ == "__main__":
-
-    # making this to work with entangler
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    entangler_integration.inject()
-    entangler.gateware.jsondesc.inject()
-    
     main()

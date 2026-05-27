@@ -3,6 +3,17 @@
 """An extension of the ARTIQ device DB template script."""
 
 import artiq.frontend.artiq_ddb_template
+import json
+import sys
+
+
+def description_uses_entangler(description_path):
+    with open(description_path, "r", encoding="utf-8") as description_file:
+        description = json.load(description_file)
+    return any(
+        peripheral.get("type") == "entangler"
+        for peripheral in description.get("peripherals", [])
+    )
 
 
 class PeripheralManager(artiq.frontend.artiq_ddb_template.PeripheralManager):
@@ -168,14 +179,13 @@ class PeripheralManager(artiq.frontend.artiq_ddb_template.PeripheralManager):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and description_uses_entangler(sys.argv[1]):
+        from entangler.gateware import jsondesc as entangler_jsondesc
 
-    import entangler.gateware.jsondesc
-
-
-    # Inject custom peripheral manager class
-    artiq.frontend.artiq_ddb_template.PeripheralManager = PeripheralManager
-    # Inject custom peripherals in JSON schema
-    entangler.gateware.jsondesc.inject()
+        # Inject custom peripheral manager class
+        artiq.frontend.artiq_ddb_template.PeripheralManager = PeripheralManager
+        # Inject custom peripherals in JSON schema
+        entangler_jsondesc.inject()
 
     # Run regular main function
     artiq.frontend.artiq_ddb_template.main()
