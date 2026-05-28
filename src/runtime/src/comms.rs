@@ -1068,14 +1068,40 @@ pub fn main() {
     #[cfg(has_drtio_routing)]
     drtio_routing::interconnect_disable_all();
 
-    task::spawn(report_async_rtio_errors());
+    info!("diag: skipping async RTIO error reporter task");
+    #[cfg(ps_fclk_local_write_sink_probe)]
+    info!("diag: skipping identifier_read for experiment 21 PS-FCLK local write sink probe");
+    #[cfg(sys_crg_bootstrap_input_probe)]
+    info!("diag: skipping identifier_read for experiment 23 standalone-SYS bootstrap-input local write sink probe");
+    #[cfg(all(standalone_sys_local_write_sink_probe, not(sys_crg_bootstrap_input_probe)))]
+    info!("diag: skipping identifier_read for experiment 22 standalone-SYS local write sink probe");
+    #[cfg(bootstrap_axi_local_write_sink_probe)]
+    info!("diag: skipping identifier_read for experiment 20 bootstrap AXI local write sink probe");
+    #[cfg(all(bootstrap_axi_csr_write_only_probe, not(bootstrap_axi_local_write_sink_probe)))]
+    info!("diag: skipping identifier_read for experiment 19 bootstrap AXI write-only probe");
+    #[cfg(all(
+        not(bootstrap_axi_csr_write_only_probe),
+        not(bootstrap_axi_local_write_sink_probe),
+        not(ps_fclk_local_write_sink_probe),
+        not(standalone_sys_local_write_sink_probe),
+        not(sys_crg_bootstrap_input_probe)
+    ))]
+    info!("diag: skipping identifier_read for experiment 17 bootstrap SED probe");
+    info!("diag: before rtio_mgt startup");
     rtio_mgt::startup(&up_destinations);
+    info!("diag: after rtio_mgt startup");
+    info!("diag: before setup_device_map");
     libboard_artiq::setup_device_map();
+    info!("diag: after setup_device_map");
 
-    analyzer::start(&up_destinations);
+    info!("diag: skipping analyzer start for control-loop reachability test");
+    info!("diag: before moninj start");
     moninj::start();
+    info!("diag: after moninj start");
 
+    info!("diag: before kernel control start");
     let control: Rc<RefCell<kernel::Control>> = Rc::new(RefCell::new(kernel::Control::start()));
+    info!("diag: after kernel control start");
     if let Ok(buffer) = libconfig::read("startup_kernel") {
         info!("Loading startup kernel...");
         if let Ok(()) = task::block_on(handle_flash_kernel(&buffer, &control, &up_destinations)) {
@@ -1087,13 +1113,18 @@ pub fn main() {
         }
     }
 
+    info!("diag: before mgmt start");
     mgmt::start();
+    info!("diag: after mgmt start");
 
+    info!("diag: before control accept task spawn");
     task::spawn(async move {
+        info!("diag: control accept task entered");
         let connection = Rc::new(Semaphore::new(1, 1));
         let terminate = Rc::new(Semaphore::new(0, 1));
         let can_restart_idle = Rc::new(Semaphore::new(1, 1));
         loop {
+            info!("diag: control accept task waiting for connection or idle restart");
             let control = control.clone();
             let mut maybe_stream = select_biased! {
                 s = (async {
@@ -1163,22 +1194,65 @@ pub fn main() {
             });
         }
     });
+    info!("diag: after control accept task spawn");
 
+    info!("diag: entering network poll loop");
     task::block_on(async {
         let mut last_link_check = Instant::from_millis(0);
+        let mut last_diag_heartbeat = Instant::from_millis(0);
+        let mut first_network_loop = true;
         const LINK_CHECK_INTERVAL: u64 = 500;
+        const DIAG_HEARTBEAT_INTERVAL: u64 = 5000;
 
         loop {
+            if first_network_loop {
+                info!("diag: first network loop before timer read");
+            }
             let instant = Instant::from_millis(timer::get_ms() as i32);
+            if first_network_loop {
+                info!("diag: first network loop before sockets poll");
+            }
             Sockets::instance().poll(&mut iface, instant);
-
-            let dev = iface.device_mut();
-            if dev.is_idle() && instant >= last_link_check + Duration::from_millis(LINK_CHECK_INTERVAL) {
-                dev.check_link_change();
-                last_link_check = instant;
+            if first_network_loop {
+                info!("diag: first network loop after sockets poll");
             }
 
+            let dev = iface.device_mut();
+            if first_network_loop {
+                info!("diag: first network loop before link idle check");
+            }
+            let should_check_link =
+                dev.is_idle() && instant >= last_link_check + Duration::from_millis(LINK_CHECK_INTERVAL);
+            if first_network_loop {
+                info!("diag: first network loop after link idle check");
+            }
+            if should_check_link {
+                if first_network_loop {
+                    info!("diag: first network loop before link change check");
+                }
+                dev.check_link_change();
+                if first_network_loop {
+                    info!("diag: first network loop after link change check");
+                }
+                last_link_check = instant;
+            }
+            if instant >= last_diag_heartbeat + Duration::from_millis(DIAG_HEARTBEAT_INTERVAL) {
+                if first_network_loop {
+                    info!("diag: first network loop heartbeat");
+                } else {
+                    info!("diag: network poll heartbeat");
+                }
+                last_diag_heartbeat = instant;
+            }
+
+            if first_network_loop {
+                info!("diag: first network loop before yield");
+            }
             task::r#yield().await;
+            if first_network_loop {
+                info!("diag: first network loop after yield");
+                first_network_loop = false;
+            }
         }
     })
 }

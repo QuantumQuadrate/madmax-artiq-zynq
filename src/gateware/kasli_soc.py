@@ -50,6 +50,13 @@ eem_iostandard_dict = {
 }
 
 DRTIO_EEM_PERIPHERALS = ["shuttler", "phaser_drtio"]
+PS_FCLK_SYS_IDENTIFIER_PROBE_VARIANT = "13_dio0_dio1_ps_fclk_sys_identifier_probe"
+AXI_CSR_TIMEOUT_PROBE_VARIANT = "18_dio0_dio1_bootstrap_axi_csr_timeout_probe"
+AXI_CSR_WRITE_ONLY_PROBE_VARIANT = "19_dio0_dio1_bootstrap_axi_write_only_probe"
+AXI_LOCAL_WRITE_SINK_PROBE_VARIANT = "20_dio0_dio1_bootstrap_axi_local_write_sink_probe"
+PS_FCLK_LOCAL_WRITE_SINK_PROBE_VARIANT = "21_dio0_dio1_ps_fclk_axi_local_write_sink_probe"
+STANDALONE_SYS_LOCAL_WRITE_SINK_PROBE_VARIANT = "22_dio0_dio1_standalone_sys_crg_normal_axi_local_write_sink_probe"
+STANDALONE_SYS_BOOTSTRAP_INPUT_LOCAL_WRITE_SINK_PROBE_VARIANT = "23_dio0_dio1_standalone_sys_crg_bootstrap_input_normal_axi_local_write_sink_probe"
 
 def eem_iostandard(eem):
     return IOStandard(eem_iostandard_dict[eem])
@@ -111,6 +118,50 @@ class GTPBootstrapClock(Module):
             raise ValueError("Bootstrap frequency must be 100 or 125MHz")
 
 
+class CSRBridgeProbe(Module, AutoCSR):
+    def __init__(self, csr_bus, sed_spread_addr):
+        self.sys_heartbeat = CSRStatus(32)
+        self.write_count = CSRStatus(32)
+        self.last_write_addr = CSRStatus(32)
+        self.last_write_data = CSRStatus(32)
+        self.sed_spread_seen = CSRStatus()
+        self.sed_spread_count = CSRStatus(32)
+
+        sys_heartbeat = Signal(32)
+        write_count = Signal(32)
+        last_write_addr = Signal(32)
+        last_write_data = Signal(32)
+        sed_spread_seen = Signal()
+        sed_spread_count = Signal(32)
+        sed_spread_word_addr = sed_spread_addr >> 2
+
+        self.sync += [
+            sys_heartbeat.eq(sys_heartbeat + 1),
+            If(csr_bus.we,
+                write_count.eq(write_count + 1),
+                last_write_addr.eq(csr_bus.adr),
+                last_write_data.eq(csr_bus.dat_w),
+                If(csr_bus.adr == sed_spread_word_addr,
+                    sed_spread_seen.eq(1),
+                    sed_spread_count.eq(sed_spread_count + 1)
+                )
+            )
+        ]
+        self.comb += [
+            self.sys_heartbeat.status.eq(sys_heartbeat),
+            self.write_count.status.eq(write_count),
+            self.last_write_addr.status.eq(last_write_addr),
+            self.last_write_data.status.eq(last_write_data),
+            self.sed_spread_seen.status.eq(sed_spread_seen),
+            self.sed_spread_count.status.eq(sed_spread_count),
+        ]
+
+
+class BootstrapWriteSink(Module, AutoCSR):
+    def __init__(self):
+        self.value = CSRStorage(32)
+
+
 def add_coaxpress_sfp(cls, clk_freq, roi_engine_count, refclk=None):
     if refclk is None:
         refclk = Signal()
@@ -159,42 +210,91 @@ class GenericStandalone(SoCCore):
         self.acpki = description["enable_acpki"]
         clk_freq = description["rtio_frequency"]
         with_wrpll = description["enable_wrpll"]
+        variant = description["variant"]
+        self.ps_fclk_sys_probe = variant in (
+            PS_FCLK_SYS_IDENTIFIER_PROBE_VARIANT,
+            PS_FCLK_LOCAL_WRITE_SINK_PROBE_VARIANT,
+        )
 
         platform = kasli_soc.Platform()
         platform.toolchain.bitstream_commands.extend([
             "set_property BITSTREAM.GENERAL.COMPRESS True [current_design]",
         ])
-        ident = generate_ident(description["variant"])
+        ident = generate_ident(variant)
         if self.acpki:
             ident = "acpki_" + ident
-        SoCCore.__init__(self, platform=platform, csr_data_width=32, ident=ident, ps_cd_sys=False)
+        SoCCore.__init__(
+            self,
+            platform=platform,
+            csr_data_width=32,
+            ident=ident,
+            ps_cd_sys=self.ps_fclk_sys_probe,
+        )
 
         self.config["HW_REV"] = description["hw_rev"]
-        clk_synth = platform.request("cdr_clk_clean_fabric")
-        clk_synth_se = Signal()
-        clk_synth_se_buf = Signal()
-        platform.add_period_constraint(clk_synth.p, 8.0)
-
-        self.specials += [ 
-            Instance("IBUFGDS",
-                p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
-                i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se
-            ),
-            Instance("BUFG", i_I=clk_synth_se, o_O=clk_synth_se_buf),
-        ]
         fix_serdes_timing_path(platform)
-        self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
         self.config["RTIO_FREQUENCY"] = str(clk_freq/1e6)
         self.config["CLOCK_FREQUENCY"] = int(clk_freq)
+        self.bootstrap_axi_csr_timeout_probe = variant in (
+            AXI_CSR_TIMEOUT_PROBE_VARIANT,
+            AXI_CSR_WRITE_ONLY_PROBE_VARIANT,
+            AXI_LOCAL_WRITE_SINK_PROBE_VARIANT,
+        )
+        self.bootstrap_axi_csr_write_only_probe = variant == AXI_CSR_WRITE_ONLY_PROBE_VARIANT
+        self.bootstrap_axi_local_write_sink_probe = variant == AXI_LOCAL_WRITE_SINK_PROBE_VARIANT
+        self.ps_fclk_local_write_sink_probe = variant == PS_FCLK_LOCAL_WRITE_SINK_PROBE_VARIANT
+        self.standalone_sys_bootstrap_input_probe = (
+            variant == STANDALONE_SYS_BOOTSTRAP_INPUT_LOCAL_WRITE_SINK_PROBE_VARIANT
+        )
+        self.standalone_sys_local_write_sink_probe = variant in (
+            STANDALONE_SYS_LOCAL_WRITE_SINK_PROBE_VARIANT,
+            STANDALONE_SYS_BOOTSTRAP_INPUT_LOCAL_WRITE_SINK_PROBE_VARIANT,
+        )
 
-        self.submodules.sys_crg = zynq_clocking.SYSCRG(self.platform, self.ps7, clk_synth_se_buf)
-        platform.add_false_path_constraints(
-            self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
-        self.csr_devices.append("sys_crg")
-        self.crg = self.ps7 # HACK for eem_7series to find the clock
-        self.crg.cd_sys = self.sys_crg.cd_sys
+        if self.ps_fclk_sys_probe:
+            self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
+            self.comb += self.cd_sys4x.clk.eq(ClockSignal())
+            self.crg = self.ps7 # HACK for eem_7series to find the clock
+            self.config["PS_FCLK_SYS_PROBE"] = None
+            if self.ps_fclk_local_write_sink_probe:
+                self.config["PS_FCLK_LOCAL_WRITE_SINK_PROBE"] = None
+        else:
+            clk_synth = platform.request("cdr_clk_clean_fabric")
+            clk_synth_se = Signal()
+            clk_synth_se_buf = Signal()
+            platform.add_period_constraint(clk_synth.p, 8.0)
 
-        if with_wrpll:
+            self.specials += [
+                Instance("IBUFGDS",
+                    p_DIFF_TERM="TRUE", p_IBUF_LOW_PWR="FALSE",
+                    i_I=clk_synth.p, i_IB=clk_synth.n, o_O=clk_synth_se
+                ),
+                Instance("BUFG", i_I=clk_synth_se, o_O=clk_synth_se_buf),
+            ]
+            self.submodules.bootstrap = GTPBootstrapClock(self.platform, clk_freq)
+            self.submodules.sys_crg = zynq_clocking.SYSCRG(
+                self.platform,
+                self.ps7,
+                clk_synth_se_buf,
+                force_clk_sw=0 if self.standalone_sys_bootstrap_input_probe else None,
+            )
+            platform.add_false_path_constraints(
+                self.bootstrap.cd_bootstrap.clk, self.sys_crg.cd_sys.clk)
+            self.csr_devices.append("sys_crg")
+            self.crg = self.ps7 # HACK for eem_7series to find the clock
+            self.crg.cd_sys = self.sys_crg.cd_sys
+
+        if self.bootstrap_axi_csr_timeout_probe:
+            self.submodules.axi2csr = ClockDomainsRenamer("bootstrap")(self.axi2csr)
+            self.config["BOOTSTRAP_AXI_CSR_TIMEOUT_PROBE"] = None
+            if self.bootstrap_axi_csr_write_only_probe:
+                self.config["BOOTSTRAP_AXI_CSR_WRITE_ONLY_PROBE"] = None
+            if self.bootstrap_axi_local_write_sink_probe:
+                self.config["BOOTSTRAP_AXI_LOCAL_WRITE_SINK_PROBE"] = None
+
+        if self.ps_fclk_sys_probe:
+            pass
+        elif with_wrpll:
             self.submodules.wrpll_refclk = wrpll.FrequencyMultiplier(platform.request("sma_clkin"))
             self.submodules.wrpll = wrpll.WRPLL(
                 platform=self.platform,
@@ -238,6 +338,28 @@ class GenericStandalone(SoCCore):
             self.rtio_tsc, self.rtio_channels, lane_count=description["sed_lanes"]
         )
         self.csr_devices.append("rtio_core")
+
+        if self.bootstrap_axi_local_write_sink_probe:
+            self.submodules.bootstrap_write_sink = ClockDomainsRenamer("bootstrap")(BootstrapWriteSink())
+            self.csr_devices.append("bootstrap_write_sink")
+
+        if self.ps_fclk_local_write_sink_probe:
+            self.submodules.ps_fclk_write_sink = BootstrapWriteSink()
+            self.csr_devices.append("ps_fclk_write_sink")
+
+        if self.standalone_sys_local_write_sink_probe:
+            self.submodules.standalone_sys_write_sink = BootstrapWriteSink()
+            self.csr_devices.append("standalone_sys_write_sink")
+            self.config["STANDALONE_SYS_LOCAL_WRITE_SINK_PROBE"] = None
+            if self.standalone_sys_bootstrap_input_probe:
+                self.config["SYS_CRG_BOOTSTRAP_INPUT_PROBE"] = None
+
+        if self.bootstrap_axi_csr_timeout_probe:
+            sed_spread_addr = 0x800 * self.csr_devices.index("rtio_core") + 0x8
+            if not self.bootstrap_axi_local_write_sink_probe:
+                self.config["CSR_BRIDGE_PROBE_SED_SPREAD_ADDR"] = sed_spread_addr
+                self.submodules.csr_bridge_probe = CSRBridgeProbe(self.axi2csr.csr, sed_spread_addr)
+                self.csr_devices.append("csr_bridge_probe")
 
         if self.acpki:
             self.config["KI_IMPL"] = "acp"

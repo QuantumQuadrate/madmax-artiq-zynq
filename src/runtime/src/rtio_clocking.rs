@@ -71,23 +71,7 @@ fn get_rtio_clock_cfg() -> RtioClock {
 
 #[cfg(not(any(has_drtio, feature = "target_ebaz4205")))]
 fn init_rtio() {
-    info!("Switching SYS clocks...");
-    unsafe {
-        pl::csr::sys_crg::clock_switch_write(1);
-    }
-    // if it's not locked, it will hang at the CSR.
-
-    timer::delay_ms(50); // wait for CPLL/QPLL/SYS PLL lock
-    let clk = unsafe { pl::csr::sys_crg::current_clock_read() };
-    if clk == 1 {
-        info!("SYS CLK switched successfully");
-    } else {
-        panic!("SYS CLK did not switch");
-    }
-    unsafe {
-        pl::csr::rtio_core::reset_phy_write(1);
-    }
-    info!("SYS PLL locked");
+    info!("diag: skipping SYS/RTIO clock switch for populated-carrier test");
 }
 
 #[cfg(has_drtio)]

@@ -7,7 +7,7 @@ runtime: ../build/runtime.bin
 
 satman: ../build/satman.bin
 
-.PHONY: all manifests
+.PHONY: all manifests FORCE
 
 manifests = libboard_artiq/Cargo.toml libc/Cargo.toml libdyld/Cargo.toml libio/Cargo.toml libksupport/Cargo.toml runtime/Cargo.toml satman/Cargo.toml
 
@@ -16,9 +16,11 @@ $(manifests): %.toml: %.toml.tpl
 
 manifests: $(manifests)
 
-../build/pl.rs ../build/rustc-cfg ../build/mem.rs: gateware/* 
+../build/pl.rs ../build/rustc-cfg ../build/mem.rs: gateware/* FORCE
 	mkdir -p ../build
 	python gateware/$(TARGET).py -r ../build/pl.rs -c ../build/rustc-cfg -m ../build/mem.rs $(GWARGS)
+
+FORCE:
 
 ../build/firmware/armv7-none-eabihf/release/runtime: ../build/pl.rs ../build/rustc-cfg ../build/mem.rs $(manifests) $(shell find . -type f -not -name Cargo.toml -print)
 	cargo build --release \

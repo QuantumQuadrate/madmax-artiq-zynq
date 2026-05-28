@@ -26,6 +26,8 @@ const IODIR_OUT_EEM_PWR_EN: u8 = 0x80;
 const IODIR_CLK_SEL: u8 = 0x80; // out
 #[cfg(has_si5324)]
 const IODIR_CLK_SEL: u8 = 0x00; // in
+#[cfg(not(any(has_si549, has_si5324)))]
+const IODIR_CLK_SEL: u8 = 0x00; // no clock synthesizer configured
 
 //IO expander port direction
 const IODIR0: [u8; 2] = [

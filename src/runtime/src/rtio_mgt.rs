@@ -929,12 +929,287 @@ pub mod drtio {
     pub fn reset() {}
 }
 
+fn log_rtio_csr_preflight() {
+    #[cfg(has_sys_crg)]
+    info!(
+        "diag: rtio csr preflight: generated CSR bases identifier=0x{:08x} sys_crg=0x{:08x} rtio_core=0x{:08x}",
+        csr::IDENTIFIER_BASE as usize,
+        csr::SYS_CRG_BASE as usize,
+        csr::RTIO_CORE_BASE as usize
+    );
+    #[cfg(not(has_sys_crg))]
+    info!(
+        "diag: rtio csr preflight: generated CSR bases identifier=0x{:08x} sys_crg=absent rtio_core=0x{:08x}",
+        csr::IDENTIFIER_BASE as usize,
+        csr::RTIO_CORE_BASE as usize
+    );
+    info!(
+        "diag: rtio csr preflight: generated CSR bases rtio=0x{:08x} rtio_dma=0x{:08x} rtio_moninj=0x{:08x}",
+        csr::RTIO_BASE as usize,
+        csr::RTIO_DMA_BASE as usize,
+        csr::RTIO_MONINJ_BASE as usize
+    );
+    info!(
+        "diag: rtio csr preflight: rtio_core base=0x{:08x} reset=0x{:08x} reset_phy=0x{:08x} sed_spread_enable=0x{:08x}",
+        csr::RTIO_CORE_BASE as usize,
+        csr::rtio_core::RESET_ADDR as usize,
+        csr::rtio_core::RESET_PHY_ADDR as usize,
+        csr::rtio_core::SED_SPREAD_ENABLE_ADDR as usize
+    );
+    info!(
+        "diag: rtio csr preflight: rtio_core sizes reset={} reset_phy={} sed_spread_enable={}",
+        csr::rtio_core::RESET_SIZE,
+        csr::rtio_core::RESET_PHY_SIZE,
+        csr::rtio_core::SED_SPREAD_ENABLE_SIZE
+    );
+    #[cfg(has_sys_crg)]
+    info!(
+        "diag: rtio csr preflight: sys_crg base=0x{:08x} current_clock=0x{:08x} clock_switch=0x{:08x}",
+        csr::SYS_CRG_BASE as usize,
+        csr::sys_crg::CURRENT_CLOCK_ADDR as usize,
+        csr::sys_crg::CLOCK_SWITCH_ADDR as usize
+    );
+    #[cfg(bootstrap_axi_local_write_sink_probe)]
+    info!(
+        "diag: rtio csr preflight: bootstrap_write_sink base=0x{:08x} value=0x{:08x}",
+        csr::BOOTSTRAP_WRITE_SINK_BASE as usize,
+        csr::bootstrap_write_sink::VALUE_ADDR as usize
+    );
+    #[cfg(ps_fclk_local_write_sink_probe)]
+    info!(
+        "diag: rtio csr preflight: ps_fclk_write_sink base=0x{:08x} value=0x{:08x}",
+        csr::PS_FCLK_WRITE_SINK_BASE as usize,
+        csr::ps_fclk_write_sink::VALUE_ADDR as usize
+    );
+    #[cfg(standalone_sys_local_write_sink_probe)]
+    info!(
+        "diag: rtio csr preflight: standalone_sys_write_sink base=0x{:08x} value=0x{:08x}",
+        csr::STANDALONE_SYS_WRITE_SINK_BASE as usize,
+        csr::standalone_sys_write_sink::VALUE_ADDR as usize
+    );
+    #[cfg(has_rtio_core)]
+    info!("diag: rtio csr preflight: runtime cfg has_rtio_core=true");
+    #[cfg(not(has_rtio_core))]
+    info!("diag: rtio csr preflight: runtime cfg has_rtio_core=false");
+    #[cfg(has_sys_crg)]
+    info!("diag: rtio csr preflight: runtime cfg has_sys_crg=true");
+    #[cfg(not(has_sys_crg))]
+    info!("diag: rtio csr preflight: runtime cfg has_sys_crg=false");
+    #[cfg(rtio_frequency = "125.0")]
+    info!("diag: clock preflight: generated rtio_frequency=125.0 MHz");
+    #[cfg(clock_frequency = "125000000")]
+    info!("diag: clock preflight: generated clock_frequency=125000000 Hz");
+    #[cfg(has_si5324)]
+    info!("diag: clock preflight: generated config has_si5324=true");
+    #[cfg(sys_crg_bootstrap_input_probe)]
+    info!("diag: clock preflight: generated config sys_crg_bootstrap_input_probe=true");
+    info!("diag: clock preflight: SYS/RTIO clock switch remains skipped in this diagnostic image");
+}
+
+#[cfg(all(
+    not(has_csr_bridge_probe),
+    not(bootstrap_axi_local_write_sink_probe),
+    not(ps_fclk_local_write_sink_probe),
+    not(standalone_sys_local_write_sink_probe)
+))]
 fn toggle_sed_spread(val: u8) {
+    info!(
+        "diag: before bootstrap-SYS SED spread CSR write value {} address=0x{:08x}",
+        val,
+        csr::rtio_core::SED_SPREAD_ENABLE_ADDR as usize
+    );
     unsafe {
         csr::rtio_core::sed_spread_enable_write(val);
     }
+    info!("diag: after bootstrap-SYS SED spread CSR write value {}", val);
 }
 
+#[cfg(all(has_csr_bridge_probe, not(bootstrap_axi_csr_write_only_probe)))]
+fn run_bootstrap_axi_csr_timeout_probe(val: u8) {
+    let before_heartbeat = unsafe { csr::csr_bridge_probe::sys_heartbeat_read() };
+    let before_write_count = unsafe { csr::csr_bridge_probe::write_count_read() };
+    let before_sed_count = unsafe { csr::csr_bridge_probe::sed_spread_count_read() };
+    info!(
+        "diag: experiment 18 bootstrap AXI/CSR probe armed sed_spread_addr=0x{:08x} sys_heartbeat_before={} write_count_before={} sed_count_before={}",
+        csr::CONFIG_CSR_BRIDGE_PROBE_SED_SPREAD_ADDR,
+        before_heartbeat,
+        before_write_count,
+        before_sed_count
+    );
+    info!(
+        "diag: experiment 18 decisive write uses bootstrap-clocked AXI2CSR response path; if this marker is the last one, ARM/AXI still did not receive a response"
+    );
+    info!(
+        "diag: before experiment 18 AXI/CSR timeout-safe SED spread write value {} address=0x{:08x}",
+        val,
+        csr::rtio_core::SED_SPREAD_ENABLE_ADDR as usize
+    );
+    unsafe {
+        csr::rtio_core::sed_spread_enable_write(val);
+    }
+    info!(
+        "diag: after experiment 18 AXI/CSR timeout-safe SED spread write value {}",
+        val
+    );
+
+    let after_heartbeat = unsafe { csr::csr_bridge_probe::sys_heartbeat_read() };
+    let after_write_count = unsafe { csr::csr_bridge_probe::write_count_read() };
+    let after_last_addr = unsafe { csr::csr_bridge_probe::last_write_addr_read() };
+    let after_last_data = unsafe { csr::csr_bridge_probe::last_write_data_read() };
+    let after_sed_seen = unsafe { csr::csr_bridge_probe::sed_spread_seen_read() };
+    let after_sed_count = unsafe { csr::csr_bridge_probe::sed_spread_count_read() };
+    info!(
+        "diag: experiment 18 probe status sys_heartbeat_after={} write_count_after={} last_word_addr=0x{:08x} last_data=0x{:08x} sed_seen={} sed_count_after={}",
+        after_heartbeat,
+        after_write_count,
+        after_last_addr,
+        after_last_data,
+        after_sed_seen,
+        after_sed_count
+    );
+
+    if after_sed_seen != 0 && after_sed_count != before_sed_count {
+        info!(
+            "diag: experiment 18 classification: AXI response returned and sys-domain CSR observer saw the RTIO-core SED write"
+        );
+    } else if after_write_count != before_write_count || after_heartbeat != before_heartbeat {
+        info!(
+            "diag: experiment 18 classification: AXI response returned; sys-domain probe is alive but did not confirm the SED target write"
+        );
+    } else {
+        info!(
+            "diag: experiment 18 classification: AXI response returned; sys-domain CSR observer/heartbeat did not advance"
+        );
+    }
+}
+
+#[cfg(bootstrap_axi_csr_write_only_probe)]
+fn run_bootstrap_axi_csr_write_only_probe(_val: u8) {
+    info!(
+        "diag: experiment 19 write-only probe: no post-network PL CSR reads have been attempted before the decisive write"
+    );
+    info!(
+        "diag: before experiment 19 bootstrap AXI write-only SED spread CSR write value 0 address=0x{:08x}",
+        csr::rtio_core::SED_SPREAD_ENABLE_ADDR as usize
+    );
+    unsafe {
+        csr::rtio_core::sed_spread_enable_write(0);
+    }
+    info!("diag: after experiment 19 bootstrap AXI write-only SED spread CSR write value 0");
+    info!(
+        "diag: experiment 19 classification: after-write marker printed, so the ARM/PS AXI write completed"
+    );
+}
+
+#[cfg(bootstrap_axi_local_write_sink_probe)]
+fn run_bootstrap_axi_local_write_sink_probe(_val: u8) {
+    info!(
+        "diag: experiment 20 local write sink probe: no post-network PL CSR reads have been attempted before the decisive local write"
+    );
+    info!(
+        "diag: before experiment 20 bootstrap-local write sink CSR write value 0 address=0x{:08x}",
+        csr::bootstrap_write_sink::VALUE_ADDR as usize
+    );
+    unsafe {
+        csr::bootstrap_write_sink::value_write(0);
+    }
+    info!("diag: after experiment 20 bootstrap-local write sink CSR write value 0");
+    info!(
+        "diag: before experiment 20 secondary RTIO-core SED spread CSR write value 0 address=0x{:08x}",
+        csr::rtio_core::SED_SPREAD_ENABLE_ADDR as usize
+    );
+    unsafe {
+        csr::rtio_core::sed_spread_enable_write(0);
+    }
+    info!("diag: after experiment 20 secondary RTIO-core SED spread CSR write value 0");
+}
+
+#[cfg(ps_fclk_local_write_sink_probe)]
+fn run_ps_fclk_local_write_sink_probe(_val: u8) {
+    info!(
+        "diag: experiment 21 PS-FCLK local write sink probe: no post-network PL CSR reads have been attempted before the decisive local write"
+    );
+    info!(
+        "diag: before experiment 21 PS-FCLK local write sink CSR write value 0 address=0x{:08x}",
+        csr::ps_fclk_write_sink::VALUE_ADDR as usize
+    );
+    unsafe {
+        csr::ps_fclk_write_sink::value_write(0);
+    }
+    info!("diag: after experiment 21 PS-FCLK local write sink CSR write value 0");
+}
+
+#[cfg(standalone_sys_local_write_sink_probe)]
+fn run_standalone_sys_local_write_sink_probe(_val: u8) {
+    #[cfg(sys_crg_bootstrap_input_probe)]
+    info!(
+        "diag: experiment 23 standalone-SYS bootstrap-input local write sink probe: no post-network PL CSR reads have been attempted before the decisive local write"
+    );
+    #[cfg(not(sys_crg_bootstrap_input_probe))]
+    info!(
+        "diag: experiment 22 standalone-SYS local write sink probe: no post-network PL CSR reads have been attempted before the decisive local write"
+    );
+    #[cfg(sys_crg_bootstrap_input_probe)]
+    info!(
+        "diag: before experiment 23 standalone-SYS bootstrap-input local write sink CSR write value 0 address=0x{:08x}",
+        csr::standalone_sys_write_sink::VALUE_ADDR as usize
+    );
+    #[cfg(not(sys_crg_bootstrap_input_probe))]
+    info!(
+        "diag: before experiment 22 standalone-SYS local write sink CSR write value 0 address=0x{:08x}",
+        csr::standalone_sys_write_sink::VALUE_ADDR as usize
+    );
+    unsafe {
+        csr::standalone_sys_write_sink::value_write(0);
+    }
+    #[cfg(sys_crg_bootstrap_input_probe)]
+    info!("diag: after experiment 23 standalone-SYS bootstrap-input local write sink CSR write value 0");
+    #[cfg(not(sys_crg_bootstrap_input_probe))]
+    info!("diag: after experiment 22 standalone-SYS local write sink CSR write value 0");
+}
+
+#[cfg(all(bootstrap_axi_csr_write_only_probe, not(bootstrap_axi_local_write_sink_probe)))]
+fn toggle_sed_spread(val: u8) {
+    run_bootstrap_axi_csr_write_only_probe(val);
+}
+
+#[cfg(all(has_csr_bridge_probe, not(bootstrap_axi_csr_write_only_probe)))]
+fn toggle_sed_spread(val: u8) {
+    run_bootstrap_axi_csr_timeout_probe(val);
+}
+
+#[cfg(bootstrap_axi_local_write_sink_probe)]
+fn toggle_sed_spread(val: u8) {
+    run_bootstrap_axi_local_write_sink_probe(val);
+}
+
+#[cfg(ps_fclk_local_write_sink_probe)]
+fn toggle_sed_spread(val: u8) {
+    run_ps_fclk_local_write_sink_probe(val);
+}
+
+#[cfg(standalone_sys_local_write_sink_probe)]
+fn toggle_sed_spread(val: u8) {
+    run_standalone_sys_local_write_sink_probe(val);
+}
+
+#[cfg(any(
+    bootstrap_axi_csr_write_only_probe,
+    bootstrap_axi_local_write_sink_probe,
+    ps_fclk_local_write_sink_probe,
+    standalone_sys_local_write_sink_probe
+))]
+fn setup_sed_spread() {
+    info!("SED spreading disabled by default");
+    toggle_sed_spread(0);
+}
+
+#[cfg(not(any(
+    bootstrap_axi_csr_write_only_probe,
+    bootstrap_axi_local_write_sink_probe,
+    ps_fclk_local_write_sink_probe,
+    standalone_sys_local_write_sink_probe
+)))]
 fn setup_sed_spread() {
     if let Ok(spread_enable) = libconfig::read_str("sed_spread_enable") {
         match spread_enable.as_ref() {
@@ -952,9 +1227,12 @@ fn setup_sed_spread() {
 }
 
 pub fn startup(up_destinations: &Rc<RefCell<[bool; drtio_routing::DEST_COUNT]>>) {
+    log_rtio_csr_preflight();
+    info!("diag: before rtio_mgt setup_sed_spread");
     setup_sed_spread();
+    info!("diag: after rtio_mgt setup_sed_spread");
+    info!("diag: before rtio_mgt drtio startup");
     drtio::startup(up_destinations);
-    unsafe {
-        csr::rtio_core::reset_phy_write(1);
-    }
+    info!("diag: after rtio_mgt drtio startup");
+    info!("diag: skipping rtio_core reset_phy CSR write");
 }

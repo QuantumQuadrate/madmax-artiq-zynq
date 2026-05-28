@@ -65,7 +65,8 @@ class ClockSwitchFSM(Module):
 
 
 class SYSCRG(Module, AutoCSR):
-    def __init__(self, platform, ps7, main_clk, clk_sw=None, clk_sw_status=None, freq=125e6, ext_async_rst=None, ):
+    def __init__(self, platform, ps7, main_clk, clk_sw=None, clk_sw_status=None, freq=125e6,
+                 ext_async_rst=None, force_clk_sw=None):
         # assumes bootstrap clock is same freq as main and sys output
         self.clock_domains.cd_sys = ClockDomain()
         self.clock_domains.cd_sys4x = ClockDomain(reset_less=True)
@@ -82,11 +83,23 @@ class SYSCRG(Module, AutoCSR):
 
         self.submodules.clk_sw_fsm = ClockSwitchFSM()
 
-        if clk_sw is None:
-            self.clock_switch = CSRStorage()
-            self.comb += self.clk_sw_fsm.i_clk_sw.eq(self.clock_switch.storage)
+        if force_clk_sw is None:
+            if clk_sw is None:
+                self.clock_switch = CSRStorage()
+                self.comb += self.clk_sw_fsm.i_clk_sw.eq(self.clock_switch.storage)
+            else:
+                self.comb += self.clk_sw_fsm.i_clk_sw.eq(clk_sw)
+            mmcm_clkin_sel = self.clk_sw_fsm.o_clk_sw
+            mmcm_reset = self.clk_sw_fsm.o_reset
         else:
-            self.comb += self.clk_sw_fsm.i_clk_sw.eq(clk_sw)
+            self.clock_switch = CSRStorage()
+            mmcm_clkin_sel = Signal(reset=force_clk_sw)
+            mmcm_reset = Signal(reset=0)
+            self.comb += [
+                self.clk_sw_fsm.i_clk_sw.eq(0),
+                mmcm_clkin_sel.eq(force_clk_sw),
+                mmcm_reset.eq(0),
+            ]
 
         self.mmcm_locked = Signal()
         mmcm_sys = Signal()
@@ -101,12 +114,12 @@ class SYSCRG(Module, AutoCSR):
                 p_REF_JITTER1=0.001,
                 p_CLKIN1_PERIOD=period, i_CLKIN1=main_clk,
                 p_CLKIN2_PERIOD=period, i_CLKIN2=bootstrap_clk,
-                i_CLKINSEL=self.clk_sw_fsm.o_clk_sw,
+                i_CLKINSEL=mmcm_clkin_sel,
 
                 # VCO @ 1.25GHz
                 p_CLKFBOUT_MULT_F=10, p_DIVCLK_DIVIDE=1,
                 i_CLKFBIN=mmcm_fb_clk,
-                i_RST=self.clk_sw_fsm.o_reset,
+                i_RST=mmcm_reset,
 
                 o_CLKFBOUT=mmcm_fb_clk,
 
@@ -148,7 +161,9 @@ class SYSCRG(Module, AutoCSR):
             )
         self.specials += Instance("IDELAYCTRL", i_REFCLK=ClockSignal("clk200"), i_RST=ic_reset)
 
-        if clk_sw_status is None:
+        if force_clk_sw is not None:
+            self.comb += self.current_clock.status.eq(force_clk_sw)
+        elif clk_sw_status is None:
             self.comb += self.current_clock.status.eq(self.clk_sw_fsm.o_clk_sw)
         else:
             self.comb += self.current_clock.status.eq(clk_sw_status)

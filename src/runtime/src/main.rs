@@ -20,7 +20,7 @@ use libboard_artiq::drtio_eem;
 use libboard_artiq::io_expander;
 #[cfg(has_cxp_grabber)]
 use libboard_artiq::{cxp_grabber, cxp_phys};
-use libboard_artiq::{i2c, identifier_read, logger, pl};
+use libboard_artiq::{i2c, logger, pl};
 use libboard_zynq::{gic, mpcore, timer};
 use libconfig;
 use libcortex_a9::l2c::enable_l2_cache;
@@ -117,23 +117,55 @@ pub fn main_core0() {
 
     info!("NAR3/Zynq7000 starting...");
 
+    info!("diag: before ram init");
     ram::init_alloc_core0();
+    info!("diag: after ram init");
+
+    info!("diag: before gic enable");
     gic::InterruptController::gic(mpcore::RegisterBlock::mpcore()).enable_interrupts();
+    info!("diag: after gic enable");
 
-    info!("gateware ident: {}", identifier_read(&mut [0; 64]));
+    #[cfg(ps_fclk_local_write_sink_probe)]
+    info!("diag: skipping identifier_read for experiment 21 PS-FCLK local write sink probe");
+    #[cfg(sys_crg_bootstrap_input_probe)]
+    info!("diag: skipping identifier_read for experiment 23 standalone-SYS bootstrap-input local write sink probe");
+    #[cfg(all(standalone_sys_local_write_sink_probe, not(sys_crg_bootstrap_input_probe)))]
+    info!("diag: skipping identifier_read for experiment 22 standalone-SYS local write sink probe");
+    #[cfg(bootstrap_axi_local_write_sink_probe)]
+    info!("diag: skipping identifier_read for experiment 20 bootstrap AXI local write sink probe");
+    #[cfg(all(bootstrap_axi_csr_write_only_probe, not(bootstrap_axi_local_write_sink_probe)))]
+    info!("diag: skipping identifier_read for experiment 19 bootstrap AXI write-only probe");
+    #[cfg(all(has_csr_bridge_probe, not(bootstrap_axi_csr_write_only_probe)))]
+    info!("diag: skipping identifier_read for experiment 18 bootstrap AXI/CSR timeout probe");
+    #[cfg(all(
+        not(has_csr_bridge_probe),
+        not(bootstrap_axi_local_write_sink_probe),
+        not(ps_fclk_local_write_sink_probe),
+        not(standalone_sys_local_write_sink_probe),
+        not(sys_crg_bootstrap_input_probe)
+    ))]
+    info!("diag: skipping identifier_read for experiment 17 bootstrap SED probe");
 
+    info!("diag: before i2c init");
     i2c::init();
+    info!("diag: after i2c init");
     #[cfg(feature = "target_kasli_soc")]
     {
         let i2c_bus = i2c::get_bus();
+        info!("diag: before io expander construct");
         let mut io_expander0 = io_expander::IoExpander::new(i2c_bus, 0).unwrap();
         let mut io_expander1 = io_expander::IoExpander::new(i2c_bus, 1).unwrap();
+        info!("diag: after io expander construct");
+        info!("diag: before io expander init 0");
         io_expander0
             .init(i2c_bus)
             .expect("I2C I/O expander #0 initialization failed");
+        info!("diag: after io expander init 0");
+        info!("diag: before io expander init 1");
         io_expander1
             .init(i2c_bus)
             .expect("I2C I/O expander #1 initialization failed");
+        info!("diag: after io expander init 1");
 
         // Drive CLK_SEL to true
         #[cfg(has_si549)]
@@ -147,10 +179,18 @@ pub fn main_core0() {
 
         // Enable EEM power
         #[cfg(hw_rev = "v1.2")]
-        io_expander1.set(0, 7, true);
+        {
+            info!("diag: before eem power enable");
+            io_expander1.set(0, 7, true);
+            info!("diag: after eem power enable");
+        }
 
+        info!("diag: before io expander service 0");
         io_expander0.service(i2c_bus).unwrap();
+        info!("diag: after io expander service 0");
+        info!("diag: before io expander service 1");
         io_expander1.service(i2c_bus).unwrap();
+        info!("diag: after io expander service 1");
 
         #[cfg(has_virtual_leds)]
         task::spawn(io_expanders_service(
@@ -166,7 +206,9 @@ pub fn main_core0() {
 
     setup_log_levels();
 
+    info!("diag: before rtio_clocking init");
     rtio_clocking::init();
+    info!("diag: after rtio_clocking init");
 
     #[cfg(has_drtio_eem)]
     drtio_eem::init();
